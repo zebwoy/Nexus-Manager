@@ -2,10 +2,12 @@ import Sidebar from './Sidebar'
 
 export default function Layout({ children }) {
   return (
-    <div className="flex min-h-screen bg-surface-950">
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
       <Sidebar />
-      <main className="flex-1 overflow-y-auto p-6">
-        {children}
+      <main style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+        <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+          {children}
+        </div>
       </main>
     </div>
   )

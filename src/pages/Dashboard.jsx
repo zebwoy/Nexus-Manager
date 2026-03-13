@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { formatRupees, formatDate, formatTime } from '../lib/helpers'
-import { PageLoader, ErrorMsg } from '../components/UI'
+import { PageLoader, ErrorMsg, SectionHeader } from '../components/UI'
+import { Plus } from 'lucide-react'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -13,162 +14,134 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    loadDashboard()
-  }, [])
+  useEffect(() => { load() }, [])
 
-  const loadDashboard = async () => {
+  const load = async () => {
     try {
       setLoading(true)
-      const [snap, cred, sessions] = await Promise.all([
+      const [snap, cred, sess] = await Promise.all([
         api.get('/dashboard-snapshot'),
         api.get('/dashboard-credits'),
-        api.get('/sessions?limit=5'),
+        api.get('/sessions?limit=6'),
       ])
       setSnapshot(snap)
       setCredits(cred.credits || [])
-      setRecentSessions(sessions.sessions || [])
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+      setRecentSessions(sess.sessions || [])
+    } catch (err) { setError(err.message) }
+    finally { setLoading(false) }
   }
-
-  if (loading) return <PageLoader />
 
   const today = new Date().toLocaleDateString('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   })
 
   const totalRevenue = snapshot
-    ? (snapshot.gaming_revenue || 0) +
-      (snapshot.walkin_revenue || 0) +
-      (snapshot.session_sales_revenue || 0) +
-      (snapshot.rc_revenue || 0) +
+    ? (snapshot.gaming_revenue || 0) + (snapshot.walkin_revenue || 0) +
+      (snapshot.session_sales_revenue || 0) + (snapshot.rc_revenue || 0) +
       (snapshot.pancafe_revenue || 0)
     : 0
 
+  if (loading) return <PageLoader />
+
   return (
     <div>
-      <div className="page-header flex items-start justify-between">
+      {/* Page header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.75rem', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">{today}</p>
+          <p className="page-sub">{today}</p>
         </div>
-        <div className="text-right">
-          <p className="text-slate-400 text-sm">Welcome back,</p>
-          <p className="font-display font-semibold text-white">{user?.full_name}</p>
-        </div>
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+          Welcome, <span style={{ color: 'var(--text)', fontWeight: 600 }}>{user?.full_name}</span>
+        </p>
       </div>
 
       <ErrorMsg error={error} />
 
-      {/* Revenue Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="stat-card col-span-2 lg:col-span-1 bg-brand-600/10 border-brand-600/30">
-          <span className="stat-label">Today's Total</span>
-          <span className="stat-value text-brand-400">{formatRupees(totalRevenue)}</span>
-          <span className="text-slate-500 text-xs font-mono">all sources</span>
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.75rem' }}>
+        {[
+          { label: "Today's Revenue", value: formatRupees(totalRevenue), sub: 'all sources', highlight: true },
+          { label: 'Gaming',          value: formatRupees(snapshot?.gaming_revenue),  sub: 'sessions' },
+          { label: 'Shop Sales',      value: formatRupees((snapshot?.walkin_revenue||0)+(snapshot?.session_sales_revenue||0)), sub: 'inventory' },
+          { label: 'RC + PanCafe',    value: formatRupees((snapshot?.rc_revenue||0)+(snapshot?.pancafe_revenue||0)), sub: 'recharges' },
+        ].map((s, i) => (
+          <div key={i} className="card" style={s.highlight ? {
+            background: 'var(--accent-dim)', borderColor: 'var(--accent-border)'
+          } : {}}>
+            <p className="stat-label">{s.label}</p>
+            <p className="stat-value" style={s.highlight ? { color: 'var(--accent-text)' } : {}}>{s.value}</p>
+            <p className="stat-sub">{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Two columns */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '1.75rem' }}>
+
+        {/* Credits outstanding */}
+        <div className="card">
+          <SectionHeader
+            title="Credits Outstanding"
+            action={snapshot?.total_outstanding_credit > 0
+              ? <span className="badge badge-danger">{formatRupees(snapshot.total_outstanding_credit)}</span>
+              : null}
+          />
+          {credits.length === 0
+            ? <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1.5rem 0' }}>No outstanding credits</p>
+            : credits.map((c, i) => (
+              <div key={c.session_id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '0.75rem 0',
+                borderBottom: i < credits.length - 1 ? '1px solid var(--border)' : 'none'
+              }}>
+                <div>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)' }}>{c.name || 'Anonymous'}</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>{formatDate(c.date)} · {c.device_label}</p>
+                </div>
+                <span className="badge badge-danger">{formatRupees(c.credit)}</span>
+              </div>
+            ))
+          }
         </div>
 
-        <div className="stat-card">
-          <span className="stat-label">Gaming</span>
-          <span className="stat-value">{formatRupees(snapshot?.gaming_revenue)}</span>
-          <span className="text-slate-500 text-xs font-mono">sessions</span>
-        </div>
-
-        <div className="stat-card">
-          <span className="stat-label">Shop Sales</span>
-          <span className="stat-value">
-            {formatRupees((snapshot?.walkin_revenue || 0) + (snapshot?.session_sales_revenue || 0))}
-          </span>
-          <span className="text-slate-500 text-xs font-mono">inventory</span>
-        </div>
-
-        <div className="stat-card">
-          <span className="stat-label">RC + PanCafe</span>
-          <span className="stat-value">
-            {formatRupees((snapshot?.rc_revenue || 0) + (snapshot?.pancafe_revenue || 0))}
-          </span>
-          <span className="text-slate-500 text-xs font-mono">recharges</span>
+        {/* Recent sessions */}
+        <div className="card">
+          <SectionHeader
+            title="Recent Sessions"
+            action={<Link to="/sessions" style={{ fontSize: '0.8125rem', color: 'var(--accent-text)', textDecoration: 'none', fontWeight: 500 }}>View all</Link>}
+          />
+          {recentSessions.length === 0
+            ? <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1.5rem 0' }}>No sessions today yet</p>
+            : recentSessions.map((s, i) => (
+              <div key={s.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '0.75rem 0',
+                borderBottom: i < recentSessions.length - 1 ? '1px solid var(--border)' : 'none'
+              }}>
+                <div>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)' }}>{s.name || 'Anonymous'}</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>{s.device_label} · {formatTime(s.time_in)}</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{formatRupees(s.total)}</p>
+                  {s.credit > 0 && <span className="badge badge-danger" style={{ marginTop: '0.25rem' }}>{formatRupees(s.credit)}</span>}
+                </div>
+              </div>
+            ))
+          }
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Credits Outstanding */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display font-semibold text-white tracking-wide">
-              Credits Outstanding
-            </h2>
-            <span className="badge badge-yellow">
-              {formatRupees(snapshot?.total_outstanding_credit)} total
-            </span>
-          </div>
-          {credits.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-6">No outstanding credits 🎉</p>
-          ) : (
-            <div className="space-y-2">
-              {credits.map((c) => (
-                <div key={c.session_id} className="flex items-center justify-between py-2 border-b border-surface-800 last:border-0">
-                  <div>
-                    <p className="text-sm font-body text-white">{c.name}</p>
-                    <p className="text-xs font-mono text-slate-500">{formatDate(c.date)} · {c.device_label}</p>
-                  </div>
-                  <span className="badge badge-red">{formatRupees(c.credit)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Recent Sessions */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display font-semibold text-white tracking-wide">
-              Recent Sessions
-            </h2>
-            <Link to="/sessions" className="text-brand-400 text-sm hover:text-brand-300 font-body">
-              View all →
-            </Link>
-          </div>
-          {recentSessions.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-6">No sessions today yet</p>
-          ) : (
-            <div className="space-y-2">
-              {recentSessions.map((s) => (
-                <div key={s.id} className="flex items-center justify-between py-2 border-b border-surface-800 last:border-0">
-                  <div>
-                    <p className="text-sm font-body text-white">{s.name || 'Anonymous'}</p>
-                    <p className="text-xs font-mono text-slate-500">
-                      {s.device_label} · {formatTime(s.time_in)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-mono text-white">{formatRupees(s.total)}</p>
-                    {s.credit > 0 && (
-                      <span className="badge badge-red text-xs">{formatRupees(s.credit)} credit</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="mt-6">
-        <h2 className="font-display font-semibold text-slate-400 text-sm tracking-widest uppercase mb-3">
-          Quick Actions
-        </h2>
-        <div className="flex flex-wrap gap-3">
-          <Link to="/sessions/new" className="btn-primary">+ New Session</Link>
-          <Link to="/pancafe/new" className="btn-secondary">+ PanCafe Session</Link>
-          <Link to="/inventory/sell" className="btn-secondary">+ Walk-in Sale</Link>
-          <Link to="/recharges/new" className="btn-secondary">+ Recharge</Link>
-          <Link to="/expenses/new" className="btn-secondary">+ Expense</Link>
+      {/* Quick actions */}
+      <div>
+        <p style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Quick Actions</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.625rem' }}>
+          <Link to="/sessions/new"    className="btn-primary"><Plus size={15} />New Session</Link>
+          <Link to="/pancafe/new"     className="btn-secondary"><Plus size={15} />PanCafe</Link>
+          <Link to="/inventory/sell"  className="btn-secondary"><Plus size={15} />Walk-in Sale</Link>
+          <Link to="/recharges/new"   className="btn-secondary"><Plus size={15} />Recharge</Link>
+          <Link to="/expenses/new"    className="btn-secondary"><Plus size={15} />Expense</Link>
         </div>
       </div>
     </div>
