@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-950 text-slate-100 font-body;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-wide;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface-900 border border-surface-700 rounded-xl p-4;
+  }
+
+  .btn-primary {
+    @apply bg-brand-600 hover:bg-brand-500 text-white font-display font-semibold
+           px-4 py-2 rounded-lg transition-colors duration-150 tracking-wide;
+  }
+
+  .btn-secondary {
+    @apply bg-surface-800 hover:bg-surface-700 text-slate-200 font-display font-semibold
+           px-4 py-2 rounded-lg border border-surface-700 transition-colors duration-150 tracking-wide;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-500 text-white font-display font-semibold
+           px-4 py-2 rounded-lg transition-colors duration-150 tracking-wide;
+  }
+
+  .input {
+    @apply bg-surface-800 border border-surface-700 rounded-lg px-3 py-2
+           text-slate-100 placeholder-slate-500 font-body
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent
+           transition-all duration-150 w-full;
+  }
+
+  .label {
+    @apply text-slate-400 text-sm font-body mb-1 block;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium;
+  }
+
+  .badge-green  { @apply badge bg-emerald-900/50 text-emerald-400 border border-emerald-800; }
+  .badge-red    { @apply badge bg-red-900/50 text-red-400 border border-red-800; }
+  .badge-yellow { @apply badge bg-yellow-900/50 text-yellow-400 border border-yellow-800; }
+  .badge-blue   { @apply badge bg-brand-900/50 text-brand-400 border border-brand-800; }
+  .badge-gray   { @apply badge bg-surface-800 text-slate-400 border border-surface-700; }
+
+  .page-header {
+    @apply mb-6;
+  }
+
+  .page-title {
+    @apply text-3xl font-display font-bold text-white tracking-wider uppercase;
+  }
+
+  .page-subtitle {
+    @apply text-slate-400 text-sm font-body mt-1;
+  }
+
+  .stat-card {
+    @apply card flex flex-col gap-1;
+  }
+
+  .stat-label {
+    @apply text-slate-400 text-xs font-mono uppercase tracking-widest;
+  }
+
+  .stat-value {
+    @apply text-2xl font-display font-bold text-white;
+  }
+
+  .table-header {
+    @apply text-xs font-mono uppercase tracking-widest text-slate-500 px-4 py-3
+           border-b border-surface-700;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm font-body text-slate-200 border-b border-surface-800;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400
+           hover:text-white hover:bg-surface-800 transition-all duration-150
+           font-display font-medium tracking-wide text-sm;
+  }
+
+  .sidebar-link.active {
+    @apply text-white bg-brand-600/20 border border-brand-600/30 text-brand-300;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* PIN input styling */
+.pin-input {
+  @apply w-14 h-14 text-center text-2xl font-mono bg-surface-800 border-2
+         border-surface-700 rounded-xl text-white focus:outline-none
+         focus:border-brand-500 transition-colors;
+}
