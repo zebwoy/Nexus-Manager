@@ -68,7 +68,7 @@ export default function Login() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
             <div>
               <label className="label">Username</label>
-              <input className="input" placeholder="Enter username"
+              <input className="input" placeholder="testing"
                 value={username} onChange={e => setUsername(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && pinRefs[0].current?.focus()}
                 autoFocus />
@@ -77,13 +77,21 @@ export default function Login() {
             <div>
               <label className="label">PIN</label>
               <div style={{ display: 'flex', gap: '0.625rem' }}>
-                {pin.map((digit, i) => (
-                  <input key={i} ref={pinRefs[i]} type="password" inputMode="numeric"
-                    maxLength={1} value={digit} className="pin-digit"
-                    onChange={e => handlePinChange(i, e.target.value)}
-                    onKeyDown={e => handlePinKeyDown(i, e)} />
-                ))}
-              </div>
+  {pin.map((digit, i) => (
+    <input
+      key={i}
+      ref={pinRefs[i]}
+      type="password"
+      inputMode="numeric"
+      maxLength={1}
+      value={digit}
+      placeholder="0"
+      className="pin-digit"
+      onChange={e => handlePinChange(i, e.target.value)}
+      onKeyDown={e => handlePinKeyDown(i, e)}
+    />
+  ))}
+</div>
             </div>
 
             {error && <p style={{ fontSize: '0.8125rem', color: 'var(--danger)' }}>{error}</p>}
