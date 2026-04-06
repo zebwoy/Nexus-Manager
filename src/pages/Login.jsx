@@ -68,7 +68,7 @@ export default function Login() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
             <div>
               <label className="label">Username</label>
-              <input className="input" placeholder="testing"
+              <input className="input" placeholder="trial"
                 value={username} onChange={e => setUsername(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && pinRefs[0].current?.focus()}
                 autoFocus />
