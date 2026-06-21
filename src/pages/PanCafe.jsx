@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatRupees, formatTime, formatDate, todayISO } from '../lib/helpers'
-import { PageLoader, EmptyState, ErrorMsg, Field, Spinner } from '../components/UI'
+import { PageLoader, EmptyState, ErrorMsg, Field } from '../components/UI'
 
 export function PanCafe() {
   const [sessions, setSessions] = useState([])
@@ -24,39 +24,57 @@ export function PanCafe() {
 
   return (
     <div>
-      <div className="page-header flex items-center justify-between">
+      {/* Page Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyBreak: 'space-between', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 className="page-title">PanCafe</h1>
-          <p className="page-subtitle">Third-party platform session log</p>
+          <h1 className="page-title">PanCafe Sessions</h1>
+          <p className="page-sub">Third-party console session managers</p>
         </div>
-        <Link to="/pancafe/new" className="btn-primary">+ New Session</Link>
+        <Link to="/pancafe/new" className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ Log Session</Link>
       </div>
+
       <ErrorMsg error={error} />
-      <div className="flex items-center gap-4 mb-4">
-        <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="input w-auto" />
+
+      {/* Filter strip */}
+      <div className="card" style={{
+        display: 'flex', alignItems: 'center', gap: '0.75rem',
+        padding: '0.85rem 1.25rem', marginBottom: '1.5rem'
+      }}>
+        <label className="label" style={{ marginBottom: 0 }}>Filter Date</label>
+        <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="input" style={{ width: 'auto', padding: '0.45rem 0.75rem' }} />
       </div>
+
       {loading ? <PageLoader /> : sessions.length === 0 ? (
-        <EmptyState icon="☕" title="No PanCafe sessions" description="No sessions found for this date"
-          action={<Link to="/pancafe/new" className="btn-primary">Add Session</Link>} />
+        <EmptyState icon="☕" title="No PanCafe Logs" description={`No third-party logs recorded for date: ${formatDate(dateFilter)}`}
+          action={<Link to="/pancafe/new" className="btn-primary">Add PanCafe Log</Link>} />
       ) : (
-        <div className="card p-0 overflow-hidden">
-          <table className="w-full">
+        /* Beveled table */
+        <div className="card-flush" style={{ overflowX: 'auto' }}>
+          <table className="tbl">
             <thead>
-              <tr>{['Customer', 'PanCafe ID', 'PC', 'Time In', 'Time Out', 'Received', 'Spent', 'Margin', 'Logged By'].map(h =>
-                <th key={h} className="table-header text-left">{h}</th>)}</tr>
+              <tr>
+                {['Client Profile', 'PanCafe Username/ID', 'Device Seat', 'Time In', 'Time Out', 'Cash Received', 'Spent on Top-up', 'Operator Margin', 'Logged By'].map(h =>
+                  <th key={h}>{h}</th>)}
+              </tr>
             </thead>
             <tbody>
-              {sessions.map(s => (
-                <tr key={s.id} className="hover:bg-surface-800/50">
-                  <td className="table-cell">{s.name || '—'}</td>
-                  <td className="table-cell font-mono text-brand-400">{s.pancafe_username}</td>
-                  <td className="table-cell"><span className="badge badge-blue">{s.device_label || '—'}</span></td>
-                  <td className="table-cell font-mono text-sm">{formatTime(s.time_in)}</td>
-                  <td className="table-cell font-mono text-sm">{s.time_out ? formatTime(s.time_out) : <span className="badge badge-yellow">Active</span>}</td>
-                  <td className="table-cell font-mono">{formatRupees(s.amount_received)}</td>
-                  <td className="table-cell font-mono">{formatRupees(s.amount_spent)}</td>
-                  <td className="table-cell"><span className="badge badge-green">{formatRupees(s.margin)}</span></td>
-                  <td className="table-cell text-slate-500 text-xs font-mono">{s.created_by_username || '—'}</td>
+              {sessions.map((s, idx) => (
+                <tr key={s.id} style={{ background: idx % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent' }}>
+                  <td className="table-cell" style={{ fontWeight: 700 }}>{s.name || <span style={{ color: 'var(--text-faint)' }}>Anonymous</span>}</td>
+                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 750, color: 'var(--accent-text)' }}>{s.pancafe_username}</td>
+                  <td className="table-cell"><span className="badge badge-accent">{s.device_label || '—'}</span></td>
+                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>{formatTime(s.time_in)}</td>
+                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>
+                    {s.time_out ? formatTime(s.time_out) : <span className="badge badge-warning" style={{ fontSize: '0.7rem' }}>Active</span>}
+                  </td>
+                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(s.amount_received)}</td>
+                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(s.amount_spent)}</td>
+                  <td className="table-cell">
+                    <span className={`badge ${s.margin >= 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                      {formatRupees(s.margin)}
+                    </span>
+                  </td>
+                  <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontWeight: 600 }}>@{s.created_by_username || 'system'}</td>
                 </tr>
               ))}
             </tbody>
@@ -118,24 +136,40 @@ export function NewPanCafe() {
   }
 
   return (
-    <div className="max-w-2xl">
-      <div className="page-header">
+    <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+      {/* Page Header */}
+      <div style={{ marginBottom: '2rem' }}>
         <h1 className="page-title">New PanCafe Session</h1>
-        <p className="page-subtitle">Log a PanCafe platform session</p>
+        <p className="page-sub">Launch a logged third-party transaction slot</p>
       </div>
+
       <ErrorMsg error={error} />
-      <div className="card space-y-5">
-        <div className="grid grid-cols-2 gap-4">
+
+      {/* Form chassis */}
+      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        
+        {/* Customer fields */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
           <Field label="Customer Name">
-            <div className="relative">
-              <input className="input" placeholder="Name (optional)" value={form.name} onChange={e => handleNameChange(e.target.value)} />
+            <div style={{ position: 'relative' }}>
+              <input className="input" placeholder="Anonymous Client" value={form.name} onChange={e => handleNameChange(e.target.value)} />
               {customerSuggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-20 bg-surface-800 border border-surface-700 rounded-lg mt-1 overflow-hidden shadow-xl">
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
+                  background: 'var(--bg-elevated)', border: '1.5px solid var(--border)',
+                  boxShadow: 'var(--shadow-md)', borderRadius: '10px', marginTop: '0.45rem',
+                  overflow: 'hidden'
+                }}>
                   {customerSuggestions.map(c => (
                     <button key={c.id} onClick={() => { f('name', c.name); f('mobile', c.mobile || ''); f('customer_id', c.id); setCustomerSuggestions([]) }}
-                      className="w-full text-left px-3 py-2 hover:bg-surface-700 text-sm">
-                      <span className="text-white">{c.name}</span>
-                      {c.mobile && <span className="text-slate-500 ml-2 font-mono text-xs">{c.mobile}</span>}
+                      className="btn-ghost"
+                      style={{
+                        width: '100%', textAlign: 'left', padding: '0.65rem 0.85rem',
+                        fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between',
+                        borderRadius: 0, borderBottom: '1px solid var(--border)'
+                      }}>
+                      <span style={{ color: 'var(--text)', fontWeight: 600 }}>{c.name}</span>
+                      {c.mobile && <span style={{ color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem' }}>{c.mobile}</span>}
                     </button>
                   ))}
                 </div>
@@ -143,49 +177,62 @@ export function NewPanCafe() {
             </div>
           </Field>
           <Field label="PanCafe Username / ID" required>
-            <input className="input" placeholder="e.g. user123" value={form.pancafe_username} onChange={e => f('pancafe_username', e.target.value)} />
+            <input className="input" placeholder="e.g. pc_user99" value={form.pancafe_username} onChange={e => f('pancafe_username', e.target.value)} />
           </Field>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="PC Station">
+
+        {/* Device & Date */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+          <Field label="PC Station Seat">
             <select className="input" value={form.device_id} onChange={e => f('device_id', e.target.value)}>
-              <option value="">Select PC</option>
+              <option value="">Select Station</option>
               {devices.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
             </select>
           </Field>
-          <Field label="Date">
+          <Field label="Session Date">
             <input type="date" className="input" value={form.date} onChange={e => f('date', e.target.value)} />
           </Field>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+
+        {/* Timestamps */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
           <Field label="Time In">
             <input type="time" className="input" value={form.time_in} onChange={e => f('time_in', e.target.value)} />
           </Field>
-          <Field label="Time Out (manual — when they leave)">
-            <input type="time" className="input" value={form.time_out} onChange={e => f('time_out', e.target.value)} />
+          <Field label="Time Out (leaving time)">
+            <input type="time" className="input" placeholder="Active" value={form.time_out} onChange={e => f('time_out', e.target.value)} />
           </Field>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Amount Received from Customer (₹)" required>
-            <input type="number" className="input" placeholder="e.g. 500" value={form.amount_received} onChange={e => f('amount_received', e.target.value)} />
+
+        {/* Financial margins */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+          <Field label="Amount Received from Client (₹)" required>
+            <input type="number" className="input" placeholder="e.g. 300" value={form.amount_received} onChange={e => f('amount_received', e.target.value)} />
           </Field>
-          <Field label="Amount Spent on PanCafe Top-up (₹)" required>
-            <input type="number" className="input" placeholder="e.g. 490" value={form.amount_spent} onChange={e => f('amount_spent', e.target.value)} />
+          <Field label="Cost of PanCafe Top-up (₹)" required>
+            <input type="number" className="input" placeholder="e.g. 280" value={form.amount_spent} onChange={e => f('amount_spent', e.target.value)} />
           </Field>
         </div>
+
+        {/* Margin display */}
         {margin !== null && (
-          <div className="flex items-center gap-2">
-            <span className="badge badge-green">Your margin: {formatRupees(margin)}</span>
+          <div style={{ display: 'flex' }}>
+            <span className={`badge ${margin >= 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '0.85rem', padding: '0.4rem 0.85rem', fontFamily: "'JetBrains Mono', monospace" }}>
+              Net Operator Margin: {formatRupees(margin)}
+            </span>
           </div>
         )}
-        <Field label="Remark">
-          <input className="input" placeholder="Optional note" value={form.remark} onChange={e => f('remark', e.target.value)} />
+
+        <Field label="Session remark">
+          <input className="input" placeholder="Account top-up codes, comments..." value={form.remark} onChange={e => f('remark', e.target.value)} />
         </Field>
-        <div className="flex gap-3 pt-2">
-          <button onClick={handleSubmit} disabled={loading} className="btn-primary disabled:opacity-50">
-            {loading ? <span className="flex items-center gap-2"><Spinner size="sm" /> Saving...</span> : 'Save Session'}
+
+        {/* Controls */}
+        <div style={{ display: 'flex', gap: '0.85rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
+          <button onClick={handleSubmit} disabled={loading} className="btn-primary" style={{ padding: '0.65rem 1.35rem' }}>
+            {loading ? 'Storing log...' : 'Save PanCafe Log'}
           </button>
-          <button onClick={() => navigate('/pancafe')} className="btn-secondary">Cancel</button>
+          <button onClick={() => navigate('/pancafe')} className="btn-secondary" style={{ padding: '0.65rem 1.35rem' }}>Abort Command</button>
         </div>
       </div>
     </div>

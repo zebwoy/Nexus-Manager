@@ -35,6 +35,9 @@ export async function handler(event) {
         extra_person_total, total, payment_received, credit, remark, players
       } = body
 
+      const finalPayment = (payment_received !== null && payment_received !== undefined && payment_received !== '') ? Number(payment_received) : 0.00
+      const finalCredit = (credit !== null && credit !== undefined && credit !== '') ? Number(credit) : Math.max(0, total - finalPayment)
+
       // Upsert customer if name provided
       let cid = customer_id
       if (!cid && name) {
@@ -62,7 +65,7 @@ export async function handler(event) {
          RETURNING id`,
         [cid, device_id, duration_mins, time_in, time_out, date,
          charge, controller_total || 0, extra_person_total || 0, total,
-         payment_received, credit, remark, userId || null]
+         finalPayment, finalCredit, remark, userId || null]
       )
 
       const sessionId = result.rows[0].id

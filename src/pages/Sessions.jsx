@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
-import { formatRupees, formatTime, formatDate, formatDuration, DURATION_OPTIONS, todayISO, nowTimeInput, toISO, addMinutes } from '../lib/helpers'
-import { PageLoader, EmptyState, Modal, Field, ErrorMsg, Spinner } from '../components/UI'
+import { formatRupees, formatTime, formatDate, formatDuration, DURATION_OPTIONS, todayISO } from '../lib/helpers'
+import { PageLoader, EmptyState, ErrorMsg } from '../components/UI'
 
-// ─── Sessions List ────────────────────────────────────────────
 export default function Sessions() {
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -31,72 +30,99 @@ export default function Sessions() {
 
   return (
     <div>
-      <div className="page-header flex items-center justify-between">
+      {/* Page Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 className="page-title">Sessions</h1>
-          <p className="page-subtitle">Gaming session log</p>
+          <h1 className="page-title">Sessions Log</h1>
+          <p className="page-sub">Gaming station session monitors</p>
         </div>
-        <Link to="/sessions/new" className="btn-primary">+ New Session</Link>
+        <Link to="/sessions/new" className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ Log Session</Link>
       </div>
 
       <ErrorMsg error={error} />
 
-      {/* Filters + summary */}
-      <div className="flex flex-wrap items-center gap-4 mb-4">
-        <input
-          type="date"
-          value={dateFilter}
-          onChange={e => setDateFilter(e.target.value)}
-          className="input w-auto"
-        />
+      {/* Control Strip & Metrics Display */}
+      <div className="card" style={{
+        display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1.25rem',
+        padding: '1rem 1.25rem', marginBottom: '1.5rem', justifyContent: 'space-between'
+      }}>
+        {/* Date Selector Slot */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <label className="label" style={{ marginBottom: 0 }}>Filter Date</label>
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value)}
+            className="input"
+            style={{ width: 'auto', padding: '0.45rem 0.75rem' }}
+          />
+        </div>
+        
+        {/* LCD Counters */}
         {!loading && (
-          <div className="flex gap-4 ml-auto">
-            <span className="stat-label">Revenue: <span className="text-white font-mono">{formatRupees(totalRevenue)}</span></span>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <div className="lcd-screen success" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '8px' }}>
+              <span style={{ fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.05em' }}>REVENUE:</span>
+              <span style={{ fontSize: '1.05rem', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(totalRevenue)}</span>
+            </div>
             {totalCredit > 0 && (
-              <span className="stat-label">Credit: <span className="text-red-400 font-mono">{formatRupees(totalCredit)}</span></span>
+              <div className="lcd-screen danger" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '8px' }}>
+                <span style={{ fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.05em' }}>CREDIT:</span>
+                <span style={{ fontSize: '1.05rem', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(totalCredit)}</span>
+              </div>
             )}
           </div>
         )}
       </div>
 
       {loading ? <PageLoader /> : sessions.length === 0 ? (
-        <EmptyState icon="🖥" title="No sessions" description={`No sessions found for ${formatDate(dateFilter)}`}
-          action={<Link to="/sessions/new" className="btn-primary">Start a Session</Link>} />
+        <EmptyState icon="🖥️" title="No Stations Active" description={`No gaming logs recorded for date: ${formatDate(dateFilter)}`}
+          action={<Link to="/sessions/new" className="btn-primary">Initiate Gaming Session</Link>} />
       ) : (
-        <div className="card p-0 overflow-hidden">
-          <table className="w-full">
+        /* Skeuomorphic Table Chassis */
+        <div className="card-flush" style={{ overflowX: 'auto' }}>
+          <table className="tbl">
             <thead>
               <tr>
-                {['Customer', 'Device', 'Time In', 'Time Out', 'Duration', 'Charge', 'Total', 'Payment', 'Credit', 'Logged By'].map(h => (
-                  <th key={h} className="table-header text-left">{h}</th>
+                {['Customer Details', 'Station ID', 'Time In', 'Time Out', 'Mins Logged', 'Seat Charge', 'Invoice Total', 'Cash Received', 'Credit Status', 'Operator'].map(h => (
+                  <th key={h}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {sessions.map(s => (
-                <tr key={s.id} className="hover:bg-surface-800/50 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/sessions/${s.id}`)}>
-                  <td className="table-cell">
-                    <p className="font-body text-white">{s.name || <span className="text-slate-500">—</span>}</p>
-                    {s.mobile && <p className="text-xs text-slate-500 font-mono">{s.mobile}</p>}
-                  </td>
-                  <td className="table-cell">
-                    <span className="badge badge-blue">{s.device_label}</span>
-                  </td>
-                  <td className="table-cell font-mono text-sm">{formatTime(s.time_in)}</td>
-                  <td className="table-cell font-mono text-sm">{formatTime(s.time_out)}</td>
-                  <td className="table-cell font-mono text-sm">{formatDuration(s.duration_mins)}</td>
-                  <td className="table-cell font-mono">{formatRupees(s.charge)}</td>
-                  <td className="table-cell font-mono font-semibold">{formatRupees(s.total)}</td>
-                  <td className="table-cell font-mono">{s.payment_received != null ? formatRupees(s.payment_received) : '—'}</td>
-                  <td className="table-cell">
-                    {s.credit > 0
-                      ? <span className="badge badge-red">{formatRupees(s.credit)}</span>
-                      : <span className="text-slate-600">—</span>}
-                  </td>
-                  <td className="table-cell text-slate-500 text-xs font-mono">{s.created_by_username || '—'}</td>
-                </tr>
-              ))}
+              {sessions.map((s, index) => {
+                // Style device type badge color dynamically
+                const deviceType = s.device_label?.split(' ')[0] || ''
+                let badgeClass = 'badge-accent'
+                if (deviceType === 'PC') badgeClass = 'badge-accent'
+                else if (deviceType === 'XBOX') badgeClass = 'badge-warning'
+                else if (deviceType === 'PS') badgeClass = 'badge-success'
+
+                return (
+                  <tr key={s.id} style={{ cursor: 'pointer', background: index % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent' }}
+                      onClick={() => navigate(`/sessions`)}>
+                    <td className="table-cell">
+                      <p style={{ fontWeight: 700, color: 'var(--text)' }}>{s.name || <span style={{ color: 'var(--text-faint)' }}>Walk-in Client</span>}</p>
+                      {s.mobile && <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace", marginTop: '0.1rem' }}>{s.mobile}</p>}
+                    </td>
+                    <td className="table-cell">
+                      <span className={`badge ${badgeClass}`}>{s.device_label}</span>
+                    </td>
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>{formatTime(s.time_in)}</td>
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>{formatTime(s.time_out)}</td>
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>{formatDuration(s.duration_mins)}</td>
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(s.charge)}</td>
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace', monospace", fontWeight: 750 }}>{formatRupees(s.total)}</td>
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{s.payment_received != null ? formatRupees(s.payment_received) : '—'}</td>
+                    <td className="table-cell">
+                      {s.credit > 0
+                        ? <span className="badge badge-danger">{formatRupees(s.credit)}</span>
+                        : <span style={{ color: 'var(--text-faint)', fontSize: '0.8125rem' }}>Fully Paid</span>}
+                    </td>
+                    <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontWeight: 600 }}>@{s.created_by_username || 'system'}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

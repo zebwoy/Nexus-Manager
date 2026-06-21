@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { DURATION_OPTIONS, formatRupees, todayISO, nowTimeInput, toISO, addMinutes, formatDuration } from '../lib/helpers'
-import { Field, ErrorMsg, Spinner, Modal } from '../components/UI'
+import { Field, ErrorMsg, Spinner } from '../components/UI'
 
 const DEVICE_TYPES = { PC: 'PC', XBOX: 'XBOX', PS: 'PS' }
 
@@ -42,24 +42,26 @@ export default function NewSession() {
   useEffect(() => { loadSetup() }, [])
 
   const loadSetup = async () => {
-    const [devData, priceData, settData] = await Promise.all([
-      api.get('/devices'),
-      api.get('/pricing'),
-      api.get('/settings'),
-    ])
-    setDevices(devData.devices || [])
-    // Build pricing map: { PC: { 30: 40, 60: 70, ... }, XBOX: {...}, PS: {...} }
-    const map = {}
-    for (const row of (priceData.pricing || [])) {
-      if (!map[row.device_type]) map[row.device_type] = {}
-      map[row.device_type][row.duration_mins] = row.price
-    }
-    setPricing(map)
-    if (settData.settings) {
-      const s = {}
-      for (const row of settData.settings) s[row.key] = Number(row.value)
-      setSettings(prev => ({ ...prev, ...s }))
-    }
+    try {
+      const [devData, priceData, settData] = await Promise.all([
+        api.get('/devices'),
+        api.get('/pricing'),
+        api.get('/settings'),
+      ])
+      setDevices(devData.devices || [])
+      // Build pricing map: { PC: { 30: 40, 60: 70, ... }, XBOX: {...}, PS: {...} }
+      const map = {}
+      for (const row of (priceData.pricing || [])) {
+        if (!map[row.device_type]) map[row.device_type] = {}
+        map[row.device_type][row.duration_mins] = row.price
+      }
+      setPricing(map)
+      if (settData.settings) {
+        const s = {}
+        for (const row of settData.settings) s[row.key] = Number(row.value)
+        setSettings(prev => ({ ...prev, ...s }))
+      }
+    } catch (err) { setError(err.message) }
   }
 
   // Recompute charge whenever device/duration/players/controllers change
@@ -178,51 +180,64 @@ export default function NewSession() {
   const isConsole = form.device_type === 'XBOX' || form.device_type === 'PS'
 
   return (
-    <div className="max-w-2xl">
-      <div className="page-header">
+    <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+      {/* Page Header */}
+      <div style={{ marginBottom: '2rem' }}>
         <h1 className="page-title">New Session</h1>
-        <p className="page-subtitle">Log a new gaming session</p>
+        <p className="page-sub">Establish operator connection and session allocation</p>
       </div>
 
       <ErrorMsg error={error} />
 
-      <div className="card space-y-5">
-        {/* Customer */}
-        <div className="grid grid-cols-2 gap-4">
+      {/* Main Console Body */}
+      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        
+        {/* Row 1: Customer Info */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
           <Field label="Customer Name">
-            <div className="relative">
-              <input className="input" placeholder="Name (optional)"
+            <div style={{ position: 'relative' }}>
+              <input className="input" placeholder="Anonymous Client"
                 value={form.name} onChange={e => handleNameChange(e.target.value)} />
               {customerSuggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-20 bg-surface-800 border border-surface-700 rounded-lg mt-1 overflow-hidden shadow-xl">
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
+                  background: 'var(--bg-elevated)', border: '1.5px solid var(--border)',
+                  boxShadow: 'var(--shadow-md)', borderRadius: '10px', marginTop: '0.45rem',
+                  overflow: 'hidden'
+                }}>
                   {customerSuggestions.map(c => (
                     <button key={c.id} onClick={() => selectCustomer(c)}
-                      className="w-full text-left px-3 py-2 hover:bg-surface-700 text-sm">
-                      <span className="text-white">{c.name}</span>
-                      {c.mobile && <span className="text-slate-500 ml-2 font-mono text-xs">{c.mobile}</span>}
+                      className="btn-ghost"
+                      style={{
+                        width: '100%', textAlign: 'left', padding: '0.65rem 0.85rem',
+                        fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between',
+                        borderRadius: 0, borderBottom: '1px solid var(--border)'
+                      }}>
+                      <span style={{ color: 'var(--text)', fontWeight: 600 }}>{c.name}</span>
+                      {c.mobile && <span style={{ color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem' }}>{c.mobile}</span>}
                     </button>
                   ))}
                 </div>
               )}
             </div>
           </Field>
-          <Field label="Mobile">
-            <input className="input" placeholder="Mobile (optional)"
+          <Field label="Mobile Phone">
+            <input className="input" placeholder="Phone number (optional)"
               value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))} />
           </Field>
         </div>
 
-        {/* Device + Duration */}
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Device" required>
+        {/* Row 2: Device Station & Duration */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+          <Field label="Station allocation" required>
             <select className="input" value={form.device_id} onChange={e => handleDeviceChange(e.target.value)}>
-              <option value="">Select device</option>
+              <option value="">Choose device terminal</option>
               {devices.filter(d => d.is_active).map(d => (
-                <option key={d.id} value={d.id}>{d.label}</option>
+                <option key={d.id} value={d.id}>{d.label} ({d.type})</option>
               ))}
             </select>
           </Field>
-          <Field label="Duration" required>
+          <Field label="Allotted Duration" required>
             <select className="input" value={form.duration_mins}
               onChange={e => setForm(f => ({ ...f, duration_mins: Number(e.target.value) }))}>
               {DURATION_OPTIONS.map(o => (
@@ -232,73 +247,95 @@ export default function NewSession() {
           </Field>
         </div>
 
-        {/* Date + Time */}
-        <div className="grid grid-cols-3 gap-4">
-          <Field label="Date">
+        {/* Row 3: Date & Access Times */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+          <Field label="System Date">
             <input type="date" className="input" value={form.date}
               onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
           </Field>
-          <Field label="Time In">
+          <Field label="Connection Time">
             <input type="time" className="input" value={form.time_in}
               onChange={e => setForm(f => ({ ...f, time_in: e.target.value }))} />
           </Field>
-          <Field label="Time Out (auto)">
-            <input type="time" className="input bg-surface-950 cursor-not-allowed"
+          <Field label="Est. Termination">
+            <input type="time" className="input" style={{ background: 'rgba(0,0,0,0.1)', cursor: 'not-allowed' }}
               value={timeOut} readOnly />
           </Field>
         </div>
 
-        {/* PC Controller */}
+        {/* Console Accessories Section */}
         {form.device_type === 'PC' && (
-          <div className="bg-surface-800 rounded-xl p-4 border border-surface-700">
-            <p className="font-display font-semibold text-white mb-3">🎮 Controller Add-on</p>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 accent-brand-500"
+          <div className="card" style={{
+            background: 'var(--bg-input)', border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow-inset)', padding: '1.15rem'
+          }}>
+            <p style={{ fontSize: '0.85rem', fontWeight: 750, color: 'var(--text)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              🎮 Hardware Controllers
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                <input type="checkbox" style={{ cursor: 'pointer' }}
                   checked={pcControllers > 0}
                   onChange={e => setPcControllers(e.target.checked ? 1 : 0)} />
-                <span className="text-slate-300 text-sm">Customer wants a controller?</span>
+                <span>Requires external PC controllers?</span>
               </label>
               {pcControllers > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-400 text-sm">How many?</span>
-                  <select className="input w-20 py-1"
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--text-faint)' }}>Qty:</span>
+                  <select className="input" style={{ width: '4.5rem', padding: '0.25rem 0.5rem' }}
                     value={pcControllers}
                     onChange={e => setPcControllers(Number(e.target.value))}>
-                    {[1,2,3,4].map(n => <option key={n} value={n}>{n}</option>)}
+                    {[1, 2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
-                  <span className="text-slate-400 text-sm font-mono">× {formatRupees(settings.controller_fee)} = {formatRupees(controllerTotal)}</span>
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', fontWeight: 550, fontFamily: "'JetBrains Mono', monospace" }}>
+                    × {formatRupees(settings.controller_fee)} = {formatRupees(controllerTotal)}
+                  </span>
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Console Players */}
+        {/* Players Add-ons list */}
         {isConsole && (
-          <div className="bg-surface-800 rounded-xl p-4 border border-surface-700">
-            <div className="flex items-center justify-between mb-3">
-              <p className="font-display font-semibold text-white">👾 Players</p>
-              <button onClick={addPlayer} className="btn-secondary text-xs py-1 px-3">+ Add Player</button>
+          <div className="card" style={{
+            background: 'var(--bg-input)', border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow-inset)', padding: '1.15rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+              <p style={{ fontSize: '0.85rem', fontWeight: 750, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                👥 Player Allocations
+              </p>
+              <button onClick={addPlayer} className="btn-secondary btn-sm" style={{ padding: '0.2rem 0.55rem' }}>+ Add Player</button>
             </div>
-            <div className="space-y-2">
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {players.map((p, i) => (
-                <div key={i} className="flex items-center gap-4 py-2 border-b border-surface-700 last:border-0">
-                  <span className="text-slate-400 text-sm font-mono w-16">Player {i + 1}</span>
-                  <label className="flex items-center gap-2 cursor-pointer flex-1">
-                    <input type="checkbox" className="w-4 h-4 accent-brand-500"
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.65rem 0.75rem',
+                  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px',
+                  boxShadow: 'var(--shadow)'
+                }}>
+                  <span style={{ fontSize: '0.725rem', color: 'var(--text-faint)', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", width: '4.5rem' }}>
+                    PLAYER {i + 1}
+                  </span>
+                  
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', flex: 1, fontSize: '0.8125rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    <input type="checkbox" style={{ cursor: 'pointer' }}
                       checked={p.own_controller}
                       onChange={() => toggleOwnController(i)} />
-                    <span className="text-slate-300 text-sm">Own controller</span>
+                    <span>Brought own controller</span>
                   </label>
-                  <div className="text-right text-xs font-mono text-slate-400">
-                    {!p.own_controller && <span className="text-slate-300">+{formatRupees(settings.controller_fee)} ctrl</span>}
+                  
+                  <div style={{ textAlign: 'right', fontSize: '0.75rem', fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-faint)', display: 'flex', gap: '0.5rem' }}>
+                    {!p.own_controller && <span style={{ color: 'var(--text-muted)' }}>+{formatRupees(settings.controller_fee)} controller</span>}
                     {i + 1 >= (settings.extra_person_from || 3) && (
-                      <span className="text-yellow-400 ml-2">+{formatRupees(settings.extra_person_fee)} add-on</span>
+                      <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>+{formatRupees(settings.extra_person_fee)} seat fee</span>
                     )}
                   </div>
+                  
                   {players.length > 1 && (
-                    <button onClick={() => removePlayer(i)} className="text-slate-600 hover:text-red-400 text-sm">✕</button>
+                    <button onClick={() => removePlayer(i)} className="btn-secondary btn-icon" style={{ width: '1.5rem', height: '1.5rem', padding: 0, borderRadius: '50%' }}>✕</button>
                   )}
                 </div>
               ))}
@@ -306,62 +343,78 @@ export default function NewSession() {
           </div>
         )}
 
-        {/* Bill Summary */}
+        {/* Bill Summary (Analog-style Receipt Slip) */}
         {form.device_id && (
-          <div className="bg-brand-950/50 border border-brand-800/50 rounded-xl p-4">
-            <p className="font-display font-semibold text-brand-300 mb-2 text-sm tracking-wide uppercase">Bill Summary</p>
-            <div className="space-y-1 text-sm font-mono">
-              <div className="flex justify-between text-slate-300">
-                <span>Session ({formatDuration(form.duration_mins)} · {devices.find(d => d.id === Number(form.device_id))?.label})</span>
-                <span>{formatRupees(charge)}</span>
+          <div style={{
+            background: 'var(--bg-input)',
+            border: '1px solid var(--border)',
+            borderRadius: '14px',
+            padding: '1.25rem',
+            boxShadow: 'var(--shadow-inset)'
+          }}>
+            <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.65rem', borderBottom: '1px dashed var(--border)', paddingBottom: '0.25rem' }}>
+              📊 Computed Session Invoice
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                <span>Seat Charge ({formatDuration(form.duration_mins)} · {devices.find(d => d.id === Number(form.device_id))?.label})</span>
+                <span style={{ color: 'var(--text)' }}>{formatRupees(charge)}</span>
               </div>
+              
               {controllerTotal > 0 && (
-                <div className="flex justify-between text-slate-300">
-                  <span>Controllers</span>
-                  <span>{formatRupees(controllerTotal)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                  <span>Controller Rentals</span>
+                  <span style={{ color: 'var(--text)' }}>{formatRupees(controllerTotal)}</span>
                 </div>
               )}
+              
               {extraPersonTotal > 0 && (
-                <div className="flex justify-between text-slate-300">
-                  <span>Extra person add-on</span>
-                  <span>{formatRupees(extraPersonTotal)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                  <span>Additional Seat Allocations</span>
+                  <span style={{ color: 'var(--text)' }}>{formatRupees(extraPersonTotal)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-white font-bold border-t border-brand-800/50 pt-1 mt-1">
-                <span>Total</span>
-                <span className="text-brand-400">{formatRupees(total)}</span>
+              
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', fontWeight: 800,
+                borderTop: '1px dashed var(--border)', paddingTop: '0.5rem', marginTop: '0.25rem',
+                fontSize: '0.95rem'
+              }}>
+                <span style={{ color: 'var(--text)' }}>TOTAL ESTIMATED BILL</span>
+                <span style={{ color: 'var(--accent-text)', textShadow: '0 0 8px var(--accent-dim)' }}>{formatRupees(total)}</span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Payment + Remark */}
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Payment Received (₹)">
-            <input type="number" className="input" placeholder="Leave blank if unpaid"
+        {/* Row 4: Payment Received & Remark */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+          <Field label="Cash / Payment Received (₹)">
+            <input type="number" className="input" placeholder="Leave empty for fully unpaid/credit"
               value={form.payment_received}
               onChange={e => setForm(f => ({ ...f, payment_received: e.target.value }))} />
           </Field>
-          <Field label="Remark">
-            <input className="input" placeholder="Optional note"
+          <Field label="Console Remark / Notes">
+            <input className="input" placeholder="Access codes, extra hardware notes..."
               value={form.remark} onChange={e => setForm(f => ({ ...f, remark: e.target.value }))} />
           </Field>
         </div>
 
-        {/* Credit display */}
+        {/* Unpaid Credit Warning */}
         {form.payment_received !== '' && Number(form.payment_received) < total && (
-          <div className="flex items-center gap-2">
-            <span className="badge badge-red">
-              Credit: {formatRupees(total - Number(form.payment_received))}
+          <div style={{ display: 'flex' }}>
+            <span className="badge badge-danger">
+              Outstanding Credit: {formatRupees(total - Number(form.payment_received))}
             </span>
           </div>
         )}
 
-        <div className="flex gap-3 pt-2">
-          <button onClick={handleSubmit} disabled={loading} className="btn-primary disabled:opacity-50">
-            {loading ? <span className="flex items-center gap-2"><Spinner size="sm" /> Saving...</span> : 'Save Session'}
+        {/* Action Controls */}
+        <div style={{ display: 'flex', gap: '0.85rem', paddingTop: '0.5rem', borderTop: '1.5px solid var(--border)' }}>
+          <button onClick={handleSubmit} disabled={loading} className="btn-primary" style={{ padding: '0.65rem 1.35rem' }}>
+            {loading ? <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Spinner size="sm" /> Storing...</span> : 'Authorize Session'}
           </button>
-          <button onClick={() => navigate('/sessions')} className="btn-secondary">Cancel</button>
+          <button onClick={() => navigate('/sessions')} className="btn-secondary" style={{ padding: '0.65rem 1.35rem' }}>Abort Command</button>
         </div>
       </div>
     </div>
