@@ -163,8 +163,12 @@ export default function Sidebar() {
               color: isActive ? 'var(--accent)' : 'var(--text-muted)',
               fontSize: '0.675rem', fontWeight: isActive ? 700 : 500
             })}>
-            <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-            <span>{label}</span>
+            {({ isActive }) => (
+              <>
+                <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                <span>{label}</span>
+              </>
+            )}
           </NavLink>
         ))}
         
