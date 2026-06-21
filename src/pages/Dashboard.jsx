@@ -36,9 +36,11 @@ export default function Dashboard() {
   })
 
   const totalRevenue = snapshot
-    ? (snapshot.gaming_revenue || 0) + (snapshot.walkin_revenue || 0) +
-      (snapshot.session_sales_revenue || 0) + (snapshot.rc_revenue || 0) +
-      (snapshot.pancafe_revenue || 0)
+    ? Number(snapshot.gaming_revenue || 0) +
+      Number(snapshot.walkin_revenue || 0) +
+      Number(snapshot.session_sales_revenue || 0) +
+      Number(snapshot.rc_revenue || 0) +
+      Number(snapshot.pancafe_revenue || 0)
     : 0
 
   if (loading) return <PageLoader />
@@ -72,8 +74,8 @@ export default function Dashboard() {
         {[
           { label: "Today's Revenue", value: formatRupees(totalRevenue), sub: 'ALL COMBINED SOURCES', state: 'success' },
           { label: 'Gaming Sessions', value: formatRupees(snapshot?.gaming_revenue),  sub: 'ACTIVE BILLABLE SLOTS', state: '' },
-          { label: 'Shop Inventory',  value: formatRupees((snapshot?.walkin_revenue||0)+(snapshot?.session_sales_revenue||0)), sub: 'WALK-IN + TABLE SALES', state: '' },
-          { label: 'RC + PanCafe',    value: formatRupees((snapshot?.rc_revenue||0)+(snapshot?.pancafe_revenue||0)), sub: 'PLATFORM RECHARGES', state: 'warning' },
+          { label: 'Shop Inventory',  value: formatRupees(Number(snapshot?.walkin_revenue || 0) + Number(snapshot?.session_sales_revenue || 0)), sub: 'WALK-IN + TABLE SALES', state: '' },
+          { label: 'RC + PanCafe',    value: formatRupees(Number(snapshot?.rc_revenue || 0) + Number(snapshot?.pancafe_revenue || 0)), sub: 'PLATFORM RECHARGES', state: 'warning' },
         ].map((s, i) => (
           <div key={i} className={`lcd-screen ${s.state}`} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '110px' }}>
             <div>
