@@ -1,34 +1,81 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { formatRupees, formatDate, formatTime } from '../lib/helpers'
-import { PageLoader, ErrorMsg, SectionHeader } from '../components/UI'
+import { formatRupees, formatDate, formatTime, todayISO } from '../lib/helpers'
+import { PageLoader, ErrorMsg, SectionHeader, Modal, Field, Spinner } from '../components/UI'
 import { Plus } from 'lucide-react'
+
+// Live countdown for active sessions
+function ActiveCountdown({ timeOut }) {
+  const [label, setLabel] = useState('')
+  const [over, setOver] = useState(false)
+  useEffect(() => {
+    const tick = () => {
+      const diff = new Date(timeOut) - new Date()
+      if (diff <= 0) { setLabel('Overdue'); setOver(true); return }
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      setLabel(h > 0 ? `${h}h ${m}m left` : `${m}m left`)
+      setOver(false)
+    }
+    tick(); const id = setInterval(tick, 30000); return () => clearInterval(id)
+  }, [timeOut])
+  return (
+    <span style={{
+      fontSize: '0.725rem', fontFamily: "'JetBrains Mono', monospace", fontWeight: 700,
+      color: over ? 'var(--danger)' : 'var(--success)'
+    }}>{label}</span>
+  )
+}
 
 export default function Dashboard() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [snapshot, setSnapshot] = useState(null)
   const [credits, setCredits] = useState([])
   const [recentSessions, setRecentSessions] = useState([])
+  const [activeSessions, setActiveSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => { load() }, [])
+  // Day-start opening balance modal
+  const [showOpeningModal, setShowOpeningModal] = useState(false)
+  const [openingCash, setOpeningCash] = useState('')
+  const [openingNote, setOpeningNote] = useState('')
+  const [savingOpening, setSavingOpening] = useState(false)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true)
-      const [snap, cred, sess] = await Promise.all([
+      const today = todayISO()
+      const [snap, cred, sess, openR] = await Promise.all([
         api.get('/dashboard-snapshot'),
         api.get('/dashboard-credits'),
-        api.get('/sessions?limit=6'),
+        api.get('/sessions?date=' + today),
+        api.get('/day-openings?date=' + today),
       ])
       setSnapshot(snap)
       setCredits(cred.credits || [])
-      setRecentSessions(sess.sessions || [])
+      const allSessions = sess.sessions || []
+      setRecentSessions(allSessions.slice(0, 6))
+      setActiveSessions(allSessions.filter(s => s.is_active))
+      // Show opening modal if not yet set for today
+      if (!openR.opening) setShowOpeningModal(true)
     } catch (err) { setError(err.message) }
     finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleSaveOpening = async () => {
+    if (openingCash === '') { setShowOpeningModal(false); return }
+    setSavingOpening(true)
+    try {
+      await api.post('/day-openings', { opening_cash: Number(openingCash), note: openingNote || null, date: todayISO() })
+      setShowOpeningModal(false)
+    } catch (e) { setError(e.message) }
+    finally { setSavingOpening(false) }
   }
 
   const today = new Date().toLocaleDateString('en-IN', {
@@ -47,6 +94,31 @@ export default function Dashboard() {
 
   return (
     <div>
+      {/* Day-start modal */}
+      <Modal open={showOpeningModal} onClose={() => setShowOpeningModal(false)} title="☀️ Good morning — Start of Day">
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.6 }}>
+          How much cash is currently in the cafe? This sets the opening balance for today's EOD reconciliation.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <Field label="Cash in drawer right now (₹)" required>
+            <input type="number" className="input" placeholder="e.g. 500" autoFocus
+              value={openingCash} onChange={e => setOpeningCash(e.target.value)} />
+          </Field>
+          <Field label="Note (optional)">
+            <input className="input" placeholder="e.g. Carried ₹200 from yesterday"
+              value={openingNote} onChange={e => setOpeningNote(e.target.value)} />
+          </Field>
+          <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1.5px solid var(--border)' }}>
+            <button onClick={handleSaveOpening} disabled={savingOpening} className="btn-primary" style={{ flex: 1 }}>
+              {savingOpening ? <><Spinner size="sm" /> Saving...</> : 'Set Opening Balance'}
+            </button>
+            <button onClick={() => setShowOpeningModal(false)} className="btn-secondary" style={{ flex: 1 }}>
+              Skip for now
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Page header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '2rem', gap: '1.25rem', flexWrap: 'wrap' }}>
         <div>
@@ -69,13 +141,13 @@ export default function Dashboard() {
 
       <ErrorMsg error={error} />
 
-      {/* Stats (glowing digital readouts) */}
+      {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
         {[
           { label: "Today's Revenue", value: formatRupees(totalRevenue), sub: 'ALL COMBINED SOURCES', state: 'success' },
-          { label: 'Gaming Sessions', value: formatRupees(snapshot?.gaming_revenue),  sub: 'ACTIVE BILLABLE SLOTS', state: '' },
-          { label: 'Shop Inventory',  value: formatRupees(Number(snapshot?.walkin_revenue || 0) + Number(snapshot?.session_sales_revenue || 0)), sub: 'WALK-IN + TABLE SALES', state: '' },
-          { label: 'RC + PanCafe',    value: formatRupees(Number(snapshot?.rc_revenue || 0) + Number(snapshot?.pancafe_revenue || 0)), sub: 'PLATFORM RECHARGES', state: 'warning' },
+          { label: 'Gaming Sessions', value: formatRupees(snapshot?.gaming_revenue), sub: `${activeSessions.length} ACTIVE NOW`, state: activeSessions.length > 0 ? 'success' : '' },
+          { label: 'Shop Inventory', value: formatRupees(Number(snapshot?.walkin_revenue || 0) + Number(snapshot?.session_sales_revenue || 0)), sub: 'WALK-IN + TABLE SALES', state: '' },
+          { label: 'RC + PanCafe', value: formatRupees(Number(snapshot?.rc_revenue || 0) + Number(snapshot?.pancafe_revenue || 0)), sub: 'PLATFORM RECHARGES', state: 'warning' },
         ].map((s, i) => (
           <div key={i} className={`lcd-screen ${s.state}`} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '110px' }}>
             <div>
@@ -86,6 +158,34 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* Active sessions panel */}
+      {activeSessions.length > 0 && (
+        <div className="card" style={{ marginBottom: '1.75rem' }}>
+          <SectionHeader
+            title="Active Sessions"
+            action={<span className="badge badge-success" style={{ animation: 'pulse 2s infinite' }}>● {activeSessions.length} LIVE</span>}
+          />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.75rem' }}>
+            {activeSessions.map(s => (
+              <button key={s.id} onClick={() => navigate(`/sessions/${s.id}`)}
+                className="card"
+                style={{ padding: '0.85rem', textAlign: 'left', cursor: 'pointer', border: '1.5px solid var(--accent-border)', background: 'var(--accent-dim)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.35rem' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text)' }}>{s.name || 'Anonymous'}</span>
+                  <ActiveCountdown timeOut={s.time_out} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="badge badge-accent" style={{ fontSize: '0.65rem' }}>{s.device_label}</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                    until {new Date(s.time_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Two columns */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginBottom: '2.25rem' }}>
@@ -104,18 +204,20 @@ export default function Dashboard() {
               : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   {credits.map((c, i) => (
-                    <div key={c.session_id} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '0.85rem 0.75rem', borderRadius: '10px',
-                      background: i % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
-                      borderBottom: i < credits.length - 1 ? '1px solid var(--border)' : 'none'
-                    }}>
+                    <button key={c.session_id} onClick={() => navigate(`/sessions/${c.session_id}`)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '0.85rem 0.75rem', borderRadius: '10px', cursor: 'pointer',
+                        background: i % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
+                        borderBottom: i < credits.length - 1 ? '1px solid var(--border)' : 'none',
+                        border: 'none', width: '100%', textAlign: 'left'
+                      }}>
                       <div>
                         <p style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)' }}>{c.name || 'Anonymous'}</p>
                         <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontWeight: 550 }}>{formatDate(c.date)} · {c.device_label}</p>
                       </div>
                       <span className="badge badge-danger">{formatRupees(c.credit)}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )
@@ -126,30 +228,35 @@ export default function Dashboard() {
         {/* Recent sessions panel */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
           <SectionHeader
-            title="Recent Sessions"
-            action={<Link to="/sessions" className="btn-secondary btn-sm" style={{ padding: '0.25rem 0.65rem' }}>Monitor logs</Link>}
+            title="Today's Sessions"
+            action={<Link to="/sessions" className="btn-secondary btn-sm" style={{ padding: '0.25rem 0.65rem' }}>View all</Link>}
           />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: recentSessions.length === 0 ? 'center' : 'flex-start' }}>
             {recentSessions.length === 0
-              ? <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0', fontWeight: 500 }}>No operator sessions logged today</p>
+              ? <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0', fontWeight: 500 }}>No sessions logged today</p>
               : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   {recentSessions.map((s, i) => (
-                    <div key={s.id} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '0.85rem 0.75rem', borderRadius: '10px',
-                      background: i % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
-                      borderBottom: i < recentSessions.length - 1 ? '1px solid var(--border)' : 'none'
-                    }}>
+                    <button key={s.id} onClick={() => navigate(`/sessions/${s.id}`)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '0.85rem 0.75rem', borderRadius: '10px', cursor: 'pointer',
+                        background: i % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
+                        borderBottom: i < recentSessions.length - 1 ? '1px solid var(--border)' : 'none',
+                        border: 'none', width: '100%', textAlign: 'left'
+                      }}>
                       <div>
                         <p style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)' }}>{s.name || 'Anonymous'}</p>
-                        <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontWeight: 550 }}>{s.device_label} · {formatTime(s.time_in)}</p>
+                        <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontWeight: 550 }}>
+                          {s.device_label} · {formatTime(s.time_in)}
+                          {s.is_active && <span className="badge badge-success" style={{ fontSize: '0.6rem', marginLeft: '0.4rem' }}>● ACTIVE</span>}
+                        </p>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ fontSize: '0.875rem', fontWeight: 750, color: 'var(--text)', fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(s.total)}</p>
                         {s.credit > 0 && <span className="badge badge-danger" style={{ marginTop: '0.25rem' }}>{formatRupees(s.credit)}</span>}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )
@@ -158,17 +265,21 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Quick actions panel */}
+      {/* Quick actions */}
       <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
-        <p style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.95rem' }}>Hardware Commands & Actions</p>
+        <p style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.95rem' }}>Quick Actions</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <Link to="/sessions/new"    className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={3} />New Gaming Session</Link>
-          <Link to="/pancafe/new"     className="btn-secondary" style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Launch PanCafe</Link>
-          <Link to="/inventory/sell"  className="btn-secondary" style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Complete Walk-in Sale</Link>
-          <Link to="/recharges/new"   className="btn-secondary" style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Recharge Platform</Link>
-          <Link to="/expenses/new"    className="btn-secondary" style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Log System Expense</Link>
+          <Link to="/sessions/new"    className="btn-primary"    style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={3} />New Gaming Session</Link>
+          <Link to="/pancafe/new"     className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Log PanCafe Session</Link>
+          <Link to="/inventory/sell"  className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Walk-in Sale</Link>
+          <Link to="/recharges/new"   className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Recharge Platform</Link>
+          <Link to="/expenses/new"    className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Log Expense</Link>
+          <Link to="/eod"             className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}>🧾 EOD Reconciliation</Link>
         </div>
       </div>
+
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
     </div>
   )
 }
+

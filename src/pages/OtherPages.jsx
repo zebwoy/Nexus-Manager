@@ -888,3 +888,183 @@ export function Settings() {
     </div>
   )
 }
+
+// ─── EOD RECONCILIATION ───────────────────────────────────────
+export function EODReconciliation() {
+  const [snapshot, setSnapshot] = useState(null)
+  const [opening, setOpening] = useState(null)
+  const [rcData, setRcData] = useState({ cash: 0, online: 0 })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [actualCash, setActualCash] = useState('')
+  const today = new Date().toLocaleDateString('en-CA')
+
+  useEffect(() => { load() }, [])
+
+  const load = async () => {
+    try {
+      setLoading(true)
+      const [snap, openR, rcR] = await Promise.all([
+        api.get('/dashboard-snapshot'),
+        api.get(`/day-openings?date=${today}`),
+        api.get(`/recharges?date=${today}`),
+      ])
+      setSnapshot(snap)
+      setOpening(openR.opening)
+      // Compute recharge cash/online
+      const recharges = rcR.recharges || []
+      setRcData({
+        cash: recharges.filter(r => r.payment_method === 'cash').reduce((s, r) => s + Number(r.payment_received || r.charge_price), 0),
+        online: recharges.filter(r => r.payment_method === 'online').reduce((s, r) => s + Number(r.payment_received || r.charge_price), 0),
+      })
+    } catch (e) { setError(e.message) }
+    finally { setLoading(false) }
+  }
+
+  const openingCash = Number(opening?.opening_cash || 0)
+
+  const cashInflows = snapshot
+    ? Number(snapshot.cash_gaming || 0) +
+      Number(snapshot.cash_sales || 0) +
+      Number(snapshot.cash_pancafe || 0) +
+      rcData.cash
+    : 0
+
+  const onlineInflows = snapshot
+    ? Number(snapshot.online_gaming || 0) +
+      Number(snapshot.online_sales || 0) +
+      Number(snapshot.online_pancafe || 0) +
+      rcData.online
+    : 0
+
+  const cashOutflows = Number(snapshot?.cash_expenses || 0)
+  const expectedCash = openingCash + cashInflows - cashOutflows
+  const actualNum = actualCash !== '' ? Number(actualCash) : null
+  const variance = actualNum !== null ? actualNum - expectedCash : null
+
+  const Row = ({ label, cash, online, highlight }) => (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+      gap: '0.5rem', padding: '0.65rem 0',
+      borderBottom: '1px dashed var(--border)',
+      fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem'
+    }}>
+      <span style={{ color: highlight ? 'var(--text)' : 'var(--text-muted)', fontWeight: highlight ? 750 : 600 }}>{label}</span>
+      <span style={{ textAlign: 'right', color: 'var(--success)', fontWeight: 650 }}>{formatRupees(cash)}</span>
+      <span style={{ textAlign: 'right', color: 'var(--accent-text)', fontWeight: 650 }}>{formatRupees(online)}</span>
+    </div>
+  )
+
+  return (
+    <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+      <div style={{ marginBottom: '2rem' }}>
+        <h1 className="page-title">End of Day Reconciliation</h1>
+        <p className="page-sub">Cash drawer balance check · {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+      </div>
+
+      <ErrorMsg error={error} />
+
+      {loading ? <PageLoader /> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+          {/* Opening balance */}
+          <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem' }}>
+            <div>
+              <p style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Opening Cash Balance</p>
+              <p style={{ fontSize: '1.75rem', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: 'var(--text)', marginTop: '0.15rem' }}>{formatRupees(openingCash)}</p>
+            </div>
+            {opening
+              ? <span className="badge badge-success">Set at {new Date(opening.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+              : <span className="badge badge-danger">Not set today</span>}
+          </div>
+
+          {/* Inflows breakdown */}
+          <div className="card">
+            <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.85rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
+              💰 Today's Inflows
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-faint)', fontWeight: 700, textTransform: 'uppercase' }}>Category</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 700, textTransform: 'uppercase', textAlign: 'right' }}>Cash</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--accent-text)', fontWeight: 700, textTransform: 'uppercase', textAlign: 'right' }}>Online</span>
+            </div>
+            {snapshot && <>
+              <Row label="Gaming Sessions" cash={snapshot.cash_gaming} online={snapshot.online_gaming} />
+              <Row label="Shop Sales" cash={snapshot.cash_sales} online={snapshot.online_sales} />
+              <Row label="PanCafe" cash={snapshot.cash_pancafe} online={snapshot.online_pancafe} />
+              <Row label="Recharges" cash={rcData.cash} online={rcData.online} />
+              <Row label="TOTAL INFLOWS" cash={cashInflows} online={onlineInflows} highlight />
+            </>}
+          </div>
+
+          {/* Cash outflows */}
+          <div className="card">
+            <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.85rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
+              💸 Cash Outflows (Expenses)
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'JetBrains Mono', monospace" }}>
+              <span style={{ color: 'var(--text-muted)' }}>Expenses paid in cash</span>
+              <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{formatRupees(cashOutflows)}</span>
+            </div>
+          </div>
+
+          {/* Expected vs Actual */}
+          <div className="card" style={{ background: 'var(--bg-elevated)' }}>
+            <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '1rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
+              🧾 Cash Drawer Summary
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.875rem', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Opening cash</span>
+                <span>{formatRupees(openingCash)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>+ Cash collected today</span>
+                <span style={{ color: 'var(--success)' }}>+{formatRupees(cashInflows)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>− Cash expenses</span>
+                <span style={{ color: 'var(--danger)' }}>−{formatRupees(cashOutflows)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1.5px dashed var(--border)', paddingTop: '0.5rem', fontWeight: 800, fontSize: '1rem' }}>
+                <span>Expected in drawer</span>
+                <span style={{ color: 'var(--accent-text)' }}>{formatRupees(expectedCash)}</span>
+              </div>
+            </div>
+
+            {snapshot?.total_outstanding_credit > 0 && (
+              <div style={{ padding: '0.65rem 1rem', borderRadius: '10px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', fontFamily: "'JetBrains Mono', monospace" }}>
+                <span style={{ color: 'var(--danger)', fontWeight: 650 }}>Outstanding credits (not in drawer)</span>
+                <span style={{ color: 'var(--danger)', fontWeight: 800 }}>{formatRupees(snapshot.total_outstanding_credit)}</span>
+              </div>
+            )}
+
+            <Field label="Actual cash counted in drawer (₹)">
+              <input type="number" className="input" placeholder="Count and enter physical cash"
+                value={actualCash} onChange={e => setActualCash(e.target.value)} />
+            </Field>
+
+            {variance !== null && (
+              <div style={{
+                marginTop: '1rem', padding: '0.85rem 1.25rem', borderRadius: '12px',
+                background: Math.abs(variance) < 1 ? 'rgba(34,197,94,0.1)' : 'rgba(220,38,38,0.1)',
+                border: `1.5px solid ${Math.abs(variance) < 1 ? 'var(--success)' : 'var(--danger)'}`,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                fontFamily: "'JetBrains Mono', monospace"
+              }}>
+                <span style={{ fontWeight: 700, color: Math.abs(variance) < 1 ? 'var(--success)' : 'var(--danger)' }}>
+                  {Math.abs(variance) < 1 ? '✓ Drawer balanced' : variance > 0 ? '↑ Cash over' : '↓ Cash short'}
+                </span>
+                <span style={{ fontSize: '1.15rem', fontWeight: 800, color: Math.abs(variance) < 1 ? 'var(--success)' : 'var(--danger)' }}>
+                  {variance > 0 ? '+' : ''}{formatRupees(variance)}
+                </span>
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+    </div>
+  )
+}
+

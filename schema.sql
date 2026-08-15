@@ -221,4 +221,87 @@ SELECT
   (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'session' AND date = CURRENT_DATE) AS session_sales_revenue,
   (SELECT COALESCE(SUM(charge_price), 0.00) FROM recharges WHERE date = CURRENT_DATE) AS rc_revenue,
   (SELECT COALESCE(SUM(amount_received), 0.00) FROM pancafe_sessions WHERE date = CURRENT_DATE) AS pancafe_revenue,
-  (SELECT COALESCE(SUM(credit), 0.00) FROM sessions WHERE credit > 0) AS total_outstanding_credit;
+  (SELECT COALESCE(SUM(credit), 0.00) FROM sessions WHERE credit > 0) AS total_outstanding_credit,
+  -- Cash vs Online inflow breakdown for EOD reconciliation
+  (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN payment_received ELSE 0 END), 0.00)
+   FROM sessions WHERE date = CURRENT_DATE) AS cash_gaming,
+  (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN payment_received ELSE 0 END), 0.00)
+   FROM sessions WHERE date = CURRENT_DATE) AS online_gaming,
+  (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN total ELSE 0 END), 0.00)
+   FROM sales WHERE date = CURRENT_DATE) AS cash_sales,
+  (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN total ELSE 0 END), 0.00)
+   FROM sales WHERE date = CURRENT_DATE) AS online_sales,
+  (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount_received ELSE 0 END), 0.00)
+   FROM pancafe_sessions WHERE date = CURRENT_DATE) AS cash_pancafe,
+  (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN amount_received ELSE 0 END), 0.00)
+   FROM pancafe_sessions WHERE date = CURRENT_DATE) AS online_pancafe,
+  (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount ELSE 0 END), 0.00)
+   FROM expenses WHERE date = CURRENT_DATE) AS cash_expenses,
+  -- Active session count
+  (SELECT COUNT(*) FROM sessions WHERE date = CURRENT_DATE AND time_out > NOW()) AS active_sessions,
+  (SELECT COUNT(*) FROM pancafe_sessions WHERE date = CURRENT_DATE AND time_out IS NULL) AS active_pancafe;
+
+
+-- ─── PHASE 2 MIGRATIONS ────────────────────────────────────────────────
+-- Run these once against your Neon DB if upgrading from Phase 1.
+
+-- 1. User roles
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'operator'
+  CHECK (role IN ('admin', 'operator'));
+UPDATE users SET role = 'admin' WHERE username = 'trial';
+
+-- 2. Customer enhancements
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS shop_name VARCHAR(100);
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS pancafe_username VARCHAR(100);
+
+-- 3. Payment method on all transaction tables
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'cash'
+  CHECK (payment_method IN ('cash', 'online', 'credit'));
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'cash'
+  CHECK (payment_method IN ('cash', 'online', 'mixed', 'credit'));
+ALTER TABLE pancafe_sessions ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'cash'
+  CHECK (payment_method IN ('cash', 'online', 'credit'));
+ALTER TABLE recharges ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'cash'
+  CHECK (payment_method IN ('cash', 'online'));
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'cash'
+  CHECK (payment_method IN ('cash', 'online'));
+
+-- 4. PanCafe membership plans
+CREATE TABLE IF NOT EXISTS pancafe_plans (
+    id SERIAL PRIMARY KEY,
+    label VARCHAR(100) NOT NULL,
+    hours DECIMAL(5,2) NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    is_signup_plan BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE pancafe_sessions ADD COLUMN IF NOT EXISTS plan_id INT REFERENCES pancafe_plans(id);
+
+INSERT INTO pancafe_plans (label, hours, price, is_signup_plan) VALUES
+  ('Signup Plan (6H)', 6.0, 500.00, TRUE),
+  ('Recharge 7H', 7.0, 420.00, FALSE)
+ON CONFLICT DO NOTHING;
+
+-- 5. Session payments log (append-only, cash/online split)
+CREATE TABLE IF NOT EXISTS session_payments (
+    id SERIAL PRIMARY KEY,
+    session_id INT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    amount DECIMAL(10,2) NOT NULL,
+    payment_method VARCHAR(20) NOT NULL DEFAULT 'cash'
+      CHECK (payment_method IN ('cash', 'online')),
+    note TEXT,
+    created_by INT REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Day opening balance (BOD cash reconciliation)
+CREATE TABLE IF NOT EXISTS day_openings (
+    id SERIAL PRIMARY KEY,
+    date DATE NOT NULL UNIQUE DEFAULT CURRENT_DATE,
+    opening_cash DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    note TEXT,
+    created_by INT REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+

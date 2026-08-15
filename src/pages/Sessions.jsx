@@ -84,7 +84,7 @@ export default function Sessions() {
           <table className="tbl">
             <thead>
               <tr>
-                {['Customer Details', 'Station ID', 'Time In', 'Time Out', 'Mins Logged', 'Seat Charge', 'Invoice Total', 'Cash Received', 'Credit Status', 'Operator'].map(h => (
+                {['Customer Details', 'Station ID', 'Time In', 'Time Out', 'Duration', 'Seat Charge', 'Invoice Total', 'Cash Received', 'Credit Status', 'Pay Method', 'Operator'].map(h => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -100,10 +100,11 @@ export default function Sessions() {
 
                 return (
                   <tr key={s.id} style={{ cursor: 'pointer', background: index % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent' }}
-                      onClick={() => navigate(`/sessions`)}>
+                      onClick={() => navigate(`/sessions/${s.id}`)}>
                     <td className="table-cell">
                       <p style={{ fontWeight: 700, color: 'var(--text)' }}>{s.name || <span style={{ color: 'var(--text-faint)' }}>Walk-in Client</span>}</p>
                       {s.mobile && <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace", marginTop: '0.1rem' }}>{s.mobile}</p>}
+                      {s.is_active && <span className="badge badge-success" style={{ fontSize: '0.6rem', marginTop: '0.25rem' }}>● ACTIVE</span>}
                     </td>
                     <td className="table-cell">
                       <span className={`badge ${badgeClass}`}>{s.device_label}</span>
@@ -112,12 +113,17 @@ export default function Sessions() {
                     <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>{formatTime(s.time_out)}</td>
                     <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>{formatDuration(s.duration_mins)}</td>
                     <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(s.charge)}</td>
-                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace', monospace", fontWeight: 750 }}>{formatRupees(s.total)}</td>
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 750 }}>{formatRupees(s.total)}</td>
                     <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{s.payment_received != null ? formatRupees(s.payment_received) : '—'}</td>
                     <td className="table-cell">
                       {s.credit > 0
                         ? <span className="badge badge-danger">{formatRupees(s.credit)}</span>
                         : <span style={{ color: 'var(--text-faint)', fontSize: '0.8125rem' }}>Fully Paid</span>}
+                    </td>
+                    <td className="table-cell">
+                      <span className={`badge ${s.payment_method === 'online' ? 'badge-warning' : 'badge-accent'}`} style={{ fontSize: '0.65rem' }}>
+                        {s.payment_method || 'cash'}
+                      </span>
                     </td>
                     <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontWeight: 600 }}>@{s.created_by_username || 'system'}</td>
                   </tr>

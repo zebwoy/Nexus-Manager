@@ -26,6 +26,7 @@ export default function NewSession() {
     date: todayISO(),
     time_in: nowTimeInput(),
     payment_received: '',
+    payment_method: 'cash',
     remark: '',
   })
 
@@ -167,8 +168,10 @@ export default function NewSession() {
         payment_received: payment,
         credit,
         remark: form.remark,
+        payment_method: form.payment_method,
         players: playersPayload,
       })
+
       navigate('/sessions')
     } catch (err) {
       setError(err.message)
@@ -387,13 +390,28 @@ export default function NewSession() {
           </div>
         )}
 
-        {/* Row 4: Payment Received & Remark */}
+        {/* Row 4: Payment Received, Method & Remark */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-          <Field label="Cash / Payment Received (₹)">
-            <input type="number" className="input" placeholder="Leave empty for fully unpaid/credit"
-              value={form.payment_received}
-              onChange={e => setForm(f => ({ ...f, payment_received: e.target.value }))} />
-          </Field>
+          <div>
+            <Field label="Payment Received (₹)">
+              <input type="number" className="input" placeholder="Leave empty for credit"
+                value={form.payment_received}
+                onChange={e => setForm(f => ({ ...f, payment_received: e.target.value }))} />
+            </Field>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.65rem' }}>
+              {['cash', 'online', 'credit'].map(m => (
+                <button key={m} onClick={() => setForm(f => ({ ...f, payment_method: m }))}
+                  style={{
+                    padding: '0.35rem 0.75rem', borderRadius: '8px', cursor: 'pointer',
+                    border: `1.5px solid ${form.payment_method === m ? 'var(--accent)' : 'var(--border)'}`,
+                    background: form.payment_method === m ? 'var(--accent-dim)' : 'var(--bg-input)',
+                    color: form.payment_method === m ? 'var(--accent-text)' : 'var(--text-muted)',
+                    fontWeight: 650, fontSize: '0.75rem', textTransform: 'capitalize',
+                    transition: 'all 0.15s'
+                  }}>{m}</button>
+              ))}
+            </div>
+          </div>
           <Field label="Console Remark / Notes">
             <input className="input" placeholder="Access codes, extra hardware notes..."
               value={form.remark} onChange={e => setForm(f => ({ ...f, remark: e.target.value }))} />

@@ -7,8 +7,9 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Sessions from './pages/Sessions'
 import NewSession from './pages/NewSession'
+import SessionDetail from './pages/SessionDetail'
 import { PanCafe, NewPanCafe } from './pages/PanCafe'
-import { Inventory, WalkInSale, Recharges, NewRecharge, Expenses, NewExpense, Customers, Reports, Settings } from './pages/OtherPages'
+import { Inventory, WalkInSale, Recharges, NewRecharge, Expenses, NewExpense, Customers, Reports, Settings, EODReconciliation } from './pages/OtherPages'
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
@@ -24,6 +25,7 @@ function AppRoutes() {
       <Route path="/"                element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/sessions"        element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
       <Route path="/sessions/new"    element={<ProtectedRoute><NewSession /></ProtectedRoute>} />
+      <Route path="/sessions/:id"    element={<ProtectedRoute><SessionDetail /></ProtectedRoute>} />
       <Route path="/pancafe"         element={<ProtectedRoute><PanCafe /></ProtectedRoute>} />
       <Route path="/pancafe/new"     element={<ProtectedRoute><NewPanCafe /></ProtectedRoute>} />
       <Route path="/inventory"       element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
@@ -35,6 +37,7 @@ function AppRoutes() {
       <Route path="/customers"       element={<ProtectedRoute><Customers /></ProtectedRoute>} />
       <Route path="/reports"         element={<ProtectedRoute><Reports /></ProtectedRoute>} />
       <Route path="/settings"        element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/eod"             element={<ProtectedRoute><EODReconciliation /></ProtectedRoute>} />
       <Route path="*"                element={<Navigate to="/" replace />} />
     </Routes>
   )

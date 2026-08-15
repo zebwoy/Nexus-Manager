@@ -44,14 +44,25 @@ export const settingsHandler = async (event) => {
 export const customersHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return cors()
   const pool = getPool()
+  const userId = event.headers['x-user-id']
   try {
     const params = event.queryStringParameters || {}
     if (params.search) {
       const r = await pool.query(
-        `SELECT * FROM customers WHERE name ILIKE $1 OR mobile LIKE $2 ORDER BY name LIMIT 10`,
+        `SELECT * FROM customers WHERE name ILIKE $1 OR mobile LIKE $2 OR shop_name ILIKE $1 ORDER BY name LIMIT 15`,
         [`%${params.search}%`, `%${params.search}%`]
       )
       return ok({ customers: r.rows })
+    }
+    if (event.httpMethod === 'POST') {
+      const b = JSON.parse(event.body || '{}')
+      if (!b.name) return err('Name is required')
+      const r = await pool.query(
+        `INSERT INTO customers (name, mobile, shop_name, pancafe_username)
+         VALUES ($1,$2,$3,$4) RETURNING *`,
+        [b.name.trim(), b.mobile || null, b.shop_name || null, b.pancafe_username || null]
+      )
+      return ok({ customer: r.rows[0] }, 201)
     }
     const r = await pool.query(`
       SELECT c.*, COUNT(s.id)::int AS session_count
@@ -68,17 +79,46 @@ export const pancafeHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return cors()
   const pool = getPool()
   const userId = event.headers['x-user-id']
+
+  // PATCH /pancafe/:id — close an open session
+  const idMatch = event.path.match(/\/pancafe\/(\d+)$/)
+  if (idMatch && event.httpMethod === 'PATCH') {
+    const id = Number(idMatch[1])
+    try {
+      const b = JSON.parse(event.body || '{}')
+      const cols = []; const vals = []; let i = 1
+      if (b.time_out !== undefined)       { cols.push(`time_out = $${i++}`);         vals.push(b.time_out) }
+      if (b.amount_received !== undefined){ cols.push(`amount_received = $${i++}`);  vals.push(Number(b.amount_received)) }
+      if (b.amount_spent !== undefined)   { cols.push(`amount_spent = $${i++}`);     vals.push(Number(b.amount_spent)) }
+      if (b.payment_method !== undefined) { cols.push(`payment_method = $${i++}`);   vals.push(b.payment_method) }
+      if (b.remark !== undefined)         { cols.push(`remark = $${i++}`);           vals.push(b.remark) }
+      if (cols.length === 0) return err('Nothing to update')
+      vals.push(id)
+      const r = await pool.query(
+        `UPDATE pancafe_sessions SET ${cols.join(', ')} WHERE id = $${i} RETURNING *`, vals
+      )
+      return ok({ session: r.rows[0] })
+    } catch (e) { console.error(e); return err('Server error', 500) }
+  }
+
   try {
     if (event.httpMethod === 'GET') {
       const params = event.queryStringParameters || {}
       const date = params.date
-      let q = `SELECT ps.*, c.name, d.label AS device_label, u.username AS created_by_username
+      const activeOnly = params.active === 'true'
+      let q = `SELECT ps.*, c.name, c.shop_name, d.label AS device_label,
+                      u.username AS created_by_username,
+                      pp.label AS plan_label, pp.hours AS plan_hours
                FROM pancafe_sessions ps
                LEFT JOIN customers c ON c.id = ps.customer_id
                LEFT JOIN devices d ON d.id = ps.device_id
-               LEFT JOIN users u ON u.id = ps.created_by`
+               LEFT JOIN users u ON u.id = ps.created_by
+               LEFT JOIN pancafe_plans pp ON pp.id = ps.plan_id`
       const vals = []
-      if (date) { q += ` WHERE ps.date = $1`; vals.push(date) }
+      const where = []
+      if (date) { where.push(`ps.date = $${vals.length + 1}`); vals.push(date) }
+      if (activeOnly) { where.push(`ps.time_out IS NULL`) }
+      if (where.length) q += ` WHERE ${where.join(' AND ')}`
       q += ` ORDER BY ps.created_at DESC`
       const r = await pool.query(q, vals)
       return ok({ sessions: r.rows })
@@ -89,12 +129,30 @@ export const pancafeHandler = async (event) => {
       if (!cid && b.name) {
         const ex = await pool.query('SELECT id FROM customers WHERE name ILIKE $1', [b.name.trim()])
         if (ex.rows.length > 0) cid = ex.rows[0].id
-        else { const nc = await pool.query('INSERT INTO customers (name, mobile) VALUES ($1,$2) RETURNING id', [b.name.trim(), b.mobile||null]); cid = nc.rows[0].id }
+        else {
+          const nc = await pool.query(
+            'INSERT INTO customers (name, mobile, shop_name, pancafe_username) VALUES ($1,$2,$3,$4) RETURNING id',
+            [b.name.trim(), b.mobile||null, b.shop_name||null, b.pancafe_username||null]
+          )
+          cid = nc.rows[0].id
+        }
+      }
+      // If customer exists and pancafe_username provided, update it
+      if (cid && b.pancafe_username) {
+        await pool.query(
+          'UPDATE customers SET pancafe_username = COALESCE(pancafe_username, $1) WHERE id = $2',
+          [b.pancafe_username, cid]
+        )
       }
       await pool.query(
-        `INSERT INTO pancafe_sessions (customer_id, pancafe_username, device_id, date, time_in, time_out, amount_received, amount_spent, remark, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [cid, b.pancafe_username, b.device_id||null, b.date, b.time_in||null, b.time_out||null, b.amount_received, b.amount_spent, b.remark||null, userId||null]
+        `INSERT INTO pancafe_sessions
+           (customer_id, pancafe_username, device_id, plan_id, date, time_in, time_out,
+            amount_received, amount_spent, payment_method, remark, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [cid, b.pancafe_username, b.device_id||null, b.plan_id||null,
+         b.date, b.time_in||null, b.time_out||null,
+         b.amount_received, b.amount_spent||0, b.payment_method||'cash',
+         b.remark||null, userId||null]
       )
       return ok({ success: true }, 201)
     }
@@ -156,8 +214,8 @@ export const expensesHandler = async (event) => {
     if (event.httpMethod === 'POST') {
       const b = JSON.parse(event.body || '{}')
       await pool.query(
-        `INSERT INTO expenses (date, category, amount, note, created_by) VALUES ($1,$2,$3,$4,$5)`,
-        [b.date, b.category, b.amount, b.note||null, userId||null]
+        `INSERT INTO expenses (date, category, amount, note, payment_method, created_by) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [b.date, b.category, b.amount, b.note||null, b.payment_method||'cash', userId||null]
       )
       return ok({ success: true }, 201)
     }
@@ -171,15 +229,36 @@ export const salesHandler = async (event) => {
   const pool = getPool()
   const userId = event.headers['x-user-id']
   try {
+    if (event.httpMethod === 'GET') {
+      const params = event.queryStringParameters || {}
+      // Fetch sales for a specific session (used by SessionDetail)
+      if (params.session_id) {
+        const r = await pool.query(
+          `SELECT sa.id, sa.total, sa.payment_received, sa.payment_method, sa.created_at,
+                  json_agg(json_build_object(
+                    'name', ii.name, 'qty', si.qty, 'unit_price', si.unit_price
+                  )) AS items
+           FROM sales sa
+           JOIN sale_items si ON si.sale_id = sa.id
+           JOIN inventory_items ii ON ii.id = si.item_id
+           WHERE sa.session_id = $1
+           GROUP BY sa.id ORDER BY sa.created_at`,
+          [Number(params.session_id)]
+        )
+        return ok({ sales: r.rows })
+      }
+      return err('session_id required for GET')
+    }
     if (event.httpMethod === 'POST') {
       const b = JSON.parse(event.body || '{}')
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
         const saleResult = await client.query(
-          `INSERT INTO sales (session_id, customer_id, sale_type, date, total, payment_received, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-          [b.session_id||null, b.customer_id||null, b.sale_type||'walkin', b.date, b.total, b.payment_received||null, userId||null]
+          `INSERT INTO sales (session_id, customer_id, sale_type, date, total, payment_received, payment_method, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+          [b.session_id||null, b.customer_id||null, b.sale_type||'walkin', b.date, b.total,
+           b.payment_received||null, b.payment_method||'cash', userId||null]
         )
         const saleId = saleResult.rows[0].id
         for (const item of (b.items || [])) {
@@ -187,10 +266,16 @@ export const salesHandler = async (event) => {
             `INSERT INTO sale_items (sale_id, item_id, qty, unit_price) VALUES ($1,$2,$3,$4)`,
             [saleId, item.item_id, item.qty, item.unit_price]
           )
-          await client.query(
-            `UPDATE inventory_items SET stock_qty = stock_qty - $1 WHERE id = $2`,
+          // Atomic stock guard — prevent going negative
+          const stockR = await client.query(
+            `UPDATE inventory_items SET stock_qty = stock_qty - $1
+             WHERE id = $2 AND stock_qty >= $1 RETURNING id`,
             [item.qty, item.item_id]
           )
+          if (stockR.rowCount === 0) {
+            await client.query('ROLLBACK')
+            return err(`Insufficient stock for item ID ${item.item_id}`, 409)
+          }
         }
         await client.query('COMMIT')
         return ok({ id: saleId }, 201)

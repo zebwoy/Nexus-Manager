@@ -3,13 +3,16 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatRupees, formatTime, formatDate, todayISO } from '../lib/helpers'
-import { PageLoader, EmptyState, ErrorMsg, Field } from '../components/UI'
+import { PageLoader, EmptyState, ErrorMsg, Field, Modal, Spinner } from '../components/UI'
 
 export function PanCafe() {
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dateFilter, setDateFilter] = useState(todayISO())
+  const [closing, setClosing] = useState(null)  // session being closed
+  const [closeForm, setCloseForm] = useState({ time_out: '', amount_received: '', payment_method: 'cash' })
+  const [closeSaving, setCloseSaving] = useState(false)
 
   useEffect(() => { load() }, [dateFilter])
 
@@ -22,13 +25,70 @@ export function PanCafe() {
     finally { setLoading(false) }
   }
 
+  const handleCloseSession = async () => {
+    setCloseSaving(true)
+    try {
+      await api.patch(`/pancafe/${closing.id}`, {
+        time_out: closeForm.time_out
+          ? new Date(`${closing.date}T${closeForm.time_out}`).toISOString()
+          : new Date().toISOString(),
+        amount_received: closeForm.amount_received ? Number(closeForm.amount_received) : closing.amount_received,
+        payment_method: closeForm.payment_method,
+      })
+      setClosing(null)
+      load()
+    } catch (e) { setError(e.message) }
+    finally { setCloseSaving(false) }
+  }
+
   return (
     <div>
+      {/* Close session modal */}
+      <Modal open={!!closing} onClose={() => setClosing(null)} title="Close PanCafe Session">
+        {closing && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+              Closing session for <strong>{closing.name || closing.pancafe_username}</strong> · {closing.device_label}
+            </p>
+            <Field label="Time Out">
+              <input type="time" className="input" value={closeForm.time_out}
+                onChange={e => setCloseForm(f => ({ ...f, time_out: e.target.value }))} />
+            </Field>
+            <Field label="Final Amount Received (₹)">
+              <input type="number" className="input" placeholder={closing.amount_received}
+                value={closeForm.amount_received}
+                onChange={e => setCloseForm(f => ({ ...f, amount_received: e.target.value }))} />
+            </Field>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="label" style={{ marginBottom: 0 }}>Payment Method</span>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {['cash', 'online'].map(m => (
+                  <button key={m} onClick={() => setCloseForm(f => ({ ...f, payment_method: m }))}
+                    style={{
+                      padding: '0.35rem 0.75rem', borderRadius: '8px', cursor: 'pointer',
+                      border: `1.5px solid ${closeForm.payment_method === m ? 'var(--accent)' : 'var(--border)'}`,
+                      background: closeForm.payment_method === m ? 'var(--accent-dim)' : 'var(--bg-input)',
+                      color: closeForm.payment_method === m ? 'var(--accent-text)' : 'var(--text-muted)',
+                      fontWeight: 650, fontSize: '0.75rem'
+                    }}>{m}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '0.75rem' }}>
+              <button onClick={handleCloseSession} disabled={closeSaving} className="btn-primary" style={{ flex: 1 }}>
+                {closeSaving ? <><Spinner size="sm" /> Closing...</> : 'Close Session'}
+              </button>
+              <button onClick={() => setClosing(null)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Page Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyBreak: 'space-between', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="page-title">PanCafe Sessions</h1>
-          <p className="page-sub">Third-party console session managers</p>
+          <p className="page-sub">Membership plan session log · PC only</p>
         </div>
         <Link to="/pancafe/new" className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ Log Session</Link>
       </div>
@@ -36,44 +96,52 @@ export function PanCafe() {
       <ErrorMsg error={error} />
 
       {/* Filter strip */}
-      <div className="card" style={{
-        display: 'flex', alignItems: 'center', gap: '0.75rem',
-        padding: '0.85rem 1.25rem', marginBottom: '1.5rem'
-      }}>
+      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.85rem 1.25rem', marginBottom: '1.5rem' }}>
         <label className="label" style={{ marginBottom: 0 }}>Filter Date</label>
         <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="input" style={{ width: 'auto', padding: '0.45rem 0.75rem' }} />
+        <span className="badge badge-accent">{sessions.filter(s => !s.time_out).length} Active</span>
       </div>
 
       {loading ? <PageLoader /> : sessions.length === 0 ? (
-        <EmptyState icon="☕" title="No PanCafe Logs" description={`No third-party logs recorded for date: ${formatDate(dateFilter)}`}
+        <EmptyState icon="☕" title="No PanCafe Logs" description={`No membership sessions recorded for ${formatDate(dateFilter)}`}
           action={<Link to="/pancafe/new" className="btn-primary">Add PanCafe Log</Link>} />
       ) : (
-        /* Beveled table */
         <div className="card-flush" style={{ overflowX: 'auto' }}>
           <table className="tbl">
             <thead>
               <tr>
-                {['Client Profile', 'PanCafe Username/ID', 'Device Seat', 'Time In', 'Time Out', 'Cash Received', 'Spent on Top-up', 'Operator Margin', 'Logged By'].map(h =>
+                {['Client Profile', 'PanCafe ID', 'Plan', 'Device', 'Time In', 'Time Out', 'Amount Collected', 'Pay Method', 'Notes', 'Logged By'].map(h =>
                   <th key={h}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
               {sessions.map((s, idx) => (
-                <tr key={s.id} style={{ background: idx % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent' }}>
-                  <td className="table-cell" style={{ fontWeight: 700 }}>{s.name || <span style={{ color: 'var(--text-faint)' }}>Anonymous</span>}</td>
+                <tr key={s.id} style={{ background: idx % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent', cursor: !s.time_out ? 'pointer' : 'default' }}
+                  onClick={() => !s.time_out && setClosing(s)}>
+                  <td className="table-cell" style={{ fontWeight: 700 }}>
+                    {s.name || <span style={{ color: 'var(--text-faint)' }}>Anonymous</span>}
+                    {s.shop_name && <p style={{ fontSize: '0.7rem', color: 'var(--text-faint)', marginTop: '0.1rem' }}>{s.shop_name}</p>}
+                  </td>
                   <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 750, color: 'var(--accent-text)' }}>{s.pancafe_username}</td>
+                  <td className="table-cell">
+                    {s.plan_label
+                      ? <span className="badge badge-accent" style={{ fontSize: '0.65rem' }}>{s.plan_label}</span>
+                      : <span style={{ color: 'var(--text-faint)', fontSize: '0.8rem' }}>Custom</span>}
+                  </td>
                   <td className="table-cell"><span className="badge badge-accent">{s.device_label || '—'}</span></td>
                   <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>{formatTime(s.time_in)}</td>
                   <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>
-                    {s.time_out ? formatTime(s.time_out) : <span className="badge badge-warning" style={{ fontSize: '0.7rem' }}>Active</span>}
+                    {s.time_out
+                      ? formatTime(s.time_out)
+                      : <span className="badge badge-success" style={{ fontSize: '0.65rem', cursor: 'pointer' }}>● ACTIVE — click to close</span>}
                   </td>
-                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(s.amount_received)}</td>
-                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(s.amount_spent)}</td>
+                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>{formatRupees(s.amount_received)}</td>
                   <td className="table-cell">
-                    <span className={`badge ${s.margin >= 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                      {formatRupees(s.margin)}
+                    <span className={`badge ${s.payment_method === 'online' ? 'badge-warning' : 'badge-accent'}`} style={{ fontSize: '0.6rem' }}>
+                      {s.payment_method || 'cash'}
                     </span>
                   </td>
+                  <td className="table-cell" style={{ color: 'var(--text-faint)', fontSize: '0.75rem' }}>{s.remark || '—'}</td>
                   <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontWeight: 600 }}>@{s.created_by_username || 'system'}</td>
                 </tr>
               ))}
@@ -89,21 +157,36 @@ export function PanCafe() {
 export function NewPanCafe() {
   const navigate = useNavigate()
   const [devices, setDevices] = useState([])
+  const [plans, setPlans] = useState([])
   const [form, setForm] = useState({
     name: '', mobile: '', customer_id: null,
-    pancafe_username: '', device_id: '',
+    pancafe_username: '', device_id: '', plan_id: '',
     date: todayISO(), time_in: new Date().toTimeString().slice(0,5),
-    time_out: '', amount_received: '', amount_spent: '', remark: ''
+    time_out: '', amount_received: '', remark: '', payment_method: 'cash'
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [customerSuggestions, setCustomerSuggestions] = useState([])
 
   useEffect(() => {
-    api.get('/devices').then(d => setDevices((d.devices || []).filter(dev => dev.type === 'PC')))
+    Promise.all([
+      api.get('/devices'),
+      api.get('/pancafe-plans'),
+    ]).then(([d, p]) => {
+      setDevices((d.devices || []).filter(dev => dev.type === 'PC'))
+      setPlans(p.plans || [])
+    })
   }, [])
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
+
+  const handlePlanChange = (planId) => {
+    f('plan_id', planId)
+    if (planId) {
+      const plan = plans.find(p => p.id === Number(planId))
+      if (plan) f('amount_received', String(plan.price))
+    }
+  }
 
   const handleNameChange = async (val) => {
     f('name', val)
@@ -113,20 +196,18 @@ export function NewPanCafe() {
     } else setCustomerSuggestions([])
   }
 
-  const margin = form.amount_received && form.amount_spent
-    ? Number(form.amount_received) - Number(form.amount_spent) : null
-
   const handleSubmit = async () => {
-    if (!form.pancafe_username || !form.amount_received || !form.amount_spent) {
-      setError('PanCafe username, amount received, and amount spent are required'); return
+    if (!form.pancafe_username || !form.amount_received) {
+      setError('PanCafe username and amount received are required'); return
     }
     setLoading(true); setError('')
     try {
       await api.post('/pancafe', {
         ...form,
+        plan_id: form.plan_id ? Number(form.plan_id) : null,
         device_id: form.device_id ? Number(form.device_id) : null,
         amount_received: Number(form.amount_received),
-        amount_spent: Number(form.amount_spent),
+        amount_spent: 0,  // no longer tracked as cost; just log receipt
         time_in: form.time_in ? new Date(`${form.date}T${form.time_in}`).toISOString() : null,
         time_out: form.time_out ? new Date(`${form.date}T${form.time_out}`).toISOString() : null,
       })
@@ -135,19 +216,19 @@ export function NewPanCafe() {
     finally { setLoading(false) }
   }
 
+  const selectedPlan = plans.find(p => p.id === Number(form.plan_id))
+
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-      {/* Page Header */}
       <div style={{ marginBottom: '2rem' }}>
-        <h1 className="page-title">New PanCafe Session</h1>
-        <p className="page-sub">Launch a logged third-party transaction slot</p>
+        <h1 className="page-title">Log PanCafe Session</h1>
+        <p className="page-sub">Record a membership plan session</p>
       </div>
 
       <ErrorMsg error={error} />
 
-      {/* Form chassis */}
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        
+
         {/* Customer fields */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
           <Field label="Customer Name">
@@ -157,19 +238,23 @@ export function NewPanCafe() {
                 <div style={{
                   position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
                   background: 'var(--bg-elevated)', border: '1.5px solid var(--border)',
-                  boxShadow: 'var(--shadow-md)', borderRadius: '10px', marginTop: '0.45rem',
-                  overflow: 'hidden'
+                  boxShadow: 'var(--shadow-md)', borderRadius: '10px', marginTop: '0.45rem', overflow: 'hidden'
                 }}>
                   {customerSuggestions.map(c => (
-                    <button key={c.id} onClick={() => { f('name', c.name); f('mobile', c.mobile || ''); f('customer_id', c.id); setCustomerSuggestions([]) }}
-                      className="btn-ghost"
-                      style={{
-                        width: '100%', textAlign: 'left', padding: '0.65rem 0.85rem',
-                        fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between',
-                        borderRadius: 0, borderBottom: '1px solid var(--border)'
-                      }}>
+                    <button key={c.id} onClick={() => {
+                      f('name', c.name); f('mobile', c.mobile || ''); f('customer_id', c.id)
+                      if (c.pancafe_username) f('pancafe_username', c.pancafe_username)
+                      setCustomerSuggestions([])
+                    }} className="btn-ghost" style={{
+                      width: '100%', textAlign: 'left', padding: '0.65rem 0.85rem',
+                      fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between',
+                      borderRadius: 0, borderBottom: '1px solid var(--border)'
+                    }}>
                       <span style={{ color: 'var(--text)', fontWeight: 600 }}>{c.name}</span>
-                      {c.mobile && <span style={{ color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem' }}>{c.mobile}</span>}
+                      <div style={{ textAlign: 'right' }}>
+                        {c.pancafe_username && <span style={{ color: 'var(--accent-text)', fontSize: '0.75rem', fontFamily: "'JetBrains Mono', monospace" }}>{c.pancafe_username}</span>}
+                        {c.mobile && <span style={{ color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.7rem', display: 'block' }}>{c.mobile}</span>}
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -181,9 +266,26 @@ export function NewPanCafe() {
           </Field>
         </div>
 
+        {/* Plan selector */}
+        <Field label="Membership Plan">
+          <select className="input" value={form.plan_id} onChange={e => handlePlanChange(e.target.value)}>
+            <option value="">Custom / No plan</option>
+            {plans.filter(p => p.is_active).map(p => (
+              <option key={p.id} value={p.id}>
+                {p.is_signup_plan ? '★ ' : ''}{p.label} — {p.hours}h for {formatRupees(p.price)}
+              </option>
+            ))}
+          </select>
+          {selectedPlan && (
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+              {selectedPlan.hours} hours · {formatRupees(selectedPlan.price)} auto-filled below
+            </p>
+          )}
+        </Field>
+
         {/* Device & Date */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-          <Field label="PC Station Seat">
+          <Field label="PC Station">
             <select className="input" value={form.device_id} onChange={e => f('device_id', e.target.value)}>
               <option value="">Select Station</option>
               {devices.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
@@ -199,40 +301,44 @@ export function NewPanCafe() {
           <Field label="Time In">
             <input type="time" className="input" value={form.time_in} onChange={e => f('time_in', e.target.value)} />
           </Field>
-          <Field label="Time Out (leaving time)">
+          <Field label="Time Out (leave blank if still active)">
             <input type="time" className="input" placeholder="Active" value={form.time_out} onChange={e => f('time_out', e.target.value)} />
           </Field>
         </div>
 
-        {/* Financial margins */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-          <Field label="Amount Received from Client (₹)" required>
-            <input type="number" className="input" placeholder="e.g. 300" value={form.amount_received} onChange={e => f('amount_received', e.target.value)} />
-          </Field>
-          <Field label="Cost of PanCafe Top-up (₹)" required>
-            <input type="number" className="input" placeholder="e.g. 280" value={form.amount_spent} onChange={e => f('amount_spent', e.target.value)} />
-          </Field>
+        {/* Amount */}
+        <Field label="Amount Collected from Member (₹)" required>
+          <input type="number" className="input" placeholder="Auto-filled from plan, or enter manually"
+            value={form.amount_received} onChange={e => f('amount_received', e.target.value)} />
+        </Field>
+
+        {/* Payment method */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="label" style={{ marginBottom: 0 }}>Payment Method</span>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {['cash', 'online', 'credit'].map(m => (
+              <button key={m} onClick={() => f('payment_method', m)}
+                style={{
+                  padding: '0.35rem 0.75rem', borderRadius: '8px', cursor: 'pointer',
+                  border: `1.5px solid ${form.payment_method === m ? 'var(--accent)' : 'var(--border)'}`,
+                  background: form.payment_method === m ? 'var(--accent-dim)' : 'var(--bg-input)',
+                  color: form.payment_method === m ? 'var(--accent-text)' : 'var(--text-muted)',
+                  fontWeight: 650, fontSize: '0.75rem', textTransform: 'capitalize'
+                }}>{m}</button>
+            ))}
+          </div>
         </div>
 
-        {/* Margin display */}
-        {margin !== null && (
-          <div style={{ display: 'flex' }}>
-            <span className={`badge ${margin >= 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '0.85rem', padding: '0.4rem 0.85rem', fontFamily: "'JetBrains Mono', monospace" }}>
-              Net Operator Margin: {formatRupees(margin)}
-            </span>
-          </div>
-        )}
-
-        <Field label="Session remark">
-          <input className="input" placeholder="Account top-up codes, comments..." value={form.remark} onChange={e => f('remark', e.target.value)} />
+        <Field label="Notes / Remarks">
+          <input className="input" placeholder="Any access codes, comments..." value={form.remark} onChange={e => f('remark', e.target.value)} />
         </Field>
 
         {/* Controls */}
         <div style={{ display: 'flex', gap: '0.85rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
           <button onClick={handleSubmit} disabled={loading} className="btn-primary" style={{ padding: '0.65rem 1.35rem' }}>
-            {loading ? 'Storing log...' : 'Save PanCafe Log'}
+            {loading ? <><Spinner size="sm" /> Saving...</> : 'Save PanCafe Log'}
           </button>
-          <button onClick={() => navigate('/pancafe')} className="btn-secondary" style={{ padding: '0.65rem 1.35rem' }}>Abort Command</button>
+          <button onClick={() => navigate('/pancafe')} className="btn-secondary" style={{ padding: '0.65rem 1.35rem' }}>Cancel</button>
         </div>
       </div>
     </div>
