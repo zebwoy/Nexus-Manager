@@ -3,10 +3,11 @@ import { getPool, ok, err } from './_db.js'
 export default async function handler(req, res) {
   const pool = getPool()
   const userId = req.headers['x-user-id']
-  const url = req.url || ''
+  const rawUrl = req.url || ''
+  const subPath = String(req.query.path || rawUrl.replace(/^\/api\/sessions\/?/, ''))
 
   // ─── Route: /api/sessions/:id/payments ───────────────────────
-  const paymentsMatch = url.match(/\/sessions\/(\d+)\/payments/)
+  const paymentsMatch = subPath.match(/(\d+)\/payments/) || rawUrl.match(/\/sessions\/(\d+)\/payments/)
   if (paymentsMatch && req.method === 'POST') {
     const sessionId = Number(paymentsMatch[1])
     const client = await pool.connect()
@@ -39,12 +40,12 @@ export default async function handler(req, res) {
     } catch (e) {
       await client.query('ROLLBACK')
       console.error(e)
-      return err(res, 'Server error', 500)
+      return err(res, e, 500)
     } finally { client.release() }
   }
 
   // ─── Route: /api/sessions/:id/extend ─────────────────────────
-  const extendMatch = url.match(/\/sessions\/(\d+)\/extend/)
+  const extendMatch = subPath.match(/(\d+)\/extend/) || rawUrl.match(/\/sessions\/(\d+)\/extend/)
   if (extendMatch && req.method === 'PATCH') {
     const sessionId = Number(extendMatch[1])
     const client = await pool.connect()
@@ -116,13 +117,13 @@ export default async function handler(req, res) {
     } catch (e) {
       await client.query('ROLLBACK')
       console.error(e)
-      return err(res, 'Server error', 500)
+      return err(res, e, 500)
     } finally { client.release() }
   }
 
   // ─── Route: /api/sessions/:id ────────────────────────────────
-  const idMatch = url.match(/\/sessions\/(\d+)(\?|$)/)
-  if (idMatch && !url.includes('/payments') && !url.includes('/extend')) {
+  const idMatch = subPath.match(/^(\d+)(\?|$)/) || rawUrl.match(/\/sessions\/(\d+)(\?|$)/)
+  if (idMatch && !subPath.includes('payments') && !subPath.includes('extend') && !rawUrl.includes('/payments') && !rawUrl.includes('/extend')) {
     const sessionId = Number(idMatch[1])
 
     if (req.method === 'GET') {
@@ -166,7 +167,7 @@ export default async function handler(req, res) {
         })
       } catch (e) {
         console.error(e)
-        return err(res, 'Server error', 500)
+        return err(res, e, 500)
       }
     }
 
@@ -183,7 +184,7 @@ export default async function handler(req, res) {
         return ok(res, { success: true })
       } catch (e) {
         console.error(e)
-        return err(res, 'Server error', 500)
+        return err(res, e, 500)
       }
     }
   }
@@ -296,6 +297,6 @@ export default async function handler(req, res) {
     return err(res, 'Method not allowed', 405)
   } catch (e) {
     console.error(e)
-    return err(res, 'Server error', 500)
+    return err(res, e, 500)
   }
 }

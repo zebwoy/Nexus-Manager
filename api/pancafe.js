@@ -3,8 +3,9 @@ import { getPool, ok, err } from './_db.js'
 export default async function handler(req, res) {
   const pool = getPool()
   const userId = req.headers['x-user-id']
-  const url = req.url || ''
-  const isPlans = req.query.resource === 'plans' || url.includes('pancafe-plans')
+  const rawUrl = req.url || ''
+  const subPath = String(req.query.path || rawUrl.replace(/^\/api\/pancafe\/?/, ''))
+  const isPlans = req.query.resource === 'plans' || rawUrl.includes('pancafe-plans')
 
   // ─── PANCAFE PLANS ──────────────────────────────────────────
   if (isPlans) {
@@ -25,7 +26,7 @@ export default async function handler(req, res) {
         return ok(res, { plan: r.rows[0] }, 201)
       }
 
-      const planIdMatch = url.match(/\/pancafe-plans\/(\d+)/) || (req.query.id ? [null, req.query.id] : null)
+      const planIdMatch = rawUrl.match(/\/pancafe-plans\/(\d+)/) || (req.query.id ? [null, req.query.id] : null)
       if (planIdMatch && req.method === 'PATCH') {
         const id = Number(planIdMatch[1])
         const b = req.body || {}
@@ -44,12 +45,12 @@ export default async function handler(req, res) {
       return err(res, 'Method not allowed', 405)
     } catch (e) {
       console.error(e)
-      return err(res, 'Server error', 500)
+      return err(res, e, 500)
     }
   }
 
   // ─── PANCAFE SESSIONS ───────────────────────────────────────
-  const idMatch = url.match(/\/pancafe\/(\d+)/)
+  const idMatch = subPath.match(/^(\d+)/) || rawUrl.match(/\/pancafe\/(\d+)/)
   if (idMatch && req.method === 'PATCH') {
     const id = Number(idMatch[1])
     try {
@@ -66,7 +67,7 @@ export default async function handler(req, res) {
       return ok(res, { session: r.rows[0] })
     } catch (e) {
       console.error(e)
-      return err(res, 'Server error', 500)
+      return err(res, e, 500)
     }
   }
 
@@ -128,6 +129,6 @@ export default async function handler(req, res) {
     return err(res, 'Method not allowed', 405)
   } catch (e) {
     console.error(e)
-    return err(res, 'Server error', 500)
+    return err(res, e, 500)
   }
 }
