@@ -26,8 +26,9 @@ function AppRoutes() {
       <Route path="/sessions"        element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
       <Route path="/sessions/new"    element={<ProtectedRoute><NewSession /></ProtectedRoute>} />
       <Route path="/sessions/:id"    element={<ProtectedRoute><SessionDetail /></ProtectedRoute>} />
-      <Route path="/pancafe"         element={<ProtectedRoute><PanCafe /></ProtectedRoute>} />
+      <Route path="/pancafe"         element={<Navigate to="/sessions" replace />} />
       <Route path="/pancafe/new"     element={<ProtectedRoute><NewPanCafe /></ProtectedRoute>} />
+
       <Route path="/inventory"       element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
       <Route path="/inventory/sell"  element={<ProtectedRoute><WalkInSale /></ProtectedRoute>} />
       <Route path="/recharges"       element={<ProtectedRoute><Recharges /></ProtectedRoute>} />

@@ -82,9 +82,10 @@ export default function Sessions() {
       </div>
 
       {loading ? <PageLoader /> : sessions.length === 0 ? (
-        <EmptyState icon="🖥️" title="No Stations Active" description={`No gaming logs recorded for date: ${formatDate(dateFilter)}`}
-          action={<Link to="/sessions/new" className="btn-primary">Initiate Gaming Session</Link>} />
+        <EmptyState title="No Stations Active" description={`No gaming logs recorded for date: ${formatDate(dateFilter)}`}
+          action={<button onClick={() => setShowLogModal(true)} className="btn-primary">Initiate Gaming Session</button>} />
       ) : (
+
         /* Skeuomorphic Table Chassis */
         <div className="card-flush" style={{ overflowX: 'auto' }}>
           <table className="tbl">

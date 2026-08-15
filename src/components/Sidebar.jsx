@@ -11,7 +11,6 @@ import {
 const NAV = [
   { to: '/',          Icon: LayoutDashboard, label: 'Dashboard'  },
   { to: '/sessions',  Icon: Monitor,         label: 'Sessions'   },
-  { to: '/pancafe',   Icon: Coffee,          label: 'PanCafe'    },
   { to: '/inventory', Icon: Package,         label: 'Cafeteria & Inventory' },
   { to: '/recharges', Icon: Zap,             label: 'Recharges'  },
   { to: '/expenses',  Icon: TrendingDown,    label: 'Expenses'   },

@@ -87,8 +87,9 @@ export default function LogSessionModal({ open, onClose }) {
               border: '1px solid var(--border)',
               display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
-              <Coffee size={22} strokeWidth={2.2} />
+              <img src="/assets/favicon_PanCafe.ico" alt="PanCafe Icon" style={{ width: '26px', height: '26px', objectFit: 'contain' }} />
             </div>
+
             <div>
               <p style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text)' }}>
                 PanCafe Member Session
