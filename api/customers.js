@@ -36,6 +36,7 @@ export default async function handler(req, res) {
     return err(res, 'Method not allowed', 405)
   } catch (e) {
     console.error(e)
-    return err(res, 'Server error', 500)
+    return err(res, e, 500)
   }
 }
+
