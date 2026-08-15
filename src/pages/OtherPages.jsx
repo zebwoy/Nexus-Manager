@@ -6,7 +6,7 @@ import { PageLoader, EmptyState, ErrorMsg, Field, Modal } from '../components/UI
 import { Plus, Trash2, ShoppingBag } from 'lucide-react'
 
 
-// ─── INVENTORY ────────────────────────────────────────────────
+// ─── CAFETERIA ────────────────────────────────────────────────
 export function Inventory() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -39,11 +39,11 @@ export function Inventory() {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 className="page-title">Inventory Stock</h1>
-          <p className="page-sub">Cafe refreshments and hardware stock levels</p>
+          <h1 className="page-title">Cafeteria</h1>
+          <p className="page-sub">Refreshment drinks, snacks, and cafeteria stock levels</p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <Link to="/inventory/sell" className="btn-secondary" style={{ padding: '0.6rem 1.25rem' }}><ShoppingBag size={15} />Open Cash Register</Link>
+          <Link to="/inventory/sell" className="btn-secondary" style={{ padding: '0.6rem 1.25rem' }}><ShoppingBag size={15} />Foreign Sale</Link>
           <button onClick={() => setShowAdd(true)} className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ Add Item</button>
         </div>
       </div>
@@ -51,7 +51,7 @@ export function Inventory() {
       <ErrorMsg error={error} />
       
       {loading ? <PageLoader /> : items.length === 0 ? (
-        <EmptyState title="No Items in Stock" description="Log products to track inventory and calculate accurate profits."
+        <EmptyState title="No Cafeteria Stock" description="Log products to track cafeteria inventory and calculate accurate profits."
           action={<button onClick={() => setShowAdd(true)} className="btn-primary">Add Item</button>} />
       ) : (
         <div className="card-flush" style={{ overflowX: 'auto' }}>
@@ -86,8 +86,7 @@ export function Inventory() {
       )}
 
       {/* Add Modal */}
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Inventory Stock Item">
-
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Cafeteria Stock Item">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <Field label="Product Name" required>
             <input className="input" placeholder="e.g. Coca-Cola 300ml" value={form.name} onChange={e => f('name', e.target.value)} />
@@ -121,16 +120,34 @@ export function Inventory() {
   )
 }
 
-// ─── WALK-IN SALE (CASH REGISTER) ──────────────────────────────
+// ─── FOREIGN SALE ───────────────────────────────────────────────
 export function WalkInSale() {
   const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [cart, setCart] = useState([])
+  const [customer, setCustomer] = useState({ id: null, name: '', shop_name: '', mobile: '' })
+  const [customerSuggestions, setCustomerSuggestions] = useState([])
   const [payment, setPayment] = useState('')
+  const [payMethod, setPayMethod] = useState('cash')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => { api.get('/inventory').then(d => setItems(d.items || [])) }, [])
+
+  const handleNameChange = async (val) => {
+    setCustomer(c => ({ ...c, name: val }))
+    if (val.length >= 2) {
+      try {
+        const d = await api.get(`/customers?search=${encodeURIComponent(val)}`)
+        setCustomerSuggestions(d.customers || [])
+      } catch { setCustomerSuggestions([]) }
+    } else setCustomerSuggestions([])
+  }
+
+  const selectCustomer = (c) => {
+    setCustomer({ id: c.id, name: c.name, shop_name: c.shop_name || '', mobile: c.mobile || '' })
+    setCustomerSuggestions([])
+  }
 
   const addToCart = (item) => {
     setCart(c => {
@@ -149,11 +166,26 @@ export function WalkInSale() {
 
   const handleSubmit = async () => {
     if (cart.length === 0) { setError('Cart is empty'); return }
+    
+    if (customer.name) {
+      const nameErr = validateName(customer.name)
+      if (nameErr) { setError(nameErr); return }
+    }
+    const mobileErr = validateMobile(customer.mobile)
+    if (mobileErr) { setError(mobileErr); return }
+
     setLoading(true); setError('')
     try {
       await api.post('/sales', {
-        sale_type: 'walkin', date: todayISO(),
-        total, payment_received: payment ? Number(payment) : total,
+        sale_type: 'walkin',
+        date: todayISO(),
+        customer_id: customer.id,
+        name: customer.name || null,
+        shop_name: customer.shop_name || null,
+        mobile: customer.mobile || null,
+        total,
+        payment_received: payment !== '' ? Number(payment) : total,
+        payment_method: payMethod,
         items: cart.map(i => ({ item_id: i.id, qty: i.qty, unit_price: i.sell_price }))
       })
       navigate('/inventory')
@@ -163,8 +195,8 @@ export function WalkInSale() {
   return (
     <div>
       <div style={{ marginBottom: '2rem' }}>
-        <h1 className="page-title">Walk-in Cash Register</h1>
-        <p className="page-sub">Direct retail sale workstation — not attached to gaming stations</p>
+        <h1 className="page-title">Foreign Sale</h1>
+        <p className="page-sub">Cafeteria sale workstation for outside clients and neighboring shop owners</p>
       </div>
 
       <ErrorMsg error={error} />
@@ -173,7 +205,7 @@ export function WalkInSale() {
         
         {/* Left Side: Product Grid */}
         <div>
-          <p className="label" style={{ marginBottom: '0.75rem' }}>Product catalog selection</p>
+          <p className="label" style={{ marginBottom: '0.75rem' }}>Cafeteria product catalog</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.85rem' }}>
             {items.filter(i => i.stock_qty > 0).map(item => (
               <button key={item.id} onClick={() => addToCart(item)}
@@ -197,15 +229,54 @@ export function WalkInSale() {
           </div>
         </div>
 
-        {/* Right Side: Cash Register Cart Receipt */}
+        {/* Right Side: Foreign Sale Checkout & Identity */}
         <div>
-          <p className="label" style={{ marginBottom: '0.75rem' }}>Cashier invoice cart</p>
-          <div className="card" style={{ padding: '1.25rem' }}>
+          <p className="label" style={{ marginBottom: '0.75rem' }}>Foreign Sale Details & Invoice</p>
+          <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            
+            {/* Customer Details Form */}
+            <div style={{ background: 'var(--bg-input)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <p style={{ fontSize: '0.75rem', fontWeight: 750, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Foreign Client Identity
+              </p>
+              <Field label="Person Full Name (First & Last Name)">
+                <div style={{ position: 'relative' }}>
+                  <input className="input" placeholder="e.g. Rahul Sharma" value={customer.name} onChange={e => handleNameChange(e.target.value)} />
+                  {customerSuggestions.length > 0 && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30,
+                      background: 'var(--bg-elevated)', border: '1.5px solid var(--border)',
+                      boxShadow: 'var(--shadow-md)', borderRadius: '10px', marginTop: '0.35rem',
+                      overflow: 'hidden'
+                    }}>
+                      {customerSuggestions.map(c => (
+                        <button key={c.id} onClick={() => selectCustomer(c)}
+                          className="btn-ghost"
+                          style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.85rem', fontSize: '0.8125rem', borderRadius: 0, borderBottom: '1px solid var(--border)' }}>
+                          <span style={{ color: 'var(--text)', fontWeight: 700 }}>{c.name}</span>
+                          {c.shop_name && <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>({c.shop_name})</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Field>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <Field label="Shop Name">
+                  <input className="input" placeholder="e.g. Gupta Medical" value={customer.shop_name} onChange={e => setCustomer(c => ({ ...c, shop_name: e.target.value }))} />
+                </Field>
+                <Field label="Mobile Number">
+                  <input className="input" placeholder="10 Digits" maxLength={10} value={customer.mobile} onChange={e => setCustomer(c => ({ ...c, mobile: e.target.value }))} />
+                </Field>
+              </div>
+            </div>
+
             {cart.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '2rem 0' }}>Register empty</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '1.5rem 0' }}>Cart empty — click cafeteria items to add</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '250px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '0.25rem' }}>
                   {cart.map(item => (
                     <div key={item.id} style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -229,16 +300,25 @@ export function WalkInSale() {
                 {/* Billing totals */}
                 <div style={{ borderTop: '1.5px dashed var(--border)', paddingTop: '0.85rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1rem', fontFamily: "'JetBrains Mono', monospace", marginBottom: '1rem' }}>
-                    <span style={{ color: 'var(--text)' }}>RETAIL TOTAL</span>
+                    <span style={{ color: 'var(--text)' }}>FOREIGN SALE TOTAL</span>
                     <span style={{ color: 'var(--accent-text)' }}>{formatRupees(total)}</span>
                   </div>
                   
-                  <Field label="Cash Tendered (₹)">
-                    <input type="number" className="input" placeholder={total} value={payment} onChange={e => setPayment(e.target.value)} />
-                  </Field>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                    <Field label="Amount Paid (₹)">
+                      <input type="number" className="input" placeholder={total} value={payment} onChange={e => setPayment(e.target.value)} />
+                    </Field>
+                    <Field label="Payment Mode">
+                      <select className="input" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+                        <option value="cash">Cash</option>
+                        <option value="online">Online</option>
+                        <option value="credit">Credit / Due</option>
+                      </select>
+                    </Field>
+                  </div>
                   
-                  <button onClick={handleSubmit} disabled={loading} className="btn-primary" style={{ width: '100%', marginTop: '1.15rem', padding: '0.65rem 1.25rem' }}>
-                    {loading ? 'Processing Sale...' : 'Finalize Transaction'}
+                  <button onClick={handleSubmit} disabled={loading} className="btn-primary" style={{ width: '100%', marginTop: '0.5rem', padding: '0.65rem 1.25rem' }}>
+                    {loading ? 'Processing Sale...' : 'Finalize Foreign Sale'}
                   </button>
                 </div>
               </div>

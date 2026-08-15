@@ -277,7 +277,7 @@ export default function Dashboard() {
         <p style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.95rem' }}>Quick Actions</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
           <button onClick={() => setShowLogModal(true)} className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={3} />Log New Session</button>
-          <Link to="/inventory/sell"  className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Walk-in Sale</Link>
+          <Link to="/inventory/sell"  className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Foreign Sale</Link>
           <Link to="/recharges/new"   className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Recharge Platform</Link>
           <Link to="/expenses/new"    className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Log Expense</Link>
           <Link to="/eod"             className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}>EOD Reconciliation</Link>

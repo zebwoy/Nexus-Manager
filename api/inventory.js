@@ -34,10 +34,28 @@ export default async function handler(req, res) {
         const client = await pool.connect()
         try {
           await client.query('BEGIN')
+
+          let cid = b.customer_id
+          if (!cid && b.name) {
+            const ex = await client.query('SELECT id FROM customers WHERE name ILIKE $1 AND (mobile = $2 OR mobile IS NULL)', [b.name.trim(), b.mobile || null])
+            if (ex.rows.length > 0) {
+              cid = ex.rows[0].id
+              if (b.shop_name) {
+                await client.query('UPDATE customers SET shop_name = COALESCE(shop_name, $1) WHERE id = $2', [b.shop_name, cid])
+              }
+            } else {
+              const nc = await client.query(
+                'INSERT INTO customers (name, mobile, shop_name) VALUES ($1,$2,$3) RETURNING id',
+                [b.name.trim(), b.mobile || null, b.shop_name || null]
+              )
+              cid = nc.rows[0].id
+            }
+          }
+
           const saleResult = await client.query(
             `INSERT INTO sales (session_id, customer_id, sale_type, date, total, payment_received, payment_method, created_by)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-            [b.session_id || null, b.customer_id || null, b.sale_type || 'walkin', b.date, b.total,
+            [b.session_id || null, cid || null, b.sale_type || 'walkin', b.date, b.total,
              b.payment_received || null, b.payment_method || 'cash', userId || null]
           )
           const saleId = saleResult.rows[0].id
@@ -63,6 +81,7 @@ export default async function handler(req, res) {
           throw e
         } finally { client.release() }
       }
+
 
       return err(res, 'Method not allowed', 405)
     } catch (e) {
