@@ -4,11 +4,14 @@ import { api } from '../lib/api'
 import { formatRupees, formatTime, formatDate, formatDuration, DURATION_OPTIONS, todayISO } from '../lib/helpers'
 import { PageLoader, EmptyState, ErrorMsg } from '../components/UI'
 
+import LogSessionModal from '../components/LogSessionModal'
+
 export default function Sessions() {
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dateFilter, setDateFilter] = useState(todayISO())
+  const [showLogModal, setShowLogModal] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => { loadSessions() }, [dateFilter])
@@ -30,14 +33,17 @@ export default function Sessions() {
 
   return (
     <div>
+      <LogSessionModal open={showLogModal} onClose={() => setShowLogModal(false)} />
+
       {/* Page Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="page-title">Sessions Log</h1>
           <p className="page-sub">Gaming station session monitors</p>
         </div>
-        <Link to="/sessions/new" className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ Log Session</Link>
+        <button onClick={() => setShowLogModal(true)} className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ Log Session</button>
       </div>
+
 
       <ErrorMsg error={error} />
 

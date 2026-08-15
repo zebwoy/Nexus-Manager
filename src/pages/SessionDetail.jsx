@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { api } from '../lib/api'
-import { formatRupees, formatTime, formatDate, formatDuration, todayISO } from '../lib/helpers'
-import { PageLoader, ErrorMsg, Field, Spinner } from '../components/UI'
-import { ArrowLeft, Plus, Minus, CreditCard, Banknote, Clock, ShoppingCart, History, ChevronRight } from 'lucide-react'
+import { formatRupees, formatTime, formatDate, formatDuration, todayISO, validateName, validateMobile, toISO, addMinutes } from '../lib/helpers'
+import { PageLoader, ErrorMsg, Field, Modal, Spinner } from '../components/UI'
+import { ArrowLeft, Plus, Minus, CreditCard, Banknote, Clock, ShoppingCart, History, ChevronRight, Edit3 } from 'lucide-react'
+
 
 // ─── Payment method toggle ────────────────────────────────────
 function PayMethodToggle({ value, onChange }) {
@@ -100,6 +101,51 @@ export default function SessionDetail() {
   }, [id])
 
   useEffect(() => { load() }, [load])
+
+  // Edit details modal
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editForm, setEditForm] = useState({ name: '', mobile: '', time_in: '', duration_mins: 60, remark: '' })
+  const [editSaving, setEditSaving] = useState(false)
+
+  const openEditModal = () => {
+    if (!s) return
+    const timeInStr = s.time_in ? new Date(s.time_in).toTimeString().slice(0, 5) : '12:00'
+    setEditForm({
+      name: s.name || '',
+      mobile: s.mobile || '',
+      time_in: timeInStr,
+      duration_mins: s.duration_mins || 60,
+      remark: s.remark || '',
+    })
+    setShowEditModal(true)
+  }
+
+  const handleSaveEdit = async () => {
+    const nameErr = validateName(editForm.name)
+    if (nameErr) { setError(nameErr); return }
+    const mobileErr = validateMobile(editForm.mobile)
+    if (mobileErr) { setError(mobileErr); return }
+
+    setEditSaving(true)
+    setError('')
+    try {
+      const timeInISO = toISO(s.date, editForm.time_in)
+      const timeOutISO = addMinutes(timeInISO, editForm.duration_mins).toISOString()
+
+      await api.patch(`/sessions/${id}`, {
+        name: editForm.name,
+        mobile: editForm.mobile,
+        time_in: timeInISO,
+        duration_mins: Number(editForm.duration_mins),
+        time_out: timeOutISO,
+        remark: editForm.remark,
+      })
+      setShowEditModal(false)
+      showToast('Session details updated ✓')
+      load()
+    } catch (e) { setError(e.message) }
+    finally { setEditSaving(false) }
+  }
 
   if (loading) return <PageLoader />
   if (!data) return <ErrorMsg error={error || 'Session not found'} />
@@ -207,6 +253,47 @@ export default function SessionDetail() {
         }}>{toast}</div>
       )}
 
+      {/* Edit Details Modal */}
+      <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Session Details">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+          <Field label="Customer Full Name (First & Last Name)" required>
+            <input className="input" value={editForm.name}
+              onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="John Doe" />
+          </Field>
+
+          <Field label="Mobile Number (10 Digits)">
+            <input className="input" value={editForm.mobile}
+              onChange={e => setEditForm(f => ({ ...f, mobile: e.target.value }))} placeholder="9876543210" maxLength={10} />
+          </Field>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <Field label="Time In">
+              <input type="time" className="input" value={editForm.time_in}
+                onChange={e => setEditForm(f => ({ ...f, time_in: e.target.value }))} />
+            </Field>
+
+            <Field label="Duration (minutes)">
+              <input type="number" className="input" value={editForm.duration_mins}
+                onChange={e => setEditForm(f => ({ ...f, duration_mins: e.target.value }))} step={15} min={15} />
+            </Field>
+          </div>
+
+          <Field label="Remark / Note">
+            <input className="input" value={editForm.remark}
+              onChange={e => setEditForm(f => ({ ...f, remark: e.target.value }))} placeholder="Session comments..." />
+          </Field>
+
+          <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+            <button onClick={handleSaveEdit} disabled={editSaving} className="btn-primary" style={{ flex: 1 }}>
+              {editSaving ? <><Spinner size="sm" /> Saving...</> : 'Save Changes'}
+            </button>
+            <button onClick={() => setShowEditModal(false)} className="btn-secondary" style={{ flex: 1 }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.75rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
@@ -219,9 +306,15 @@ export default function SessionDetail() {
               SESSION #{s.id}
             </span>
           </div>
-          <h1 className="page-title" style={{ marginBottom: '0.15rem' }}>
-            {s.name || 'Anonymous Client'}
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <h1 className="page-title" style={{ marginBottom: '0.15rem' }}>
+              {s.name || 'Anonymous Client'}
+            </h1>
+            <button onClick={openEditModal} className="btn-secondary btn-sm"
+              style={{ padding: '0.25rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem' }}>
+              <Edit3 size={13} /> Edit Details
+            </button>
+          </div>
           <p className="page-sub">
             {s.device_label} · {formatDate(s.date)} · {formatTime(s.time_in)} → {formatTime(s.time_out)}
             {s.mobile && <span style={{ marginLeft: '0.5rem', fontFamily: "'JetBrains Mono', monospace" }}>· {s.mobile}</span>}
@@ -230,9 +323,10 @@ export default function SessionDetail() {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
           {isActive
             ? <><span className="badge badge-success">● ACTIVE</span><Countdown timeOut={s.time_out} /></>
-            : <span className="badge badge-neutral">CLOSED</span>}
+            : <span className="badge badge-warning">COMPLETED</span>}
         </div>
       </div>
+
 
       <ErrorMsg error={error} />
 

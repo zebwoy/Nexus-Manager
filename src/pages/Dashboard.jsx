@@ -5,6 +5,8 @@ import { api } from '../lib/api'
 import { formatRupees, formatDate, formatTime, todayISO } from '../lib/helpers'
 import { PageLoader, ErrorMsg, SectionHeader, Modal, Field, Spinner } from '../components/UI'
 import { Plus } from 'lucide-react'
+import LogSessionModal from '../components/LogSessionModal'
+
 
 // Live countdown for active sessions
 function ActiveCountdown({ timeOut }) {
@@ -44,6 +46,8 @@ export default function Dashboard() {
   const [openingCash, setOpeningCash] = useState('')
   const [openingNote, setOpeningNote] = useState('')
   const [savingOpening, setSavingOpening] = useState(false)
+  const [showLogModal, setShowLogModal] = useState(false)
+
 
   const load = useCallback(async () => {
     try {
@@ -118,6 +122,9 @@ export default function Dashboard() {
           </div>
         </div>
       </Modal>
+
+      <LogSessionModal open={showLogModal} onClose={() => setShowLogModal(false)} />
+
 
       {/* Page header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '2rem', gap: '1.25rem', flexWrap: 'wrap' }}>
@@ -269,12 +276,11 @@ export default function Dashboard() {
       <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
         <p style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.95rem' }}>Quick Actions</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <Link to="/sessions/new"    className="btn-primary"    style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={3} />New Gaming Session</Link>
-          <Link to="/pancafe/new"     className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Log PanCafe Session</Link>
+          <button onClick={() => setShowLogModal(true)} className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={3} />Log New Session</button>
           <Link to="/inventory/sell"  className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Walk-in Sale</Link>
           <Link to="/recharges/new"   className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Recharge Platform</Link>
           <Link to="/expenses/new"    className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Log Expense</Link>
-          <Link to="/eod"             className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}>🧾 EOD Reconciliation</Link>
+          <Link to="/eod"             className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}>EOD Reconciliation</Link>
         </div>
       </div>
 
@@ -282,4 +288,5 @@ export default function Dashboard() {
     </div>
   )
 }
+
 

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
-import { formatRupees, formatDate, todayISO } from '../lib/helpers'
+import { formatRupees, formatDate, todayISO, validateName, validateMobile } from '../lib/helpers'
 import { PageLoader, EmptyState, ErrorMsg, Field, Modal } from '../components/UI'
 import { Plus, Trash2, ShoppingBag } from 'lucide-react'
+
 
 // ─── INVENTORY ────────────────────────────────────────────────
 export function Inventory() {
@@ -50,7 +51,7 @@ export function Inventory() {
       <ErrorMsg error={error} />
       
       {loading ? <PageLoader /> : items.length === 0 ? (
-        <EmptyState icon="📦" title="No Items in Stock" description="Log products to track inventory and calculate accurate profits."
+        <EmptyState title="No Items in Stock" description="Log products to track inventory and calculate accurate profits."
           action={<button onClick={() => setShowAdd(true)} className="btn-primary">Add Item</button>} />
       ) : (
         <div className="card-flush" style={{ overflowX: 'auto' }}>
@@ -85,7 +86,8 @@ export function Inventory() {
       )}
 
       {/* Add Modal */}
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="➕ Add Inventory Stock Item">
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Inventory Stock Item">
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <Field label="Product Name" required>
             <input className="input" placeholder="e.g. Coca-Cola 300ml" value={form.name} onChange={e => f('name', e.target.value)} />
@@ -339,8 +341,16 @@ export function NewRecharge() {
   }
 
   const handleSubmit = async () => {
+    if (form.name) {
+      const nameErr = validateName(form.name)
+      if (nameErr) { setError(nameErr); return }
+    }
+    const mobileErr = validateMobile(form.mobile)
+    if (mobileErr) { setError(mobileErr); return }
+
     if (!form.cost_price || !form.charge_price) { setError('Cost and charge price are required'); return }
     setLoading(true); setError('')
+
     try {
       await api.post('/recharges', { ...form, cost_price: Number(form.cost_price), charge_price: Number(form.charge_price), payment_received: form.payment_received ? Number(form.payment_received) : null })
       navigate('/recharges')

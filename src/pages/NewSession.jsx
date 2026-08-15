@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
-import { DURATION_OPTIONS, formatRupees, todayISO, nowTimeInput, toISO, addMinutes, formatDuration } from '../lib/helpers'
+import { DURATION_OPTIONS, formatRupees, todayISO, nowTimeInput, toISO, addMinutes, formatDuration, validateName, validateMobile } from '../lib/helpers'
 import { Field, ErrorMsg, Spinner } from '../components/UI'
 
 const DEVICE_TYPES = { PC: 'PC', XBOX: 'XBOX', PS: 'PS' }
@@ -126,10 +126,17 @@ export default function NewSession() {
   ))
 
   const handleSubmit = async () => {
+    const nameErr = validateName(form.name)
+    if (nameErr) { setError(nameErr); return }
+
+    const mobileErr = validateMobile(form.mobile)
+    if (mobileErr) { setError(mobileErr); return }
+
     if (!form.device_id || !form.duration_mins) {
-      setError('Please select a device and duration')
+      setError('Please select a station seat and duration')
       return
     }
+
     setLoading(true)
     setError('')
     try {

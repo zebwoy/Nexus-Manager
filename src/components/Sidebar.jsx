@@ -5,17 +5,18 @@ import { useTheme, ACCENTS } from '../context/ThemeContext'
 import {
   LayoutDashboard, Monitor, Coffee, Package,
   Zap, TrendingDown, Users, BarChart2, Settings,
-  Sun, Moon, LogOut, Menu, X
+  Sun, Moon, LogOut, Menu, X, FileCheck
 } from 'lucide-react'
 
 const NAV = [
   { to: '/',          Icon: LayoutDashboard, label: 'Dashboard'  },
   { to: '/sessions',  Icon: Monitor,         label: 'Sessions'   },
   { to: '/pancafe',   Icon: Coffee,          label: 'PanCafe'    },
-  { to: '/inventory', Icon: Package,         label: 'Inventory'  },
+  { to: '/inventory', Icon: Package,         label: 'Cafeteria & Inventory' },
   { to: '/recharges', Icon: Zap,             label: 'Recharges'  },
   { to: '/expenses',  Icon: TrendingDown,    label: 'Expenses'   },
   { to: '/customers', Icon: Users,           label: 'Customers'  },
+  { to: '/eod',       Icon: FileCheck,       label: 'EOD Reconciliation' },
   { to: '/reports',   Icon: BarChart2,       label: 'Reports'    },
   { to: '/settings',  Icon: Settings,        label: 'Settings'   },
 ]

@@ -56,3 +56,22 @@ export function nowTimeInput() {
 export function toISO(dateStr, timeStr) {
   return new Date(`${dateStr}T${timeStr}`).toISOString()
 }
+
+// Validate mandatory name (First Name and Last Name required)
+export function validateName(name) {
+  if (!name || !name.trim()) return 'Full Name (First and Last Name) is required'
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length < 2) return 'Please enter both First Name and Last Name'
+  return null
+}
+
+// Validate 10-digit mobile number
+export function validateMobile(mobile, required = false) {
+  if (!mobile || !mobile.trim()) {
+    return required ? 'Mobile number is required' : null
+  }
+  const clean = mobile.trim()
+  if (!/^\d{10}$/.test(clean)) return 'Mobile number must be exactly 10 numeric digits'
+  return null
+}
+

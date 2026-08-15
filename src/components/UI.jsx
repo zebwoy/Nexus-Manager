@@ -13,7 +13,7 @@ export function PageLoader() {
   )
 }
 
-export function EmptyState({ icon, title, description, action }) {
+export function EmptyState({ icon: IconComponent, title, description, action }) {
   return (
     <div className="card" style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -23,10 +23,11 @@ export function EmptyState({ icon, title, description, action }) {
         width: '4rem', height: '4rem', borderRadius: '50%',
         background: 'var(--bg-input)', border: '1.5px solid var(--border)',
         boxShadow: 'var(--shadow-inset)', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', fontSize: '2rem', marginBottom: '1.25rem'
+        justifyContent: 'center', fontSize: '1.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem'
       }}>
-        {icon || '📥'}
+        {IconComponent ? (typeof IconComponent === 'function' || typeof IconComponent === 'object' ? <IconComponent size={28} /> : IconComponent) : <Inbox size={28} />}
       </div>
+
       <p style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text)', marginBottom: '0.375rem' }}>{title}</p>
       {description && <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem', maxWidth: '320px' }}>{description}</p>}
       {action}

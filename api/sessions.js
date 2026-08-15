@@ -174,19 +174,70 @@ export default async function handler(req, res) {
     if (req.method === 'PATCH') {
       try {
         const b = req.body || {}
-        const updates = []
-        const vals = []
-        let idx = 1
-        if (b.remark !== undefined) { updates.push(`remark = $${idx++}`); vals.push(b.remark) }
-        if (updates.length === 0) return err(res, 'Nothing to update')
-        vals.push(sessionId)
-        await pool.query(`UPDATE sessions SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
-        return ok(res, { success: true })
+        const client = await pool.connect()
+        try {
+          await client.query('BEGIN')
+
+          // 1. Check if name/mobile needs updating on customer or session
+          let cid = null
+          if (b.name !== undefined || b.mobile !== undefined) {
+            const currentSess = await client.query('SELECT customer_id FROM sessions WHERE id = $1', [sessionId])
+            cid = currentSess.rows[0]?.customer_id
+
+            if (cid) {
+              const custCols = []
+              const custVals = []
+              let cIdx = 1
+              if (b.name !== undefined) { custCols.push(`name = $${cIdx++}`); custVals.push(b.name.trim()) }
+              if (b.mobile !== undefined) { custCols.push(`mobile = $${cIdx++}`); custVals.push(b.mobile || null) }
+              if (custCols.length > 0) {
+                custVals.push(cid)
+                await client.query(`UPDATE customers SET ${custCols.join(', ')} WHERE id = $${cIdx}`, custVals)
+              }
+            } else if (b.name) {
+              const newC = await client.query(
+                'INSERT INTO customers (name, mobile) VALUES ($1,$2) RETURNING id',
+                [b.name.trim(), b.mobile || null]
+              )
+              cid = newC.rows[0].id
+            }
+          }
+
+          // 2. Build session update
+          const updates = []
+          const vals = []
+          let idx = 1
+
+          if (cid) { updates.push(`customer_id = $${idx++}`); vals.push(cid) }
+          if (b.remark !== undefined) { updates.push(`remark = $${idx++}`); vals.push(b.remark) }
+          if (b.payment_method !== undefined) { updates.push(`payment_method = $${idx++}`); vals.push(b.payment_method) }
+          if (b.time_in !== undefined) { updates.push(`time_in = $${idx++}`); vals.push(b.time_in) }
+
+          if (b.duration_mins !== undefined && b.time_out !== undefined) {
+            updates.push(`duration_mins = $${idx++}`); vals.push(Number(b.duration_mins))
+            updates.push(`time_out = $${idx++}`); vals.push(b.time_out)
+            if (b.charge !== undefined) { updates.push(`charge = $${idx++}`); vals.push(Number(b.charge)) }
+            if (b.total !== undefined) { updates.push(`total = $${idx++}`); vals.push(Number(b.total)) }
+            if (b.credit !== undefined) { updates.push(`credit = $${idx++}`); vals.push(Number(b.credit)) }
+          }
+
+          if (updates.length > 0) {
+            vals.push(sessionId)
+            await client.query(`UPDATE sessions SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
+          }
+
+          await client.query('COMMIT')
+          return ok(res, { success: true })
+        } catch (e) {
+          await client.query('ROLLBACK')
+          throw e
+        } finally { client.release() }
       } catch (e) {
         console.error(e)
         return err(res, e, 500)
       }
     }
+
   }
 
   // ─── Base /api/sessions Collection Routes ───────────────────

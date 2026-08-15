@@ -2,17 +2,21 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
-import { formatRupees, formatTime, formatDate, todayISO } from '../lib/helpers'
+import { formatRupees, formatTime, formatDate, todayISO, validateName, validateMobile } from '../lib/helpers'
+
 import { PageLoader, EmptyState, ErrorMsg, Field, Modal, Spinner } from '../components/UI'
+import LogSessionModal from '../components/LogSessionModal'
 
 export function PanCafe() {
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dateFilter, setDateFilter] = useState(todayISO())
-  const [closing, setClosing] = useState(null)  // session being closed
+  const [closing, setClosing] = useState(null)
   const [closeForm, setCloseForm] = useState({ time_out: '', amount_received: '', payment_method: 'cash' })
   const [closeSaving, setCloseSaving] = useState(false)
+  const [showLogModal, setShowLogModal] = useState(false)
+
 
   useEffect(() => { load() }, [dateFilter])
 
@@ -43,8 +47,10 @@ export function PanCafe() {
 
   return (
     <div>
+      <LogSessionModal open={showLogModal} onClose={() => setShowLogModal(false)} />
       {/* Close session modal */}
       <Modal open={!!closing} onClose={() => setClosing(null)} title="Close PanCafe Session">
+
         {closing && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
@@ -90,8 +96,9 @@ export function PanCafe() {
           <h1 className="page-title">PanCafe Sessions</h1>
           <p className="page-sub">Membership plan session log · PC only</p>
         </div>
-        <Link to="/pancafe/new" className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ Log Session</Link>
+        <button onClick={() => setShowLogModal(true)} className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ Log Session</button>
       </div>
+
 
       <ErrorMsg error={error} />
 
@@ -197,9 +204,16 @@ export function NewPanCafe() {
   }
 
   const handleSubmit = async () => {
+    const nameErr = validateName(form.name)
+    if (nameErr) { setError(nameErr); return }
+
+    const mobileErr = validateMobile(form.mobile)
+    if (mobileErr) { setError(mobileErr); return }
+
     if (!form.pancafe_username || !form.amount_received) {
       setError('PanCafe username and amount received are required'); return
     }
+
     setLoading(true); setError('')
     try {
       await api.post('/pancafe', {
