@@ -1,29 +1,27 @@
-import { getPool, ok, err, cors } from './_db.js'
+import { getPool, ok, err } from './_db.js'
 
-export async function handler(event) {
-  if (event.httpMethod === 'OPTIONS') return cors()
+export default async function handler(req, res) {
   const pool = getPool()
-  const userId = event.headers['x-user-id']
+  const userId = req.headers['x-user-id']
+  const url = req.url || ''
 
-  // ─── Route: /sessions/:id/payments ────────────────────────────
-  const paymentsMatch = event.path.match(/\/sessions\/(\d+)\/payments$/)
-  if (paymentsMatch && event.httpMethod === 'POST') {
+  // ─── Route: /api/sessions/:id/payments ───────────────────────
+  const paymentsMatch = url.match(/\/sessions\/(\d+)\/payments/)
+  if (paymentsMatch && req.method === 'POST') {
     const sessionId = Number(paymentsMatch[1])
     const client = await pool.connect()
     try {
-      const b = JSON.parse(event.body || '{}')
-      if (!b.amount || Number(b.amount) <= 0) return err('Amount must be positive')
+      const b = req.body || {}
+      if (!b.amount || Number(b.amount) <= 0) return err(res, 'Amount must be positive')
       const amt = Number(b.amount)
       const method = b.payment_method || 'cash'
 
       await client.query('BEGIN')
-      // Append payment record
       await client.query(
         `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by)
          VALUES ($1,$2,$3,$4,$5)`,
         [sessionId, amt, method, b.note || null, userId || null]
       )
-      // Update session totals
       const updated = await client.query(
         `UPDATE sessions
          SET payment_received = COALESCE(payment_received, 0) + $1,
@@ -34,32 +32,30 @@ export async function handler(event) {
       )
       if (updated.rowCount === 0) {
         await client.query('ROLLBACK')
-        return err('Session not found', 404)
+        return err(res, 'Session not found', 404)
       }
       await client.query('COMMIT')
-      return ok({ success: true, ...updated.rows[0] })
+      return ok(res, { success: true, ...updated.rows[0] })
     } catch (e) {
       await client.query('ROLLBACK')
       console.error(e)
-      return err('Server error', 500)
+      return err(res, 'Server error', 500)
     } finally { client.release() }
   }
 
-  // ─── Route: /sessions/:id/extend ──────────────────────────────
-  const extendMatch = event.path.match(/\/sessions\/(\d+)\/extend$/)
-  if (extendMatch && event.httpMethod === 'PATCH') {
+  // ─── Route: /api/sessions/:id/extend ─────────────────────────
+  const extendMatch = url.match(/\/sessions\/(\d+)\/extend/)
+  if (extendMatch && req.method === 'PATCH') {
     const sessionId = Number(extendMatch[1])
     const client = await pool.connect()
     try {
-      const b = JSON.parse(event.body || '{}')
-      const packets = Number(b.packets) || 1  // number of 30-min blocks to add
+      const b = req.body || {}
+      const packets = Number(b.packets) || 1
       const extraMins = packets * 30
       const collectNow = Number(b.collect_now) || 0
       const payMethod = b.payment_method || 'cash'
 
       await client.query('BEGIN')
-
-      // Get current session + device type for repricing
       const sessR = await client.query(
         `SELECT s.*, d.type AS device_type FROM sessions s
          JOIN devices d ON d.id = s.device_id WHERE s.id = $1`,
@@ -67,23 +63,20 @@ export async function handler(event) {
       )
       if (sessR.rowCount === 0) {
         await client.query('ROLLBACK')
-        return err('Session not found', 404)
+        return err(res, 'Session not found', 404)
       }
       const sess = sessR.rows[0]
       const newDuration = Number(sess.duration_mins) + extraMins
       const newTimeOut = new Date(new Date(sess.time_out).getTime() + extraMins * 60000).toISOString()
 
-      // Fetch new price for extended duration
       const priceR = await client.query(
         `SELECT price FROM pricing WHERE device_type = $1 AND duration_mins = $2`,
         [sess.device_type, newDuration]
       )
-      // If exact duration not found, use proportional rate from base 60-min price
       let newCharge
       if (priceR.rowCount > 0) {
         newCharge = Number(priceR.rows[0].price)
       } else {
-        // Fallback: add pro-rated extension at per-30-min rate from closest pricing
         const rateR = await client.query(
           `SELECT price, duration_mins FROM pricing
            WHERE device_type = $1 ORDER BY duration_mins DESC LIMIT 1`,
@@ -98,7 +91,6 @@ export async function handler(event) {
       const newTotal = newCharge + Number(sess.controller_total) + Number(sess.extra_person_total)
       const additionalCharge = newTotal - Number(sess.total)
 
-      // Apply immediate payment if provided
       let newPaymentReceived = Number(sess.payment_received || 0) + collectNow
       let newCredit = Math.max(0, newTotal - newPaymentReceived)
 
@@ -111,7 +103,6 @@ export async function handler(event) {
         [newDuration, newTimeOut, newCharge, newTotal, newPaymentReceived, newCredit, sessionId]
       )
 
-      // Log payment if collected now
       if (collectNow > 0) {
         await client.query(
           `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by)
@@ -121,21 +112,20 @@ export async function handler(event) {
       }
 
       await client.query('COMMIT')
-      return ok({ success: true, additional_charge: additionalCharge, ...updated.rows[0] })
+      return ok(res, { success: true, additional_charge: additionalCharge, ...updated.rows[0] })
     } catch (e) {
       await client.query('ROLLBACK')
       console.error(e)
-      return err('Server error', 500)
+      return err(res, 'Server error', 500)
     } finally { client.release() }
   }
 
-  // ─── Route: /sessions/:id ─────────────────────────────────────
-  const idMatch = event.path.match(/\/sessions\/(\d+)$/)
-  if (idMatch) {
+  // ─── Route: /api/sessions/:id ────────────────────────────────
+  const idMatch = url.match(/\/sessions\/(\d+)(\?|$)/)
+  if (idMatch && !url.includes('/payments') && !url.includes('/extend')) {
     const sessionId = Number(idMatch[1])
 
-    // GET — full session detail
-    if (event.httpMethod === 'GET') {
+    if (req.method === 'GET') {
       try {
         const [sessR, playersR, salesR, paymentsR] = await Promise.all([
           pool.query(
@@ -167,38 +157,42 @@ export async function handler(event) {
             [sessionId]
           ),
         ])
-        if (sessR.rowCount === 0) return err('Session not found', 404)
-        return ok({
+        if (sessR.rowCount === 0) return err(res, 'Session not found', 404)
+        return ok(res, {
           session: sessR.rows[0],
           players: playersR.rows,
           sales: salesR.rows,
           payments: paymentsR.rows,
         })
-      } catch (e) { console.error(e); return err('Server error', 500) }
+      } catch (e) {
+        console.error(e)
+        return err(res, 'Server error', 500)
+      }
     }
 
-    // PATCH — update remark or mark remark correction
-    if (event.httpMethod === 'PATCH') {
+    if (req.method === 'PATCH') {
       try {
-        const b = JSON.parse(event.body || '{}')
+        const b = req.body || {}
         const updates = []
         const vals = []
         let idx = 1
         if (b.remark !== undefined) { updates.push(`remark = $${idx++}`); vals.push(b.remark) }
-        if (updates.length === 0) return err('Nothing to update')
+        if (updates.length === 0) return err(res, 'Nothing to update')
         vals.push(sessionId)
         await pool.query(`UPDATE sessions SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
-        return ok({ success: true })
-      } catch (e) { console.error(e); return err('Server error', 500) }
+        return ok(res, { success: true })
+      } catch (e) {
+        console.error(e)
+        return err(res, 'Server error', 500)
+      }
     }
   }
 
+  // ─── Base /api/sessions Collection Routes ───────────────────
   try {
-    // ─── GET /sessions ─────────────────────────────────────────
-    if (event.httpMethod === 'GET') {
-      const params = event.queryStringParameters || {}
-      const date = params.date
-      const limit = params.limit ? Number(params.limit) : null
+    if (req.method === 'GET') {
+      const date = req.query.date
+      const limit = req.query.limit ? Number(req.query.limit) : null
 
       let query = `
         SELECT s.*, c.name, c.mobile, c.shop_name, d.label AS device_label, d.type AS device_type,
@@ -215,12 +209,11 @@ export async function handler(event) {
       if (limit) { query += ` LIMIT $${vals.length + 1}`; vals.push(limit) }
 
       const result = await pool.query(query, vals)
-      return ok({ sessions: result.rows })
+      return ok(res, { sessions: result.rows })
     }
 
-    // ─── POST /sessions ────────────────────────────────────────
-    if (event.httpMethod === 'POST') {
-      const body = JSON.parse(event.body || '{}')
+    if (req.method === 'POST') {
+      const body = req.body || {}
       const {
         customer_id, name, mobile, shop_name, device_id, duration_mins,
         time_in, time_out, date, charge, controller_total,
@@ -238,7 +231,6 @@ export async function handler(event) {
       try {
         await client.query('BEGIN')
 
-        // Upsert customer
         let cid = customer_id
         if (!cid && name) {
           const existing = await client.query(
@@ -247,7 +239,6 @@ export async function handler(event) {
           )
           if (existing.rows.length > 0) {
             cid = existing.rows[0].id
-            // Update shop_name if provided and not yet set
             if (shop_name) {
               await client.query(
                 'UPDATE customers SET shop_name = COALESCE(shop_name, $1) WHERE id = $2',
@@ -276,7 +267,6 @@ export async function handler(event) {
         )
         const sessionId = result.rows[0].id
 
-        // Insert initial payment log entry
         if (finalPayment > 0) {
           await client.query(
             `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by)
@@ -285,7 +275,6 @@ export async function handler(event) {
           )
         }
 
-        // Insert players
         if (players?.length) {
           for (const p of players) {
             await client.query(
@@ -297,16 +286,16 @@ export async function handler(event) {
         }
 
         await client.query('COMMIT')
-        return ok({ id: sessionId }, 201)
+        return ok(res, { id: sessionId }, 201)
       } catch (e) {
         await client.query('ROLLBACK')
         throw e
       } finally { client.release() }
     }
 
-    return err('Method not allowed', 405)
+    return err(res, 'Method not allowed', 405)
   } catch (e) {
     console.error(e)
-    return err('Server error', 500)
+    return err(res, 'Server error', 500)
   }
 }

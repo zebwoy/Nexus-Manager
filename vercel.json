@@ -1,0 +1,15 @@
+{
+  "rewrites": [
+    { "source": "/api/auth-login", "destination": "/api/auth?action=login" },
+    { "source": "/api/users", "destination": "/api/auth?action=users" },
+    { "source": "/api/devices", "destination": "/api/setup?resource=devices" },
+    { "source": "/api/pricing", "destination": "/api/setup?resource=pricing" },
+    { "source": "/api/settings", "destination": "/api/setup?resource=settings" },
+    { "source": "/api/pancafe-plans", "destination": "/api/pancafe?resource=plans" },
+    { "source": "/api/sales", "destination": "/api/inventory?resource=sales" },
+    { "source": "/api/dashboard-snapshot", "destination": "/api/dashboard?target=snapshot" },
+    { "source": "/api/dashboard-credits", "destination": "/api/dashboard?target=credits" },
+    { "source": "/api/day-openings", "destination": "/api/dashboard?target=day-openings" },
+    { "source": "/((?!api/.*).*)", "destination": "/index.html" }
+  ]
+}
