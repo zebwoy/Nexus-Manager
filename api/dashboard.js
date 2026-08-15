@@ -37,11 +37,12 @@ export default async function handler(req, res) {
       if (req.method === 'GET') {
         const date = req.query.date || new Date().toISOString().slice(0, 10)
         const r = await pool.query(
-          `SELECT do.*, u.username AS created_by_username FROM day_openings do
-           LEFT JOIN users u ON u.id = do.created_by
-           WHERE do.date = $1`,
+          `SELECT dop.*, u.username AS created_by_username FROM day_openings dop
+           LEFT JOIN users u ON u.id = dop.created_by
+           WHERE dop.date = $1`,
           [date]
         )
+
         return ok(res, { opening: r.rows[0] || null })
       }
 
