@@ -171,7 +171,7 @@ export default function Dashboard() {
         <div className="card" style={{ marginBottom: '1.75rem' }}>
           <SectionHeader
             title="Active Sessions"
-            action={<span className="badge badge-success" style={{ animation: 'pulse 2s infinite' }}>● {activeSessions.length} LIVE</span>}
+            action={<span className="badge-active-session animate-pulse">{activeSessions.length} LIVE</span>}
           />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.75rem' }}>
             {activeSessions.map(s => (
@@ -256,7 +256,7 @@ export default function Dashboard() {
                         <p style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)' }}>{s.name || 'Anonymous'}</p>
                         <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontWeight: 550 }}>
                           {s.device_label} · {formatTime(s.time_in)}
-                          {s.is_active && <span className="badge badge-success" style={{ fontSize: '0.6rem', marginLeft: '0.4rem' }}>● ACTIVE</span>}
+                          {s.is_active && <span className="badge-active-session animate-pulse" style={{ fontSize: '0.6rem', marginLeft: '0.4rem' }}>ACTIVE</span>}
                         </p>
                       </div>
                       <div style={{ textAlign: 'right' }}>

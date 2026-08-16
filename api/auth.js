@@ -67,6 +67,15 @@ export default async function handler(req, res) {
       return ok(res, { user: result.rows[0] }, 201)
     }
 
+    if (req.method === 'PUT') {
+      const id = req.query.id
+      const { pin } = req.body || {}
+      if (!id || !pin) return err(res, 'User ID and PIN are required')
+      if (String(pin).length !== 4 || !/^\d{4}$/.test(String(pin))) return err(res, 'PIN must be exactly 4 digits')
+      await pool.query('UPDATE users SET pin = $1 WHERE id = $2', [String(pin), Number(id)])
+      return ok(res, { success: true, message: 'Security PIN reset successfully.' })
+    }
+
     if (req.method === 'DELETE') {
       const id = req.query.id
       if (!id) return err(res, 'User ID required')

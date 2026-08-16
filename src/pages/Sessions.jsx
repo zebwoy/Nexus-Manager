@@ -111,7 +111,7 @@ export default function Sessions() {
                     <td className="table-cell">
                       <p style={{ fontWeight: 700, color: 'var(--text)' }}>{s.name || <span style={{ color: 'var(--text-faint)' }}>Walk-in Client</span>}</p>
                       {s.mobile && <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace", marginTop: '0.1rem' }}>{s.mobile}</p>}
-                      {s.is_active && <span className="badge badge-success" style={{ fontSize: '0.6rem', marginTop: '0.25rem' }}>● ACTIVE</span>}
+                      {s.is_active && <span className="badge-active-session animate-pulse" style={{ fontSize: '0.6rem', marginTop: '0.25rem' }}>ACTIVE</span>}
                     </td>
                     <td className="table-cell">
                       <span className={`badge ${badgeClass}`}>{s.device_label}</span>

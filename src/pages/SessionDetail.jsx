@@ -123,22 +123,20 @@ export default function SessionDetail() {
   const handleSaveEdit = async () => {
     const nameErr = validateName(editForm.name)
     if (nameErr) { setError(nameErr); return }
-    const mobileErr = validateMobile(editForm.mobile)
+    const mobileErr = validateMobile(editForm.mobile, true)
     if (mobileErr) { setError(mobileErr); return }
 
     setEditSaving(true)
     setError('')
     try {
       const timeInISO = toISO(s.date, editForm.time_in)
-      const timeOutISO = addMinutes(timeInISO, editForm.duration_mins).toISOString()
+      const timeOutISO = addMinutes(timeInISO, s.duration_mins).toISOString()
 
       await api.patch(`/sessions/${id}`, {
         name: editForm.name,
         mobile: editForm.mobile,
         time_in: timeInISO,
-        duration_mins: Number(editForm.duration_mins),
         time_out: timeOutISO,
-        remark: editForm.remark,
       })
       setShowEditModal(false)
       showToast('Session details updated ✓')
@@ -261,26 +259,14 @@ export default function SessionDetail() {
               onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="John Doe" />
           </Field>
 
-          <Field label="Mobile Number (10 Digits)">
+          <Field label="Mobile Number (10 Digits)" required>
             <input className="input" value={editForm.mobile}
-              onChange={e => setEditForm(f => ({ ...f, mobile: e.target.value }))} placeholder="9876543210" maxLength={10} />
+              onChange={e => setEditForm(f => ({ ...f, mobile: e.target.value.replace(/\D/g, '') }))} placeholder="9876543210" maxLength={10} />
           </Field>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <Field label="Time In">
-              <input type="time" className="input" value={editForm.time_in}
-                onChange={e => setEditForm(f => ({ ...f, time_in: e.target.value }))} />
-            </Field>
-
-            <Field label="Duration (minutes)">
-              <input type="number" className="input" value={editForm.duration_mins}
-                onChange={e => setEditForm(f => ({ ...f, duration_mins: e.target.value }))} step={15} min={15} />
-            </Field>
-          </div>
-
-          <Field label="Remark / Note">
-            <input className="input" value={editForm.remark}
-              onChange={e => setEditForm(f => ({ ...f, remark: e.target.value }))} placeholder="Session comments..." />
+          <Field label="Time In">
+            <input type="time" className="input" value={editForm.time_in}
+              onChange={e => setEditForm(f => ({ ...f, time_in: e.target.value }))} />
           </Field>
 
           <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem', marginTop: '0.5rem' }}>
@@ -297,7 +283,7 @@ export default function SessionDetail() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.75rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
             <button onClick={() => navigate('/sessions')} className="btn-secondary btn-sm"
               style={{ padding: '0.3rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
               <ArrowLeft size={13} /> Back
@@ -322,7 +308,7 @@ export default function SessionDetail() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
           {isActive
-            ? <><span className="badge badge-success">● ACTIVE</span><Countdown timeOut={s.time_out} /></>
+            ? <><span className="badge-active-session animate-pulse">ACTIVE</span><Countdown timeOut={s.time_out} /></>
             : <span className="badge badge-warning">COMPLETED</span>}
         </div>
       </div>
@@ -367,6 +353,67 @@ export default function SessionDetail() {
               {s.remark && (
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.5rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                   Note: {s.remark}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Add cafe items */}
+          {sectionCard('Add Cafe Items', <ShoppingCart size={14} />, (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Product grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.5rem' }}>
+                {inventory.filter(i => i.stock_qty > 0).map(item => {
+                  const inCart = cart.find(c => c.id === item.id)
+                  return (
+                    <button key={item.id} onClick={() => addToCart(item)}
+                      className="card"
+                      style={{
+                        padding: '0.75rem', cursor: 'pointer', textAlign: 'left',
+                        border: inCart ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                        background: inCart ? 'var(--accent-dim)' : 'var(--bg-card)'
+                      }}>
+                      <p style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text)', marginBottom: '0.25rem' }}>{item.name}</p>
+                      <p style={{ fontSize: '0.8rem', fontWeight: 750, fontFamily: "'JetBrains Mono', monospace", color: 'var(--accent-text)' }}>
+                        {formatRupees(item.sell_price)}
+                      </p>
+                      {inCart && (
+                        <span className="badge badge-accent" style={{ fontSize: '0.6rem', marginTop: '0.25rem' }}>×{inCart.qty}</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Cart summary */}
+              {cart.length > 0 && (
+                <div style={{ background: 'var(--bg-input)', borderRadius: '10px', padding: '0.85rem', border: '1px solid var(--border)' }}>
+                  {cart.map(item => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 650, color: 'var(--text)' }}>{item.name}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <button onClick={() => updateCartQty(item.id, item.qty - 1)} className="btn-secondary btn-icon"
+                          style={{ width: '1.35rem', height: '1.35rem', borderRadius: '4px', padding: 0 }}><Minus size={10} /></button>
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: '0.8rem', minWidth: '1rem', textAlign: 'center' }}>{item.qty}</span>
+                        <button onClick={() => updateCartQty(item.id, item.qty + 1)} className="btn-secondary btn-icon"
+                          style={{ width: '1.35rem', height: '1.35rem', borderRadius: '4px', padding: 0 }}><Plus size={10} /></button>
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', color: 'var(--text-muted)', minWidth: '3rem', textAlign: 'right' }}>
+                          {formatRupees(item.sell_price * item.qty)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.6rem', display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                    <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text)' }}>Cart Total</span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--accent-text)' }}>{formatRupees(cartTotal)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                    <span className="label" style={{ marginBottom: 0 }}>Collect via</span>
+                    <PayMethodToggle value={cartPayMethod} onChange={setCartPayMethod} />
+                  </div>
+                  <button onClick={handleAddItems} disabled={cartSaving} className="btn-primary" style={{ width: '100%' }}>
+                    {cartSaving ? <><Spinner size="sm" /> Adding...</> : `Add to Session — ${formatRupees(cartTotal)}`}
+                  </button>
                 </div>
               )}
             </div>
@@ -482,67 +529,6 @@ export default function SessionDetail() {
                 style={{ padding: '0.65rem 1.25rem' }}>
                 {extSaving ? <><Spinner size="sm" /> Extending...</> : `Extend Session +${extPackets * 30} mins`}
               </button>
-            </div>
-          ))}
-
-          {/* Add cafe items */}
-          {sectionCard('Add Cafe Items', <ShoppingCart size={14} />, (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Product grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.5rem' }}>
-                {inventory.filter(i => i.stock_qty > 0).map(item => {
-                  const inCart = cart.find(c => c.id === item.id)
-                  return (
-                    <button key={item.id} onClick={() => addToCart(item)}
-                      className="card"
-                      style={{
-                        padding: '0.75rem', cursor: 'pointer', textAlign: 'left',
-                        border: inCart ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-                        background: inCart ? 'var(--accent-dim)' : 'var(--bg-card)'
-                      }}>
-                      <p style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text)', marginBottom: '0.25rem' }}>{item.name}</p>
-                      <p style={{ fontSize: '0.8rem', fontWeight: 750, fontFamily: "'JetBrains Mono', monospace", color: 'var(--accent-text)' }}>
-                        {formatRupees(item.sell_price)}
-                      </p>
-                      {inCart && (
-                        <span className="badge badge-accent" style={{ fontSize: '0.6rem', marginTop: '0.25rem' }}>×{inCart.qty}</span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* Cart summary */}
-              {cart.length > 0 && (
-                <div style={{ background: 'var(--bg-input)', borderRadius: '10px', padding: '0.85rem', border: '1px solid var(--border)' }}>
-                  {cart.map(item => (
-                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '0.8125rem', fontWeight: 650, color: 'var(--text)' }}>{item.name}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <button onClick={() => updateCartQty(item.id, item.qty - 1)} className="btn-secondary btn-icon"
-                          style={{ width: '1.35rem', height: '1.35rem', borderRadius: '4px', padding: 0 }}><Minus size={10} /></button>
-                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: '0.8rem', minWidth: '1rem', textAlign: 'center' }}>{item.qty}</span>
-                        <button onClick={() => updateCartQty(item.id, item.qty + 1)} className="btn-secondary btn-icon"
-                          style={{ width: '1.35rem', height: '1.35rem', borderRadius: '4px', padding: 0 }}><Plus size={10} /></button>
-                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', color: 'var(--text-muted)', minWidth: '3rem', textAlign: 'right' }}>
-                          {formatRupees(item.sell_price * item.qty)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                  <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.6rem', display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                    <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text)' }}>Cart Total</span>
-                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--accent-text)' }}>{formatRupees(cartTotal)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                    <span className="label" style={{ marginBottom: 0 }}>Collect via</span>
-                    <PayMethodToggle value={cartPayMethod} onChange={setCartPayMethod} />
-                  </div>
-                  <button onClick={handleAddItems} disabled={cartSaving} className="btn-primary" style={{ width: '100%' }}>
-                    {cartSaving ? <><Spinner size="sm" /> Adding...</> : `Add to Session — ${formatRupees(cartTotal)}`}
-                  </button>
-                </div>
-              )}
             </div>
           ))}
         </div>

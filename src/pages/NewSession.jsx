@@ -129,7 +129,7 @@ export default function NewSession() {
     const nameErr = validateName(form.name)
     if (nameErr) { setError(nameErr); return }
 
-    const mobileErr = validateMobile(form.mobile)
+    const mobileErr = validateMobile(form.mobile, true)
     if (mobileErr) { setError(mobileErr); return }
 
     if (!form.device_id || !form.duration_mins) {
@@ -231,9 +231,9 @@ export default function NewSession() {
               )}
             </div>
           </Field>
-          <Field label="Mobile Phone">
-            <input className="input" placeholder="Phone number (optional)"
-              value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))} />
+          <Field label="Mobile Phone (10 digits)" required>
+            <input className="input" placeholder="e.g. 9876543210" maxLength={10}
+              value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: e.target.value.replace(/\D/g, '') }))} />
           </Field>
         </div>
 

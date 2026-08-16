@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import { formatRupees, formatDate, todayISO, validateName, validateMobile } from '../lib/helpers'
 import { PageLoader, EmptyState, ErrorMsg, Field, Modal } from '../components/UI'
 import { Plus, Trash2, ShoppingBag } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 
 // ─── CAFETERIA ────────────────────────────────────────────────
@@ -845,6 +846,9 @@ export function Reports() {
 
 // ─── SETTINGS ─────────────────────────────────────────────────
 export function Settings() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin' || user?.username === 'trial'
+
   const [users, setUsers] = useState([])
   const [settings, setSettings] = useState([])
   const [loading, setLoading] = useState(true)
@@ -853,6 +857,10 @@ export function Settings() {
   const [newUser, setNewUser] = useState({ full_name: '', username: '', pin: '' })
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
+
+  const [resettingUser, setResettingUser] = useState(null)
+  const [newPin, setNewPin] = useState('')
+  const [resetSaving, setResetSaving] = useState(false)
 
   useEffect(() => { load() }, [])
   const load = async () => {
@@ -867,6 +875,26 @@ export function Settings() {
       await api.post('/users', newUser)
       setShowAddUser(false); setNewUser({ full_name: '', username: '', pin: '' }); load()
     } catch (err) { setError(err.message) } finally { setSaving(false) }
+  }
+
+  const handleResetPin = async () => {
+    if (newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
+      setError('PIN must be exactly 4 digits.')
+      return
+    }
+    setResetSaving(true)
+    setError('')
+    try {
+      await api.put(`/users?id=${resettingUser.id}`, { pin: newPin })
+      setResettingUser(null)
+      setNewPin('')
+      setSaveMsg('Security PIN reset successfully!')
+      setTimeout(() => setSaveMsg(''), 2000)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setResetSaving(false)
+    }
   }
 
   const handleSettingChange = (key, value) => {
@@ -924,22 +952,34 @@ export function Settings() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {users.map((u, idx) => (
               <div key={u.id} style={{
-                display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.65rem 0.75rem',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.85rem', padding: '0.65rem 0.75rem',
                 background: idx % 2 === 0 ? 'rgba(0,0,0,0.01)' : 'transparent',
                 borderBottom: idx < users.length - 1 ? '1px solid var(--border)' : 'none',
                 borderRadius: '8px'
               }}>
-                <div style={{
-                  width: '2rem', height: '2rem', borderRadius: '50%', background: 'var(--accent-dim)',
-                  border: '1.5px solid var(--accent-border)', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: '0.85rem', fontWeight: 750, color: 'var(--accent-text)'
-                }}>
-                  {u.full_name?.[0]?.toUpperCase()}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                  <div style={{
+                    width: '2rem', height: '2rem', borderRadius: '50%', background: 'var(--accent-dim)',
+                    border: '1.5px solid var(--accent-border)', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', fontSize: '0.85rem', fontWeight: 750, color: 'var(--accent-text)'
+                  }}>
+                    {u.full_name?.[0]?.toUpperCase()}
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)' }}>{u.full_name}</p>
+                    <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 550, fontFamily: "'JetBrains Mono', monospace" }}>
+                      @{u.username}
+                      <span style={{ textTransform: 'capitalize', fontSize: '0.65rem', background: 'var(--accent-dim)', padding: '0.1rem 0.35rem', borderRadius: '4px', color: 'var(--accent-text)', marginLeft: '0.35rem' }}>
+                        {u.role || 'operator'}
+                      </span>
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)' }}>{u.full_name}</p>
-                  <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 550, fontFamily: "'JetBrains Mono', monospace" }}>@{u.username}</p>
-                </div>
+                {isAdmin && (
+                  <button onClick={() => setResettingUser(u)} className="btn-secondary btn-sm" style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}>
+                    Reset PIN
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -1018,6 +1058,30 @@ export function Settings() {
               {purging ? 'Purging Data...' : 'Confirm Reset & Purge'}
             </button>
             <button onClick={() => setShowPurgeModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Reset PIN Modal */}
+      <Modal open={!!resettingUser} onClose={() => setResettingUser(null)} title={`Reset PIN for ${resettingUser?.full_name}`}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <Field label="New 4-digit Security PIN" required>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              className="input"
+              placeholder="Enter new 4-digit PIN"
+              value={newPin}
+              onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
+            />
+          </Field>
+          
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1.5px solid var(--border)' }}>
+            <button onClick={handleResetPin} disabled={resetSaving} className="btn-primary" style={{ flex: 1 }}>
+              {resetSaving ? 'Saving...' : 'Update PIN'}
+            </button>
+            <button onClick={() => setResettingUser(null)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
           </div>
         </div>
       </Modal>
