@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     if (resource === 'purge' || req.url.includes('purge')) {
       if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
       await pool.query(`
-        TRUNCATE TABLE session_payments, pancafe_sessions, sale_items, sales, recharges, expenses, day_openings, sessions CASCADE;
+        TRUNCATE TABLE session_payments, pancafe_sessions, sale_items, sales, recharges, expenses, day_openings, sessions, inventory_items CASCADE;
         DELETE FROM customers WHERE id NOT IN (SELECT DISTINCT customer_id FROM sales WHERE customer_id IS NOT NULL);
       `)
       await pool.query(
