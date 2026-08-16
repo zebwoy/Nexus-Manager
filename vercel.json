@@ -5,6 +5,8 @@
     { "source": "/api/devices", "destination": "/api/setup?resource=devices" },
     { "source": "/api/pricing", "destination": "/api/setup?resource=pricing" },
     { "source": "/api/settings", "destination": "/api/setup?resource=settings" },
+    { "source": "/api/purge", "destination": "/api/setup?resource=purge" },
+
     { "source": "/api/pancafe-plans", "destination": "/api/pancafe?resource=plans" },
     { "source": "/api/pancafe-plans/(.*)", "destination": "/api/pancafe?resource=plans&id=$1" },
     { "source": "/api/sales", "destination": "/api/inventory?resource=sales" },

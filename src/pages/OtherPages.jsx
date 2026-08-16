@@ -882,6 +882,24 @@ export function Settings() {
     } catch (err) { setError(err.message) } finally { setSaving(false) }
   }
 
+  const [showPurgeModal, setShowPurgeModal] = useState(false)
+  const [purging, setPurging] = useState(false)
+
+  const handlePurgeData = async () => {
+    setPurging(true)
+    setError('')
+    try {
+      await api.post('/purge')
+      setShowPurgeModal(false)
+      setSaveMsg('Production reset complete! Test data purged.')
+      setTimeout(() => setSaveMsg(''), 3000)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setPurging(false)
+    }
+  }
+
   const EDITABLE_SETTINGS = ['controller_fee', 'extra_person_fee', 'extra_person_from']
 
   return (
@@ -896,7 +914,7 @@ export function Settings() {
       {/* Staff management panel */}
       <div className="card" style={{ marginBottom: '1.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
-          <p style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>👥 Staff Registry</p>
+          <p style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Staff Registry</p>
           <button onClick={() => setShowAddUser(true)} className="btn-primary btn-sm">+ Add Staff</button>
         </div>
         
@@ -929,8 +947,8 @@ export function Settings() {
       </div>
 
       {/* System variables configurations panel */}
-      <div className="card">
-        <p style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1.25rem' }}>🎛️ System Variables</p>
+      <div className="card" style={{ marginBottom: '1.75rem' }}>
+        <p style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1.25rem' }}>System Variables</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {settings.filter(s => EDITABLE_SETTINGS.includes(s.key)).map(s => (
             <div key={s.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
@@ -956,8 +974,21 @@ export function Settings() {
         </div>
       </div>
 
+      {/* Production Cleanup / Purge Section */}
+      <div className="card" style={{ border: '1.5px solid var(--danger-border)', background: 'var(--danger-dim)' }}>
+        <p style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.45rem' }}>
+          Production Data Purge & System Reset
+        </p>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: 1.45, marginBottom: '1.25rem' }}>
+          Purge test sessions, sales, expenses, recharges, and daily opening records to prepare your console for production. Pricing rules, devices, and user accounts will remain intact.
+        </p>
+        <button onClick={() => setShowPurgeModal(true)} className="btn-danger" style={{ padding: '0.6rem 1.25rem' }}>
+          Purge Test Data
+        </button>
+      </div>
+
       {/* Add Staff Modal */}
-      <Modal open={showAddUser} onClose={() => setShowAddUser(false)} title="➕ Add Console Staff Account">
+      <Modal open={showAddUser} onClose={() => setShowAddUser(false)} title="Add Console Staff Account">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <Field label="Full Name" required>
             <input className="input" placeholder="e.g. Rahul Sharma" value={newUser.full_name} onChange={e => setNewUser(u => ({...u, full_name: e.target.value}))} />
@@ -975,11 +1006,27 @@ export function Settings() {
           </div>
         </div>
       </Modal>
+
+      {/* Purge Confirmation Modal */}
+      <Modal open={showPurgeModal} onClose={() => setShowPurgeModal(false)} title="Purge Test Data for Production">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            Are you sure you want to <strong>purge all transactional test data</strong>? This will clear all logged sessions, sales, expenses, and opening balances to leave your database clean for live production use.
+          </p>
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1.5px solid var(--border)' }}>
+            <button onClick={handlePurgeData} disabled={purging} className="btn-danger" style={{ flex: 1 }}>
+              {purging ? 'Purging Data...' : 'Confirm Reset & Purge'}
+            </button>
+            <button onClick={() => setShowPurgeModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
 
 // ─── EOD RECONCILIATION ───────────────────────────────────────
+
 export function EODReconciliation() {
   const [snapshot, setSnapshot] = useState(null)
   const [opening, setOpening] = useState(null)

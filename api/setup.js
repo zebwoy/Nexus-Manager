@@ -32,10 +32,18 @@ export default async function handler(req, res) {
         }
         return ok(res, { success: true })
       }
-      return err(res, 'Method not allowed', 405)
+    // ─── PURGE TEST DATA ─────────────────────────────────────
+    if (resource === 'purge' || req.url.includes('purge')) {
+      if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
+      await pool.query(`
+        TRUNCATE TABLE session_payments, pancafe_sessions, sale_items, sales, recharges, expenses, day_openings, sessions CASCADE;
+        DELETE FROM customers WHERE id NOT IN (SELECT DISTINCT customer_id FROM sales WHERE customer_id IS NOT NULL);
+      `)
+      return ok(res, { success: true, message: 'All transactional test data successfully purged.' })
     }
 
     return err(res, 'Invalid setup resource', 400)
+
   } catch (e) {
     console.error(e)
     return err(res, 'Server error', 500)

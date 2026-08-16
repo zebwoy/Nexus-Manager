@@ -1,11 +1,9 @@
-import { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { useTheme, ACCENTS } from '../context/ThemeContext'
+import { api } from '../lib/api'
+import { Modal, Spinner } from './UI'
 import {
   LayoutDashboard, Monitor, Coffee, Package,
   Zap, TrendingDown, Users, BarChart2, Settings,
-  Sun, Moon, LogOut, Menu, X, FileCheck
+  Sun, Moon, LogOut, Menu, X, FileCheck, Trash2
 } from 'lucide-react'
 
 const NAV = [
@@ -25,11 +23,30 @@ export default function Sidebar() {
   const { isDark, toggleDark, accentId, setAccentId } = useTheme()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showSignOutModal, setShowSignOutModal] = useState(false)
+  const [isPurging, setIsPurging] = useState(false)
 
-  const handleLogout = () => { logout(); navigate('/login') }
+  const isTrial = user?.username === 'trial' || user?.role === 'trial'
+
+  const handleConfirmSignOut = async () => {
+    setIsPurging(true)
+    try {
+      if (isTrial) {
+        await api.post('/purge')
+      }
+    } catch (e) {
+      console.error('Purge error on logout:', e)
+    } finally {
+      setIsPurging(false)
+      setShowSignOutModal(false)
+      logout()
+      navigate('/login')
+    }
+  }
 
   const activeMobileNav = NAV.slice(0, 4)
   const moreMobileNav = NAV.slice(4)
+
 
   return (
     <>
@@ -140,7 +157,7 @@ export default function Sidebar() {
               </p>
             </div>
           </div>
-          <button onClick={handleLogout} className="btn-secondary btn-sm"
+          <button onClick={() => setShowSignOutModal(true)} className="btn-secondary btn-sm"
             style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
             <LogOut size={13} /> Operator Sign Out
           </button>
@@ -202,30 +219,24 @@ export default function Sidebar() {
             {/* Grab Handle */}
             <div style={{ width: '40px', height: '5px', background: 'var(--border)', borderRadius: '99px', margin: '-0.75rem auto 1.25rem' }} />
             
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+            {/* Header bar */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
               <div>
-                <p style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text)' }}>Navigation & Controls</p>
-                <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>Console operator dashboard</p>
+                <p style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text)' }}>Console Navigation</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Additional station controls & features</p>
               </div>
-              <button onClick={() => setMenuOpen(false)} className="btn-secondary btn-icon" style={{ borderRadius: '50%' }}>
+              <button onClick={() => setMenuOpen(false)} className="btn-secondary btn-icon" style={{ borderRadius: '50%', width: '2rem', height: '2rem' }}>
                 <X size={16} />
               </button>
             </div>
 
-            {/* Menu List */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem', marginBottom: '1.5rem' }}>
+            {/* Menu Links */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.5rem' }}>
               {moreMobileNav.map(({ to, Icon, label }) => (
                 <NavLink key={to} to={to} onClick={() => setMenuOpen(false)}
-                  className={({ isActive }) => `flex items-center gap-2.5 p-3 rounded-xl border border-transparent no-underline`}
-                  style={({ isActive }) => ({
-                    background: isActive ? 'var(--accent-dim)' : 'var(--bg-input)',
-                    border: isActive ? '1px solid var(--accent-border)' : '1px solid var(--border)',
-                    color: isActive ? 'var(--accent-text)' : 'var(--text)',
-                    fontSize: '0.875rem', fontWeight: 600,
-                    boxShadow: isActive ? 'none' : 'inset 1px 1px 3px rgba(0,0,0,0.05)'
-                  })}>
-                  <Icon size={16} strokeWidth={2.2} />
+                  className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+                  style={{ padding: '0.75rem 1rem', borderRadius: '12px' }}>
+                  <Icon size={18} strokeWidth={2.2} />
                   <span>{label}</span>
                 </NavLink>
               ))}
@@ -277,13 +288,45 @@ export default function Sidebar() {
                   <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>@{user?.username}</p>
                 </div>
               </div>
-              <button onClick={() => { setMenuOpen(false); handleLogout() }} className="btn-danger btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <button onClick={() => { setMenuOpen(false); setShowSignOutModal(true) }} className="btn-danger btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <LogOut size={13} /> Sign Out
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ─── SIGN OUT CONFIRMATION MODAL ────────────────────────────── */}
+      <Modal open={showSignOutModal} onClose={() => setShowSignOutModal(false)} title={isTrial ? "End Trial Session & Clear Data" : "Confirm Operator Sign Out"}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {isTrial ? (
+            <div style={{
+              background: 'var(--danger-dim)', border: '1px solid var(--danger-border)',
+              borderRadius: '12px', padding: '1rem 1.15rem', color: 'var(--danger)'
+            }}>
+              <p style={{ fontWeight: 800, fontSize: '0.95rem', marginBottom: '0.35rem' }}>
+                Purge Trial Simulation Data
+              </p>
+              <p style={{ fontSize: '0.825rem', lineHeight: 1.45, opacity: 0.9 }}>
+                You are currently signed in under the <strong>Trial Account</strong> (@trial). All test sessions, sales, expenses, and simulation logs collected during this trial session will be deleted to keep your database clean.
+              </p>
+            </div>
+          ) : (
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Are you sure you want to log out of <strong>Nexus Manager</strong> console?
+            </p>
+          )}
+
+          <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
+            <button onClick={handleConfirmSignOut} disabled={isPurging} className={isTrial ? "btn-danger" : "btn-primary"} style={{ flex: 1, padding: '0.65rem' }}>
+              {isPurging ? <><Spinner size="sm" /> Purging & Signing Out...</> : (isTrial ? "Purge Data & Sign Out" : "Sign Out")}
+            </button>
+            <button onClick={() => setShowSignOutModal(false)} className="btn-secondary" style={{ flex: 1, padding: '0.65rem' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Slideup keyframe injection */}
       <style>{`
