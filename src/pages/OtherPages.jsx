@@ -874,6 +874,9 @@ export function Settings() {
     try {
       await api.post('/users', newUser)
       setShowAddUser(false); setNewUser({ full_name: '', username: '', pin: '' }); load()
+      if (user?.username === 'trial') {
+        alert('This is a trial account for demo purposes.')
+      }
     } catch (err) { setError(err.message) } finally { setSaving(false) }
   }
 
@@ -890,6 +893,9 @@ export function Settings() {
       setNewPin('')
       setSaveMsg('Security PIN reset successfully!')
       setTimeout(() => setSaveMsg(''), 2000)
+      if (user?.username === 'trial') {
+        alert('This is a trial account for demo purposes.')
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -907,6 +913,9 @@ export function Settings() {
       await api.post('/settings', { settings })
       setSaveMsg('Configuration updated!')
       setTimeout(() => setSaveMsg(''), 2000)
+      if (user?.username === 'trial') {
+        alert('This is a trial account for demo purposes.')
+      }
     } catch (err) { setError(err.message) } finally { setSaving(false) }
   }
 
@@ -921,6 +930,9 @@ export function Settings() {
       setShowPurgeModal(false)
       setSaveMsg('Production reset complete! Test data purged.')
       setTimeout(() => setSaveMsg(''), 3000)
+      if (user?.username === 'trial') {
+        alert('This is a trial account for demo purposes.')
+      }
     } catch (err) {
       setError(err.message)
     } finally {
