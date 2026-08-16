@@ -222,15 +222,13 @@ SELECT
   (SELECT COALESCE(SUM(charge_price), 0.00) FROM recharges WHERE date = CURRENT_DATE) AS rc_revenue,
   (SELECT COALESCE(SUM(amount_received), 0.00) FROM pancafe_sessions WHERE date = CURRENT_DATE) AS pancafe_revenue,
   (SELECT COALESCE(SUM(credit), 0.00) FROM sessions WHERE credit > 0) AS total_outstanding_credit,
-  -- Cash vs Online inflow breakdown for EOD reconciliation
+  -- Cash vs Online inflow breakdown for EOD reconciliation (using session_payments)
+  (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'cash' AND created_at::date = CURRENT_DATE) AS cash_gaming,
+  (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'online' AND created_at::date = CURRENT_DATE) AS online_gaming,
   (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN payment_received ELSE 0 END), 0.00)
-   FROM sessions WHERE date = CURRENT_DATE) AS cash_gaming,
+   FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE) AS cash_sales,
   (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN payment_received ELSE 0 END), 0.00)
-   FROM sessions WHERE date = CURRENT_DATE) AS online_gaming,
-  (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN total ELSE 0 END), 0.00)
-   FROM sales WHERE date = CURRENT_DATE) AS cash_sales,
-  (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN total ELSE 0 END), 0.00)
-   FROM sales WHERE date = CURRENT_DATE) AS online_sales,
+   FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE) AS online_sales,
   (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount_received ELSE 0 END), 0.00)
    FROM pancafe_sessions WHERE date = CURRENT_DATE) AS cash_pancafe,
   (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN amount_received ELSE 0 END), 0.00)

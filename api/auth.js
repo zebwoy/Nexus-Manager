@@ -4,6 +4,72 @@ export default async function handler(req, res) {
   try {
     const pool = getPool()
     const action = req.query.action
+    const userId = req.headers['x-user-id']
+    const currentOperator = req.headers['x-username']
+
+    // ─── INITIALIZATION / MIGRATIONS ─────────────────────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+          id SERIAL PRIMARY KEY,
+          user_id INT,
+          username VARCHAR(100),
+          action VARCHAR(100) NOT NULL,
+          details TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS operator_sessions (
+          id SERIAL PRIMARY KEY,
+          user_id INT,
+          username VARCHAR(100) NOT NULL,
+          login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          logout_at TIMESTAMP WITH TIME ZONE
+      );
+    `)
+
+    try {
+      await pool.query(`
+        ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_category_check;
+        ALTER TABLE expenses ADD CONSTRAINT expenses_category_check CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Other', 'Cafeteria'));
+      `)
+    } catch (e) {
+      console.error('Failed to update expenses check constraint:', e)
+    }
+
+    // ─── LOGOUT: POST /api/auth-logout ─────────────────────────────
+    if (action === 'logout' || req.url.includes('auth-logout')) {
+      if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
+      if (userId) {
+        await pool.query(
+          `UPDATE operator_sessions
+           SET logout_at = CURRENT_TIMESTAMP
+           WHERE user_id = $1 AND logout_at IS NULL`,
+          [Number(userId)]
+        )
+        await pool.query(
+          `INSERT INTO audit_logs (user_id, username, action, details)
+           VALUES ($1, $2, $3, $4)`,
+          [Number(userId), currentOperator || 'system', 'LOGOUT', `Operator logged out: @${currentOperator}`]
+        )
+      }
+      return ok(res, { success: true })
+    }
+
+    // ─── AUDIT TRAILS: GET /api/auth-audit ──────────────────────────
+    if (action === 'audit' || req.url.includes('auth-audit')) {
+      if (req.method !== 'GET') return err(res, 'Method not allowed', 405)
+      if (!userId) return err(res, 'Authorization required', 401)
+
+      const userRes = await pool.query('SELECT role, username FROM users WHERE id = $1', [Number(userId)])
+      const requestingUser = userRes.rows[0]
+      const isAdmin = requestingUser?.role === 'admin' || requestingUser?.username === 'trial'
+      if (!isAdmin) return err(res, 'Access denied: Admin only', 403)
+
+      const [logs, sessions] = await Promise.all([
+        pool.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 150'),
+        pool.query('SELECT * FROM operator_sessions ORDER BY login_at DESC LIMIT 150')
+      ])
+      return ok(res, { logs: logs.rows, sessions: sessions.rows })
+    }
 
     // ─── LOGIN: POST /api/auth-login ──────────────────────────────
     if (action === 'login' || req.url.includes('auth-login')) {
@@ -28,7 +94,20 @@ export default async function handler(req, res) {
       }
       
       if (result.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
-      return ok(res, { user: result.rows[0] })
+      
+      const loggedUser = result.rows[0]
+      // Record login session
+      await pool.query(
+        'INSERT INTO operator_sessions (user_id, username) VALUES ($1, $2)',
+        [loggedUser.id, loggedUser.username]
+      )
+      // Record audit log
+      await pool.query(
+        'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
+        [loggedUser.id, loggedUser.username, 'LOGIN', `Operator logged in: @${loggedUser.username}`]
+      )
+
+      return ok(res, { user: loggedUser })
     }
 
     // ─── USERS: GET, POST, DELETE /api/users ─────────────────────
@@ -64,6 +143,12 @@ export default async function handler(req, res) {
         )
         if (result.rows[0]) result.rows[0].role = role || 'operator'
       }
+
+      await pool.query(
+        'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
+        [userId || null, currentOperator || 'system', 'CREATE_USER', `Created staff account: @${username}`]
+      )
+
       return ok(res, { user: result.rows[0] }, 201)
     }
 
@@ -72,14 +157,30 @@ export default async function handler(req, res) {
       const { pin } = req.body || {}
       if (!id || !pin) return err(res, 'User ID and PIN are required')
       if (String(pin).length !== 4 || !/^\d{4}$/.test(String(pin))) return err(res, 'PIN must be exactly 4 digits')
+      
+      const userToReset = await pool.query('SELECT username FROM users WHERE id = $1', [Number(id)])
       await pool.query('UPDATE users SET pin = $1 WHERE id = $2', [String(pin), Number(id)])
+
+      await pool.query(
+        'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
+        [userId || null, currentOperator || 'system', 'RESET_PIN', `Reset PIN for staff: @${userToReset.rows[0]?.username || id}`]
+      )
+
       return ok(res, { success: true, message: 'Security PIN reset successfully.' })
     }
 
     if (req.method === 'DELETE') {
       const id = req.query.id
       if (!id) return err(res, 'User ID required')
+      
+      const userToDelete = await pool.query('SELECT username FROM users WHERE id = $1', [Number(id)])
       await pool.query('DELETE FROM users WHERE id = $1', [Number(id)])
+
+      await pool.query(
+        'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
+        [userId || null, currentOperator || 'system', 'DELETE_USER', `Deleted staff account: @${userToDelete.rows[0]?.username || id}`]
+      )
+
       return ok(res, { success: true })
     }
 

@@ -597,14 +597,54 @@ export function NewExpense() {
   const [form, setForm] = useState({ category: 'Marketing', amount: '', note: '', date: todayISO() })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Cafeteria expense specific state
+  const [inventory, setInventory] = useState([])
+  const [cafeMode, setCafeMode] = useState('existing') // 'existing' | 'new'
+  const [itemId, setItemId] = useState('')
+  const [units, setUnits] = useState('1')
+
+  // New cafeteria item details
+  const [newItemName, setNewItemName] = useState('')
+  const [newItemCategory, setNewItemCategory] = useState('Drinks')
+  const [newItemSellPrice, setNewItemSellPrice] = useState('')
+
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
-  const CATS = ['Marketing', 'Employee', 'Inventory', 'Other']
+  const CATS = ['Marketing', 'Employee', 'Inventory', 'Other', 'Cafeteria']
+
+  useEffect(() => {
+    if (form.category === 'Cafeteria') {
+      api.get('/inventory')
+        .then(res => setInventory(res.items || []))
+        .catch(err => setError('Failed to load inventory: ' + err.message))
+    }
+  }, [form.category])
 
   const handleSubmit = async () => {
     if (!form.amount) { setError('Amount is required'); return }
+    if (form.category === 'Cafeteria') {
+      if (!units || Number(units) <= 0) { setError('Quantity (Units) must be a positive number'); return }
+      if (cafeMode === 'existing' && !itemId) { setError('Please select an existing cafeteria item'); return }
+      if (cafeMode === 'new') {
+        if (!newItemName.trim()) { setError('New item name is required'); return }
+        if (!newItemSellPrice || Number(newItemSellPrice) <= 0) { setError('New item selling price must be positive'); return }
+      }
+    }
+
     setLoading(true); setError('')
     try {
-      await api.post('/expenses', { ...form, amount: Number(form.amount) })
+      const payload = {
+        ...form,
+        amount: Number(form.amount),
+        units: form.category === 'Cafeteria' ? Number(units) : null,
+        item_id: (form.category === 'Cafeteria' && cafeMode === 'existing') ? Number(itemId) : null,
+        new_item: (form.category === 'Cafeteria' && cafeMode === 'new') ? {
+          name: newItemName.trim(),
+          category: newItemCategory,
+          sell_price: Number(newItemSellPrice)
+        } : null
+      }
+      await api.post('/expenses', payload)
       navigate('/expenses')
     } catch (err) { setError(err.message) } finally { setLoading(false) }
   }
@@ -633,6 +673,69 @@ export function NewExpense() {
             <input type="date" className="input" value={form.date} onChange={e => f('date', e.target.value)} />
           </Field>
         </div>
+
+        {form.category === 'Cafeteria' && (
+          <div style={{
+            background: 'var(--bg-elevated)', border: '1.5px solid var(--border)',
+            padding: '1.15rem', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '1rem'
+          }}>
+            <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--accent-text)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.25rem' }}>
+              📦 Cafeteria Inventory Linkage
+            </p>
+            
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button type="button" onClick={() => setCafeMode('existing')}
+                className={cafeMode === 'existing' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'} style={{ flex: 1, padding: '0.35rem' }}>
+                Existing Item
+              </button>
+              <button type="button" onClick={() => setCafeMode('new')}
+                className={cafeMode === 'new' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'} style={{ flex: 1, padding: '0.35rem' }}>
+                New Item
+              </button>
+            </div>
+
+            {cafeMode === 'existing' ? (
+              <Field label="Select Cafeteria Item" required>
+                <select className="input" value={itemId} onChange={e => setItemId(e.target.value)}>
+                  <option value="">-- Choose Item --</option>
+                  {inventory.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} (Stock: {item.stock_qty})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <Field label="New Item Name" required>
+                  <input className="input" placeholder="e.g. Monster Energy" value={newItemName} onChange={e => setNewItemName(e.target.value)} />
+                </Field>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <Field label="Category" required>
+                    <select className="input" value={newItemCategory} onChange={e => setNewItemCategory(e.target.value)}>
+                      <option value="Drinks">Drinks</option>
+                      <option value="Snacks">Snacks</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </Field>
+                  <Field label="Selling Price (₹)" required>
+                    <input type="number" className="input" placeholder="Price" value={newItemSellPrice} onChange={e => setNewItemSellPrice(e.target.value)} />
+                  </Field>
+                </div>
+              </div>
+            )}
+
+            <Field label="Total Quantity Received (Units / Pack Size)" required>
+              <input type="number" className="input" placeholder="e.g. 24 or 30" value={units} onChange={e => setUnits(e.target.value)} />
+            </Field>
+
+            {form.amount && units && Number(units) > 0 && (
+              <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 650 }}>
+                Calculated Buy Price: <span style={{ color: 'var(--success)', fontWeight: 800 }}>{formatRupees((Number(form.amount) / Number(units)).toFixed(2))}</span> per unit.
+              </p>
+            )}
+          </div>
+        )}
         
         <Field label="Description / Details">
           <input className="input" placeholder="What was this logged for?" value={form.note} onChange={e => f('note', e.target.value)} />
@@ -861,10 +964,20 @@ export function Settings() {
   const [resettingUser, setResettingUser] = useState(null)
   const [newPin, setNewPin] = useState('')
   const [resetSaving, setResetSaving] = useState(false)
+  const [auditData, setAuditData] = useState({ logs: [], sessions: [] })
 
   useEffect(() => { load() }, [])
   const load = async () => {
-    try { setLoading(true); const [u, s] = await Promise.all([api.get('/users'), api.get('/settings')]); setUsers(u.users || []); setSettings(s.settings || []) }
+    try {
+      setLoading(true)
+      const [u, s] = await Promise.all([api.get('/users'), api.get('/settings')])
+      setUsers(u.users || [])
+      setSettings(s.settings || [])
+      if (isAdmin) {
+        const audit = await api.get('/auth?action=audit')
+        setAuditData(audit || { logs: [], sessions: [] })
+      }
+    }
     catch (err) { setError(err.message) } finally { setLoading(false) }
   }
 
@@ -1025,6 +1138,83 @@ export function Settings() {
           )}
         </div>
       </div>
+
+      {/* Security & Audit Trail (Admin Only) */}
+      {isAdmin && (
+        <div className="card" style={{ marginBottom: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <p style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
+            🔒 Security & Audit Trail
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {/* Login Sessions */}
+            <div>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)', marginBottom: '0.65rem' }}>Operator Login Sessions</p>
+              {auditData.sessions?.length === 0 ? (
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No operator sessions logged.</p>
+              ) : (
+                <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                  <table className="tbl" style={{ fontSize: '0.75rem' }}>
+                    <thead>
+                      <tr>
+                        <th>Operator</th>
+                        <th>Logged In</th>
+                        <th>Logged Out</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditData.sessions?.map(sess => (
+                        <tr key={sess.id}>
+                          <td style={{ fontWeight: 700, color: 'var(--text)' }}>@{sess.username}</td>
+                          <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-muted)' }}>{new Date(sess.login_at).toLocaleString('en-IN')}</td>
+                          <td style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                            {sess.logout_at ? new Date(sess.logout_at).toLocaleString('en-IN') : (
+                              <span className="badge-active-session animate-pulse" style={{ fontSize: '0.65rem' }}>ACTIVE NOW</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Audit Logs */}
+            <div>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)', marginBottom: '0.65rem' }}>Critical System Audit Logs</p>
+              {auditData.logs?.length === 0 ? (
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No audit events logged.</p>
+              ) : (
+                <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                  <table className="tbl" style={{ fontSize: '0.75rem' }}>
+                    <thead>
+                      <tr>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Details</th>
+                        <th>Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditData.logs?.map(log => (
+                        <tr key={log.id}>
+                          <td style={{ fontWeight: 700, color: 'var(--text)' }}>@{log.username || 'system'}</td>
+                          <td>
+                            <span className="badge badge-accent" style={{ fontSize: '0.6rem' }}>{log.action}</span>
+                          </td>
+                          <td style={{ color: 'var(--text-muted)', fontSize: '0.725rem' }}>{log.details}</td>
+                          <td style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.7rem', color: 'var(--text-faint)' }}>{new Date(log.created_at).toLocaleString('en-IN')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Production Cleanup / Purge Section */}
       <div className="card" style={{ border: '1.5px solid var(--danger-border)', background: 'var(--danger-dim)' }}>

@@ -30,6 +30,10 @@ export default async function handler(req, res) {
             await pool.query('UPDATE settings SET value = $1 WHERE key = $2', [s.value, s.key])
           }
         }
+        await pool.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,$3,$4)`,
+          [userId || null, req.headers['x-username'] || 'system', 'UPDATE_SETTINGS', 'Updated configurations']
+        )
         return ok(res, { success: true })
       }
       return err(res, 'Method not allowed', 405)
@@ -42,6 +46,10 @@ export default async function handler(req, res) {
         TRUNCATE TABLE session_payments, pancafe_sessions, sale_items, sales, recharges, expenses, day_openings, sessions CASCADE;
         DELETE FROM customers WHERE id NOT IN (SELECT DISTINCT customer_id FROM sales WHERE customer_id IS NOT NULL);
       `)
+      await pool.query(
+        `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,$3,$4)`,
+        [userId || null, req.headers['x-username'] || 'system', 'PURGE_DATA', 'Purged all test data']
+      )
       return ok(res, { success: true, message: 'All transactional test data successfully purged.' })
     }
 
