@@ -73,6 +73,7 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
+      const currentOperator = req.headers['x-username']
       const date = req.query.date
       const activeOnly = req.query.active === 'true'
       let q = `SELECT ps.*, c.name, c.shop_name, d.label AS device_label,
@@ -85,6 +86,13 @@ export default async function handler(req, res) {
                LEFT JOIN pancafe_plans pp ON pp.id = ps.plan_id`
       const vals = []
       const where = []
+      
+      if (currentOperator === 'trial') {
+        where.push(`u.username = 'trial'`)
+      } else {
+        where.push(`(u.username IS NULL OR u.username <> 'trial')`)
+      }
+      
       if (date) { where.push(`ps.date = $${vals.length + 1}`); vals.push(date) }
       if (activeOnly) { where.push(`ps.time_out IS NULL`) }
       if (where.length) q += ` WHERE ${where.join(' AND ')}`

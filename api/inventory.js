@@ -93,7 +93,23 @@ export default async function handler(req, res) {
   // ─── INVENTORY ──────────────────────────────────────────────
   try {
     if (req.method === 'GET') {
-      const r = await pool.query('SELECT * FROM inventory_items WHERE is_active = TRUE ORDER BY category, name')
+      const currentOperator = req.headers['x-username']
+      let query = 'SELECT ii.* FROM inventory_items ii'
+      const vals = []
+      
+      if (currentOperator === 'trial') {
+        const trialUserRes = await pool.query("SELECT id FROM users WHERE username = 'trial'")
+        const trialUserId = trialUserRes.rows[0]?.id
+        query += ' WHERE ii.is_active = TRUE AND ii.created_by = $1'
+        vals.push(trialUserId || 0)
+      } else {
+        const trialUserRes = await pool.query("SELECT id FROM users WHERE username = 'trial'")
+        const trialUserId = trialUserRes.rows[0]?.id
+        query += ' WHERE ii.is_active = TRUE AND (ii.created_by IS NULL OR ii.created_by <> $1)'
+        vals.push(trialUserId || 0)
+      }
+      query += ' ORDER BY ii.category, ii.name'
+      const r = await pool.query(query, vals)
       return ok(res, { items: r.rows })
     }
 

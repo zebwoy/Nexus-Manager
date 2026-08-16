@@ -137,3 +137,91 @@ export function SectionHeader({ title, action }) {
     </div>
   )
 }
+
+export function TrialWarningModal({ open, onClose, actionName }) {
+  if (!open) return null
+
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999,
+      animation: 'fadeIn 0.25s ease-out',
+      padding: '1rem'
+    }}>
+      <div style={{
+        background: 'var(--bg-card)',
+        border: '1.5px solid var(--border)',
+        borderRadius: '16px',
+        padding: '2rem',
+        maxWidth: '420px',
+        width: '100%',
+        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+        textAlign: 'center',
+        animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center'
+      }}>
+        <div style={{
+          width: '3.5rem', height: '3.5rem', borderRadius: '50%',
+          background: 'var(--danger-dim)', border: '1.5px solid var(--danger-border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '1.75rem', color: 'var(--danger)', marginBottom: '1.25rem',
+          animation: 'pulseGlow 2s infinite'
+        }}>
+          💡
+        </div>
+        <h3 style={{
+          fontSize: '1.15rem',
+          fontWeight: 800,
+          marginBottom: '0.65rem',
+          color: 'var(--text)'
+        }}>
+          Trial Account Demo
+        </h3>
+        <p style={{
+          fontSize: '0.85rem',
+          color: 'var(--text-muted)',
+          lineHeight: '1.5',
+          marginBottom: '1.5rem'
+        }}>
+          You clicked <strong>{actionName}</strong>. This is a trial account for demo and simulation purposes. Administrative updates (such as resetting PINs, adding/editing staff, or changing system settings) are simulated in memory and will not be written to the database.
+        </p>
+        <button 
+          onClick={onClose}
+          className="btn-primary"
+          style={{
+            width: '100%',
+            padding: '0.75rem',
+            borderRadius: '10px',
+            fontWeight: 700,
+            fontSize: '0.875rem'
+          }}
+        >
+          Acknowledge & Continue
+        </button>
+      </div>
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes scaleUp {
+          from { transform: scale(0.95); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes pulseGlow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+          50% { box-shadow: 0 0 15px 5px rgba(239, 68, 68, 0.2); }
+        }
+      `}</style>
+    </div>
+  )
+}

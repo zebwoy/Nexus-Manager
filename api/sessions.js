@@ -163,6 +163,12 @@ export default async function handler(req, res) {
           ),
         ])
         if (sessR.rowCount === 0) return err(res, 'Session not found', 404)
+        
+        const currentOperator = req.headers['x-username']
+        if (currentOperator === 'trial' && sessR.rows[0]?.created_by_username !== 'trial') {
+          return err(res, 'Access denied: Production data is hidden in trial mode', 403)
+        }
+
         return ok(res, {
           session: sessR.rows[0],
           players: playersR.rows,
@@ -247,6 +253,7 @@ export default async function handler(req, res) {
   // ─── Base /api/sessions Collection Routes ───────────────────
   try {
     if (req.method === 'GET') {
+      const currentOperator = req.headers['x-username']
       const date = req.query.date
       const limit = req.query.limit ? Number(req.query.limit) : null
 
@@ -260,9 +267,28 @@ export default async function handler(req, res) {
         LEFT JOIN users u ON u.id = s.created_by
       `
       const vals = []
-      if (date) { query += ` WHERE s.date = $1`; vals.push(date) }
+      const clauses = []
+      
+      if (currentOperator === 'trial') {
+        clauses.push(`u.username = 'trial'`)
+      } else {
+        clauses.push(`(u.username IS NULL OR u.username <> 'trial')`)
+      }
+
+      if (date) {
+        clauses.push(`s.date = $${vals.length + 1}`)
+        vals.push(date)
+      }
+
+      if (clauses.length > 0) {
+        query += ` WHERE ` + clauses.join(' AND ')
+      }
+
       query += ` ORDER BY s.time_in DESC`
-      if (limit) { query += ` LIMIT $${vals.length + 1}`; vals.push(limit) }
+      if (limit) {
+        query += ` LIMIT $${vals.length + 1}`
+        vals.push(limit)
+      }
 
       const result = await pool.query(query, vals)
       return ok(res, { sessions: result.rows })

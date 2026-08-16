@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatRupees, formatDate, todayISO, validateName, validateMobile } from '../lib/helpers'
-import { PageLoader, EmptyState, ErrorMsg, Field, Modal } from '../components/UI'
+import { PageLoader, EmptyState, ErrorMsg, Field, Modal, TrialWarningModal } from '../components/UI'
 import { Plus, Trash2, ShoppingBag } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { toast } from 'react-toastify'
@@ -26,6 +26,7 @@ export function Inventory() {
   
   const [activePopover, setActivePopover] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
 
   useEffect(() => { load() }, [])
   useEffect(() => {
@@ -50,6 +51,9 @@ export function Inventory() {
       setShowAdd(false); setForm({ name: '', category: 'Drinks', buy_price: '', sell_price: '', stock_qty: '' })
       toast.success(`Successfully added product: "${form.name}"`)
       load()
+      if (user?.username === 'trial') {
+        setTrialModal({ isOpen: true, action: 'Register Cafeteria Product' })
+      }
     } catch (err) { setError(err.message) } finally { setSaving(false) }
   }
 
@@ -67,6 +71,9 @@ export function Inventory() {
       setShowEdit(false)
       toast.success(`Updated details for "${editForm.name}"`)
       load()
+      if (user?.username === 'trial') {
+        setTrialModal({ isOpen: true, action: 'Update Cafeteria Product details' })
+      }
     } catch (err) { toast.error('Failed to update product: ' + err.message) } finally { setSaving(false) }
   }
 
@@ -75,6 +82,10 @@ export function Inventory() {
       await api.delete(`/inventory?id=${item.id}`)
       setItems(prev => prev.filter(i => i.id !== item.id))
       
+      if (user?.username === 'trial') {
+        setTrialModal({ isOpen: true, action: 'Delete Cafeteria Product' })
+      }
+
       toast.info(
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <span>Deleted "{item.name}"</span>
@@ -106,6 +117,7 @@ export function Inventory() {
 
   return (
     <div>
+      <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => setTrialModal({ isOpen: false, action: '' })} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="page-title">Cafeteria</h1>
@@ -1119,6 +1131,7 @@ export function Settings() {
   const [newPin, setNewPin] = useState('')
   const [resetSaving, setResetSaving] = useState(false)
   const [auditData, setAuditData] = useState({ logs: [], sessions: [] })
+  const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
 
   useEffect(() => { load() }, [])
   const load = async () => {
@@ -1142,7 +1155,7 @@ export function Settings() {
       await api.post('/users', newUser)
       setShowAddUser(false); setNewUser({ full_name: '', username: '', pin: '' }); load()
       if (user?.username === 'trial') {
-        alert('This is a trial account for demo purposes.')
+        setTrialModal({ isOpen: true, action: 'Add Staff Member' })
       }
     } catch (err) { setError(err.message) } finally { setSaving(false) }
   }
@@ -1161,7 +1174,7 @@ export function Settings() {
       setSaveMsg('Security PIN reset successfully!')
       setTimeout(() => setSaveMsg(''), 2000)
       if (user?.username === 'trial') {
-        alert('This is a trial account for demo purposes.')
+        setTrialModal({ isOpen: true, action: 'Reset Security PIN' })
       }
     } catch (err) {
       setError(err.message)
@@ -1181,7 +1194,7 @@ export function Settings() {
       setSaveMsg('Configuration updated!')
       setTimeout(() => setSaveMsg(''), 2000)
       if (user?.username === 'trial') {
-        alert('This is a trial account for demo purposes.')
+        setTrialModal({ isOpen: true, action: 'Modify System Settings' })
       }
     } catch (err) { setError(err.message) } finally { setSaving(false) }
   }
@@ -1198,7 +1211,7 @@ export function Settings() {
       setSaveMsg('Production reset complete! Test data purged.')
       setTimeout(() => setSaveMsg(''), 3000)
       if (user?.username === 'trial') {
-        alert('This is a trial account for demo purposes.')
+        setTrialModal({ isOpen: true, action: 'Purge Transactional Logs' })
       }
     } catch (err) {
       setError(err.message)
@@ -1211,6 +1224,7 @@ export function Settings() {
 
   return (
     <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+      <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => setTrialModal({ isOpen: false, action: '' })} />
       <div style={{ marginBottom: '2rem' }}>
         <h1 className="page-title">Settings Console</h1>
         <p className="page-sub">Manage system variables and staff directory</p>
