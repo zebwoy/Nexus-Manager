@@ -144,11 +144,15 @@ export default async function handler(req, res) {
             [sessionId]
           ),
           pool.query(
-            `SELECT sa.*, si.qty, si.unit_price, ii.name AS item_name
+            `SELECT sa.id, sa.total, sa.payment_received, sa.payment_method, sa.created_at,
+                    json_agg(json_build_object(
+                      'name', ii.name, 'qty', si.qty, 'unit_price', si.unit_price
+                    )) AS items
              FROM sales sa
              JOIN sale_items si ON si.sale_id = sa.id
              JOIN inventory_items ii ON ii.id = si.item_id
-             WHERE sa.session_id = $1 ORDER BY sa.created_at`,
+             WHERE sa.session_id = $1
+             GROUP BY sa.id ORDER BY sa.created_at`,
             [sessionId]
           ),
           pool.query(
