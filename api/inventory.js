@@ -98,12 +98,49 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
+      const action = req.query.action
+      if (action === 'restore') {
+        const id = req.query.id
+        await pool.query('UPDATE inventory_items SET is_active = TRUE WHERE id = $1', [Number(id)])
+        await pool.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,$3,$4)`,
+          [userId || null, req.headers['x-username'] || 'system', 'RESTORE_INVENTORY', `Restored deleted cafeteria item ID: ${id}`]
+        )
+        return ok(res, { success: true })
+      }
+      
       const b = req.body || {}
       await pool.query(
-        `INSERT INTO inventory_items (name, category, buy_price, sell_price, stock_qty) VALUES ($1,$2,$3,$4,$5)`,
-        [b.name, b.category, b.buy_price || 0, b.sell_price, b.stock_qty || 0]
+        `INSERT INTO inventory_items (name, category, buy_price, sell_price, stock_qty, created_by) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [b.name, b.category, b.buy_price || 0, b.sell_price, b.stock_qty || 0, userId || null]
       )
       return ok(res, { success: true }, 201)
+    }
+
+    if (req.method === 'PUT') {
+      const id = req.query.id
+      const b = req.body || {}
+      await pool.query(
+        `UPDATE inventory_items
+         SET name = $1, category = $2, sell_price = $3, buy_price = $4, stock_qty = $5
+         WHERE id = $6`,
+        [b.name, b.category, Number(b.sell_price), Number(b.buy_price || 0), Number(b.stock_qty || 0), Number(id)]
+      )
+      await pool.query(
+        `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,$3,$4)`,
+        [userId || null, req.headers['x-username'] || 'system', 'UPDATE_INVENTORY', `Updated cafeteria item: ${b.name}`]
+      )
+      return ok(res, { success: true })
+    }
+
+    if (req.method === 'DELETE') {
+      const id = req.query.id
+      const r = await pool.query('UPDATE inventory_items SET is_active = FALSE WHERE id = $1 RETURNING name', [Number(id)])
+      await pool.query(
+        `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,$3,$4)`,
+        [userId || null, req.headers['x-username'] || 'system', 'DELETE_INVENTORY', `Soft-deleted cafeteria item: ${r.rows[0]?.name || id}`]
+      )
+      return ok(res, { success: true })
     }
 
     return err(res, 'Method not allowed', 405)

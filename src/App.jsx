@@ -51,12 +51,16 @@ function AppRoutes() {
   )
 }
 
+import { ToastContainer } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
+
 export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
           <AppRoutes />
+          <ToastContainer position="bottom-right" theme="dark" autoClose={5000} />
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

@@ -43,15 +43,55 @@ export default async function handler(req, res) {
     // ─── PURGE TEST DATA ─────────────────────────────────────
     if (resource === 'purge' || req.url.includes('purge')) {
       if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
-      await pool.query(`
-        TRUNCATE TABLE session_payments, pancafe_sessions, sale_items, sales, recharges, expenses, day_openings, sessions, inventory_items CASCADE;
-        DELETE FROM customers WHERE id NOT IN (SELECT DISTINCT customer_id FROM sales WHERE customer_id IS NOT NULL);
-      `)
-      await pool.query(
-        `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,$3,$4)`,
-        [userId || null, req.headers['x-username'] || 'system', 'PURGE_DATA', 'Purged all test data']
-      )
-      return ok(res, { success: true, message: 'All transactional test data successfully purged.' })
+      
+      const isTrialOperator = req.headers['x-username'] === 'trial'
+      
+      if (isTrialOperator) {
+        const trialUserRes = await pool.query("SELECT id FROM users WHERE username = 'trial'")
+        const trialUserId = trialUserRes.rows[0]?.id
+        
+        if (trialUserId) {
+          const client = await pool.connect()
+          try {
+            await client.query('BEGIN')
+            await client.query(`DELETE FROM session_payments WHERE session_id IN (SELECT id FROM sessions WHERE created_by = $1)`, [trialUserId])
+            await client.query(`DELETE FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE created_by = $1)`, [trialUserId])
+            await client.query(`DELETE FROM sales WHERE created_by = $1`, [trialUserId])
+            await client.query(`DELETE FROM sessions WHERE created_by = $1`, [trialUserId])
+            await client.query(`DELETE FROM pancafe_sessions WHERE created_by = $1`, [trialUserId])
+            await client.query(`DELETE FROM recharges WHERE created_by = $1`, [trialUserId])
+            await client.query(`DELETE FROM expenses WHERE created_by = $1`, [trialUserId])
+            await client.query(`DELETE FROM day_openings WHERE created_by = $1`, [trialUserId])
+            await client.query(`DELETE FROM inventory_items WHERE created_by = $1`, [trialUserId])
+            await client.query(`DELETE FROM customers WHERE id NOT IN (SELECT DISTINCT customer_id FROM sales WHERE customer_id IS NOT NULL)
+                               AND id NOT IN (SELECT DISTINCT customer_id FROM sessions WHERE customer_id IS NOT NULL)`)
+            await client.query('COMMIT')
+          } catch (e) {
+            await client.query('ROLLBACK')
+            throw e
+          } finally {
+            client.release()
+          }
+        }
+        
+        await pool.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,$3,$4)`,
+          [userId || null, 'trial', 'PURGE_DATA', 'Purged trial operator session data']
+        )
+        return ok(res, { success: true, message: 'Trial session data successfully purged.' })
+      } else {
+        // Full production purge (only triggered by real production admin)
+        await pool.query(`
+          TRUNCATE TABLE session_payments, pancafe_sessions, sale_items, sales, recharges, expenses, day_openings, sessions, inventory_items CASCADE;
+          DELETE FROM customers WHERE id NOT IN (SELECT DISTINCT customer_id FROM sales WHERE customer_id IS NOT NULL)
+                                 AND id NOT IN (SELECT DISTINCT customer_id FROM sessions WHERE customer_id IS NOT NULL);
+        `)
+        await pool.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,$3,$4)`,
+          [userId || null, req.headers['x-username'] || 'system', 'PURGE_DATA', 'Purged all test data']
+        )
+        return ok(res, { success: true, message: 'All transactional test data successfully purged.' })
+      }
     }
 
     return err(res, 'Invalid setup resource', 400)

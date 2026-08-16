@@ -5,18 +5,34 @@ import { formatRupees, formatDate, todayISO, validateName, validateMobile } from
 import { PageLoader, EmptyState, ErrorMsg, Field, Modal } from '../components/UI'
 import { Plus, Trash2, ShoppingBag } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { toast } from 'react-toastify'
 
 
 // ─── CAFETERIA ────────────────────────────────────────────────
 export function Inventory() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin' || user?.username === 'trial'
+
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ name: '', category: 'Drinks', buy_price: '', sell_price: '', stock_qty: '' })
+  
+  const [showEdit, setShowEdit] = useState(false)
+  const [editItem, setEditItem] = useState(null)
+  const [editForm, setEditForm] = useState({ name: '', category: 'Drinks', buy_price: '', sell_price: '', stock_qty: '' })
+  
+  const [activePopover, setActivePopover] = useState(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    const handleClose = () => setActivePopover(null)
+    window.addEventListener('click', handleClose)
+    return () => window.removeEventListener('click', handleClose)
+  }, [])
 
   const load = async () => {
     try { setLoading(true); const d = await api.get('/inventory'); setItems(d.items || []) }
@@ -24,14 +40,66 @@ export function Inventory() {
   }
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
+  const ef = (k, v) => setEditForm(p => ({ ...p, [k]: v }))
 
   const handleAdd = async () => {
     if (!form.name || !form.sell_price) { return }
     setSaving(true)
     try {
       await api.post('/inventory', { ...form, buy_price: Number(form.buy_price || 0), sell_price: Number(form.sell_price), stock_qty: Number(form.stock_qty || 0) })
-      setShowAdd(false); setForm({ name: '', category: 'Drinks', buy_price: '', sell_price: '', stock_qty: '' }); load()
+      setShowAdd(false); setForm({ name: '', category: 'Drinks', buy_price: '', sell_price: '', stock_qty: '' })
+      toast.success(`Successfully added product: "${form.name}"`)
+      load()
     } catch (err) { setError(err.message) } finally { setSaving(false) }
+  }
+
+  const handleUpdate = async () => {
+    if (!editForm.name || !editForm.sell_price) { return }
+    setSaving(true)
+    try {
+      await api.put(`/inventory?id=${editItem.id}`, {
+        name: editForm.name,
+        category: editForm.category,
+        buy_price: Number(editForm.buy_price || 0),
+        sell_price: Number(editForm.sell_price),
+        stock_qty: Number(editForm.stock_qty || 0)
+      })
+      setShowEdit(false)
+      toast.success(`Updated details for "${editForm.name}"`)
+      load()
+    } catch (err) { toast.error('Failed to update product: ' + err.message) } finally { setSaving(false) }
+  }
+
+  const handleDelete = async (item) => {
+    try {
+      await api.delete(`/inventory?id=${item.id}`)
+      setItems(prev => prev.filter(i => i.id !== item.id))
+      
+      toast.info(
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <span>Deleted "{item.name}"</span>
+          <button 
+            className="btn-primary btn-sm" 
+            style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', textTransform: 'uppercase' }}
+            onClick={async (e) => {
+              e.stopPropagation()
+              try {
+                await api.post(`/inventory?action=restore&id=${item.id}`)
+                load()
+                toast.success(`Restored "${item.name}"`)
+              } catch (e) {
+                toast.error('Failed to restore item: ' + e.message)
+              }
+            }}
+          >
+            Undo
+          </button>
+        </div>,
+        { autoClose: 6000, closeOnClick: false }
+      )
+    } catch (err) {
+      toast.error('Failed to delete item: ' + err.message)
+    }
   }
 
   const CATEGORIES = ['Drinks', 'Snacks', 'Other']
@@ -55,13 +123,14 @@ export function Inventory() {
         <EmptyState title="No Cafeteria Stock" description="Log products to track cafeteria inventory and calculate accurate profits."
           action={<button onClick={() => setShowAdd(true)} className="btn-primary">Add Item</button>} />
       ) : (
-        <div className="card-flush" style={{ overflowX: 'auto' }}>
-          <table className="tbl">
+        <div className="card-flush" style={{ overflowX: 'auto', overflowY: 'visible' }}>
+          <table className="tbl" style={{ overflow: 'visible' }}>
             <thead>
               <tr>
                 {['Item name', 'Category', 'Unit Cost', 'Retail Price', 'Stock Level', 'Terminal Status'].map(h => (
                   <th key={h}>{h}</th>
                 ))}
+                {isAdmin && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -79,6 +148,59 @@ export function Inventory() {
                         ? <span className="badge badge-warning">Low Stock</span>
                         : <span className="badge badge-success">In Stock</span>}
                   </td>
+                  {isAdmin && (
+                    <td className="table-cell" style={{ position: 'relative', overflow: 'visible' }}>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActivePopover(activePopover === item.id ? null : item.id)
+                        }}
+                        className="btn-secondary btn-sm"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.725rem' }}
+                      >
+                        ⚙️ Manage
+                      </button>
+                      
+                      {activePopover === item.id && (
+                        <div style={{
+                          position: 'absolute', right: '10px', top: '100%', zIndex: 1000,
+                          background: 'var(--bg-elevated)', border: '1.5px solid var(--border)',
+                          borderRadius: '8px', padding: '0.5rem', minWidth: '120px',
+                          display: 'flex', flexDirection: 'column', gap: '0.25rem',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                        }}>
+                          <button 
+                            onClick={() => {
+                              setEditItem(item)
+                              setEditForm({
+                                name: item.name,
+                                category: item.category,
+                                buy_price: item.buy_price,
+                                sell_price: item.sell_price,
+                                stock_qty: item.stock_qty
+                              })
+                              setShowEdit(true)
+                              setActivePopover(null)
+                            }}
+                            className="btn-secondary btn-sm"
+                            style={{ width: '100%', textAlign: 'left', padding: '0.35rem 0.5rem', fontSize: '0.725rem' }}
+                          >
+                            ✏️ Edit Details
+                          </button>
+                          <button 
+                            onClick={() => {
+                              handleDelete(item)
+                              setActivePopover(null)
+                            }}
+                            className="btn-danger btn-sm"
+                            style={{ width: '100%', textAlign: 'left', padding: '0.35rem 0.5rem', fontSize: '0.725rem' }}
+                          >
+                            🗑️ Delete Item
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -114,6 +236,38 @@ export function Inventory() {
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1.5px solid var(--border)' }}>
             <button onClick={handleAdd} disabled={saving} className="btn-primary" style={{ flex: 1 }}>{saving ? 'Adding...' : 'Save Product'}</button>
             <button onClick={() => setShowAdd(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Update Cafeteria Item">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <Field label="Product Name" required>
+            <input className="input" placeholder="e.g. Coca-Cola 300ml" value={editForm.name} onChange={e => ef('name', e.target.value)} />
+          </Field>
+          
+          <Field label="Category">
+            <select className="input" value={editForm.category} onChange={e => ef('category', e.target.value)}>
+              {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </Field>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem' }}>
+            <Field label="Cost (₹)">
+              <input type="number" className="input" placeholder="Buy price" value={editForm.buy_price} onChange={e => ef('buy_price', e.target.value)} />
+            </Field>
+            <Field label="Retail (₹)" required>
+              <input type="number" className="input" placeholder="Sell price" value={editForm.sell_price} onChange={e => ef('sell_price', e.target.value)} />
+            </Field>
+            <Field label="Stock Qty">
+              <input type="number" className="input" placeholder="Count" value={editForm.stock_qty} onChange={e => ef('stock_qty', e.target.value)} />
+            </Field>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1.5px solid var(--border)' }}>
+            <button onClick={handleUpdate} disabled={saving} className="btn-primary" style={{ flex: 1 }}>{saving ? 'Updating...' : 'Update Product'}</button>
+            <button onClick={() => setShowEdit(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
           </div>
         </div>
       </Modal>
@@ -598,16 +752,10 @@ export function NewExpense() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // Cafeteria expense specific state
+  // Cafeteria expense specific state (existing restock only)
   const [inventory, setInventory] = useState([])
-  const [cafeMode, setCafeMode] = useState('existing') // 'existing' | 'new'
   const [itemId, setItemId] = useState('')
   const [units, setUnits] = useState('1')
-
-  // New cafeteria item details
-  const [newItemName, setNewItemName] = useState('')
-  const [newItemCategory, setNewItemCategory] = useState('Drinks')
-  const [newItemSellPrice, setNewItemSellPrice] = useState('')
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
   const CATS = ['Marketing', 'Employee', 'Inventory', 'Other', 'Cafeteria']
@@ -624,11 +772,7 @@ export function NewExpense() {
     if (!form.amount) { setError('Amount is required'); return }
     if (form.category === 'Cafeteria') {
       if (!units || Number(units) <= 0) { setError('Quantity (Units) must be a positive number'); return }
-      if (cafeMode === 'existing' && !itemId) { setError('Please select an existing cafeteria item'); return }
-      if (cafeMode === 'new') {
-        if (!newItemName.trim()) { setError('New item name is required'); return }
-        if (!newItemSellPrice || Number(newItemSellPrice) <= 0) { setError('New item selling price must be positive'); return }
-      }
+      if (!itemId) { setError('Please select an existing cafeteria item to restock'); return }
     }
 
     setLoading(true); setError('')
@@ -637,12 +781,8 @@ export function NewExpense() {
         ...form,
         amount: Number(form.amount),
         units: form.category === 'Cafeteria' ? Number(units) : null,
-        item_id: (form.category === 'Cafeteria' && cafeMode === 'existing') ? Number(itemId) : null,
-        new_item: (form.category === 'Cafeteria' && cafeMode === 'new') ? {
-          name: newItemName.trim(),
-          category: newItemCategory,
-          sell_price: Number(newItemSellPrice)
-        } : null
+        item_id: form.category === 'Cafeteria' ? Number(itemId) : null,
+        new_item: null
       }
       await api.post('/expenses', payload)
       navigate('/expenses')
@@ -680,50 +820,19 @@ export function NewExpense() {
             padding: '1.15rem', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '1rem'
           }}>
             <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--accent-text)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.25rem' }}>
-              📦 Cafeteria Inventory Linkage
+              📦 Cafeteria Stock Refill
             </p>
-            
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button type="button" onClick={() => setCafeMode('existing')}
-                className={cafeMode === 'existing' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'} style={{ flex: 1, padding: '0.35rem' }}>
-                Existing Item
-              </button>
-              <button type="button" onClick={() => setCafeMode('new')}
-                className={cafeMode === 'new' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'} style={{ flex: 1, padding: '0.35rem' }}>
-                New Item
-              </button>
-            </div>
 
-            {cafeMode === 'existing' ? (
-              <Field label="Select Cafeteria Item" required>
-                <select className="input" value={itemId} onChange={e => setItemId(e.target.value)}>
-                  <option value="">-- Choose Item --</option>
-                  {inventory.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} (Stock: {item.stock_qty})
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <Field label="New Item Name" required>
-                  <input className="input" placeholder="e.g. Monster Energy" value={newItemName} onChange={e => setNewItemName(e.target.value)} />
-                </Field>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <Field label="Category" required>
-                    <select className="input" value={newItemCategory} onChange={e => setNewItemCategory(e.target.value)}>
-                      <option value="Drinks">Drinks</option>
-                      <option value="Snacks">Snacks</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </Field>
-                  <Field label="Selling Price (₹)" required>
-                    <input type="number" className="input" placeholder="Price" value={newItemSellPrice} onChange={e => setNewItemSellPrice(e.target.value)} />
-                  </Field>
-                </div>
-              </div>
-            )}
+            <Field label="Select Cafeteria Item to Restock" required>
+              <select className="input" value={itemId} onChange={e => setItemId(e.target.value)}>
+                <option value="">-- Choose Item --</option>
+                {inventory.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} (Current Stock: {item.stock_qty})
+                  </option>
+                ))}
+              </select>
+            </Field>
 
             <Field label="Total Quantity Received (Units / Pack Size)" required>
               <input type="number" className="input" placeholder="e.g. 24 or 30" value={units} onChange={e => setUnits(e.target.value)} />
