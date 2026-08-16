@@ -130,6 +130,14 @@ export default async function handler(req, res) {
       const existing = await pool.query('SELECT id FROM users WHERE username = $1', [String(username).toLowerCase()])
       if (existing.rows.length > 0) return err(res, 'Username already taken')
 
+      if (currentOperator === 'trial') {
+        await pool.query(
+          'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
+          [userId || null, 'trial', 'CREATE_USER', `[SIMULATED] Created staff account: @${username}`]
+        )
+        return ok(res, { user: { id: 999, full_name, username, role: role || 'operator' } }, 201)
+      }
+
       let result
       try {
         result = await pool.query(
@@ -159,6 +167,15 @@ export default async function handler(req, res) {
       if (String(pin).length !== 4 || !/^\d{4}$/.test(String(pin))) return err(res, 'PIN must be exactly 4 digits')
       
       const userToReset = await pool.query('SELECT username FROM users WHERE id = $1', [Number(id)])
+      
+      if (currentOperator === 'trial') {
+        await pool.query(
+          'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
+          [userId || null, 'trial', 'RESET_PIN', `[SIMULATED] Reset PIN for staff: @${userToReset.rows[0]?.username || id}`]
+        )
+        return ok(res, { success: true, message: 'Security PIN reset successfully.' })
+      }
+
       await pool.query('UPDATE users SET pin = $1 WHERE id = $2', [String(pin), Number(id)])
 
       await pool.query(
@@ -174,6 +191,15 @@ export default async function handler(req, res) {
       if (!id) return err(res, 'User ID required')
       
       const userToDelete = await pool.query('SELECT username FROM users WHERE id = $1', [Number(id)])
+
+      if (currentOperator === 'trial') {
+        await pool.query(
+          'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
+          [userId || null, 'trial', 'DELETE_USER', `[SIMULATED] Deleted staff account: @${userToDelete.rows[0]?.username || id}`]
+        )
+        return ok(res, { success: true })
+      }
+
       await pool.query('DELETE FROM users WHERE id = $1', [Number(id)])
 
       await pool.query(
