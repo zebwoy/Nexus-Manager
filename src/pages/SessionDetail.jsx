@@ -69,19 +69,17 @@ export default function SessionDetail() {
 
   // Cart for adding items
   const [cart, setCart] = useState([])
+  const [cartPayNow, setCartPayNow] = useState(false)
   const [cartPayMethod, setCartPayMethod] = useState('cash')
   const [cartSaving, setCartSaving] = useState(false)
 
   // Payment collection
   const [collectAmount, setCollectAmount] = useState('')
   const [collectMethod, setCollectMethod] = useState('cash')
-  const [collectNote, setCollectNote] = useState('')
   const [collectSaving, setCollectSaving] = useState(false)
 
   // Extension
-  const [extPackets, setExtPackets] = useState(1)
-  const [extCollectNow, setExtCollectNow] = useState('')
-  const [extPayMethod, setExtPayMethod] = useState('cash')
+  const [extMins, setExtMins] = useState(30)
   const [extSaving, setExtSaving] = useState(false)
   const [extResult, setExtResult] = useState(null)
 
@@ -151,14 +149,19 @@ export default function SessionDetail() {
   const { session: s, players, payments } = data
 
   const isActive = s.time_out && new Date(s.time_out) > new Date()
+  const cafeTotal = data.sales?.reduce((sum, sa) => sum + Number(sa.total), 0) || 0
+  const grandTotal = Number(s.total) + cafeTotal
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
-  const creditRemaining = Math.max(0, Number(s.total) - totalPaid)
+  const creditRemaining = Math.max(0, grandTotal - totalPaid)
 
   // --- Compute extension preview ---
-  const extMins = extPackets * 30
-  const perMinRate = Number(s.charge) / Number(s.duration_mins)
+  const currentEnd = s.time_out ? new Date(s.time_out) : new Date()
+  const newEnd = addMinutes(currentEnd, extMins)
+  const newEndTimeStr = newEnd.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+
+  const perMinRate = Number(s.charge) / Number(s.duration_mins || 60)
   const extCharge = perMinRate * extMins
-  const extTotal = extCharge
+  const newOutstanding = creditRemaining + extCharge
 
   // --- Cart helpers ---
   const addToCart = (item) => setCart(c => {
@@ -179,10 +182,19 @@ export default function SessionDetail() {
       await api.post('/sales', {
         session_id: Number(id), sale_type: 'session',
         date: todayISO(), total: cartTotal,
-        payment_received: cartTotal, payment_method: cartPayMethod,
+        payment_received: cartPayNow ? cartTotal : 0,
+        payment_method: cartPayNow ? cartPayMethod : 'cash',
         items: cart.map(i => ({ item_id: i.id, qty: i.qty, unit_price: i.sell_price }))
       })
+      if (cartPayNow) {
+        await api.post(`/sessions/${id}/payments`, {
+          amount: cartTotal,
+          payment_method: cartPayMethod,
+          note: `Paid for cafe items: ${cart.map(i => `${i.name} x${i.qty}`).join(', ')}`
+        })
+      }
       setCart([])
+      setCartPayNow(false)
       showToast('Items added to session ✓')
       load()
     } catch (e) { setError(e.message) }
@@ -199,9 +211,9 @@ export default function SessionDetail() {
       await api.post(`/sessions/${id}/payments`, {
         amount: Number(collectAmount),
         payment_method: collectMethod,
-        note: collectNote || null,
+        note: null,
       })
-      setCollectAmount(''); setCollectNote('')
+      setCollectAmount('')
       showToast('Payment recorded ✓')
       load()
     } catch (e) { setError(e.message) }
@@ -213,12 +225,10 @@ export default function SessionDetail() {
     setExtResult(null)
     try {
       const res = await api.patch(`/sessions/${id}/extend`, {
-        packets: extPackets,
-        collect_now: extCollectNow ? Number(extCollectNow) : 0,
-        payment_method: extPayMethod,
+        packets: extMins / 30,
+        collect_now: 0,
       })
       setExtResult(res)
-      setExtCollectNow('')
       showToast(`Session extended by ${extMins} mins ✓`)
       load()
     } catch (e) { setError(e.message) }
@@ -407,11 +417,23 @@ export default function SessionDetail() {
                     <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text)' }}>Cart Total</span>
                     <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--accent-text)' }}>{formatRupees(cartTotal)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                    <span className="label" style={{ marginBottom: 0 }}>Collect via</span>
-                    <PayMethodToggle value={cartPayMethod} onChange={setCartPayMethod} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="label" style={{ marginBottom: 0 }}>Payment Status</span>
+                      <select className="input" style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}
+                        value={cartPayNow ? 'pay_now' : 'add_bill'} onChange={e => setCartPayNow(e.target.value === 'pay_now')}>
+                        <option value="add_bill">Add to Session Bill</option>
+                        <option value="pay_now">Collect Payment Now</option>
+                      </select>
+                    </div>
+                    {cartPayNow && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span className="label" style={{ marginBottom: 0 }}>Pay Method</span>
+                        <PayMethodToggle value={cartPayMethod} onChange={setCartPayMethod} />
+                      </div>
+                    )}
                   </div>
-                  <button onClick={handleAddItems} disabled={cartSaving} className="btn-primary" style={{ width: '100%' }}>
+                  <button onClick={handleAddItems} disabled={cartSaving} className="btn-primary" style={{ width: '100%', marginTop: '0.75rem' }}>
                     {cartSaving ? <><Spinner size="sm" /> Adding...</> : `Add to Session — ${formatRupees(cartTotal)}`}
                   </button>
                 </div>
@@ -473,10 +495,6 @@ export default function SessionDetail() {
                 <span className="label" style={{ marginBottom: 0 }}>Payment Method</span>
                 <PayMethodToggle value={collectMethod} onChange={setCollectMethod} />
               </div>
-              <Field label="Note (optional)">
-                <input className="input" placeholder="e.g. Balance collected at close" value={collectNote}
-                  onChange={e => setCollectNote(e.target.value)} />
-              </Field>
               <button onClick={handleCollect} disabled={collectSaving} className="btn-primary"
                 style={{ padding: '0.65rem 1.25rem' }}>
                 {collectSaving ? <><Spinner size="sm" /> Recording...</> : 'Record Payment'}
@@ -487,47 +505,48 @@ export default function SessionDetail() {
           {/* Extend session */}
           {isActive && sectionCard('Extend Session', <Clock size={14} />, (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <span className="label" style={{ marginBottom: 0 }}>Add 30-min blocks</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
-                  <button onClick={() => setExtPackets(p => Math.max(1, p - 1))} className="btn-secondary btn-icon"
-                    style={{ borderRadius: '50%', width: '1.75rem', height: '1.75rem', padding: 0 }}>
-                    <Minus size={13} />
-                  </button>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '1.1rem', minWidth: '1.5rem', textAlign: 'center' }}>
-                    {extPackets}
-                  </span>
-                  <button onClick={() => setExtPackets(p => p + 1)} className="btn-secondary btn-icon"
-                    style={{ borderRadius: '50%', width: '1.75rem', height: '1.75rem', padding: 0 }}>
-                    <Plus size={13} />
-                  </button>
-                </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={() => setExtMins(30)}
+                  className={extMins === 30 ? 'btn-primary' : 'btn-secondary'}
+                  style={{ flex: 1, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}>
+                  + 30 Mins
+                </button>
+                <button onClick={() => setExtMins(60)}
+                  className={extMins === 60 ? 'btn-primary' : 'btn-secondary'}
+                  style={{ flex: 1, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}>
+                  + 1 Hour
+                </button>
               </div>
 
               <div style={{
-                padding: '0.65rem 1rem', borderRadius: '10px',
-                background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
-                fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem',
-                display: 'flex', justifyContent: 'space-between'
+                padding: '0.75rem 1rem', borderRadius: '12px',
+                background: 'var(--bg-input)', border: '1px solid var(--border)',
+                display: 'flex', flexDirection: 'column', gap: '0.5rem',
+                fontSize: '0.8125rem'
               }}>
-                <span style={{ color: 'var(--text-muted)' }}>+{extPackets * 30} mins</span>
-                <span style={{ color: 'var(--accent-text)', fontWeight: 800 }}>+{formatRupees(extCharge.toFixed(2))}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Extend Until</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--text)' }}>
+                    {newEndTimeStr}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Extension Cost</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--accent-text)' }}>
+                    {formatRupees(extCharge)}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 650 }}>New Balance Due</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--danger)' }}>
+                    {formatRupees(newOutstanding)}
+                  </span>
+                </div>
               </div>
 
-              <Field label="Collect now (₹) — leave blank to add to credit">
-                <input type="number" className="input" placeholder="0 = add to credit"
-                  value={extCollectNow} onChange={e => setExtCollectNow(e.target.value)} />
-              </Field>
-              {extCollectNow > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="label" style={{ marginBottom: 0 }}>Payment Method</span>
-                  <PayMethodToggle value={extPayMethod} onChange={setExtPayMethod} />
-                </div>
-              )}
-
-              <button onClick={handleExtend} disabled={extSaving} className="btn-secondary"
+              <button onClick={handleExtend} disabled={extSaving} className="btn-primary"
                 style={{ padding: '0.65rem 1.25rem' }}>
-                {extSaving ? <><Spinner size="sm" /> Extending...</> : `Extend Session +${extPackets * 30} mins`}
+                {extSaving ? <><Spinner size="sm" /> Extending...</> : `Confirm Extension`}
               </button>
             </div>
           ))}

@@ -24,7 +24,7 @@ const NAV = [
 ]
 
 export default function Sidebar() {
-  const { user, logout } = useAuth()
+  const { user, logout, isAdmin } = useAuth()
   const { isDark, toggleDark, accentId, setAccentId } = useTheme()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -49,8 +49,15 @@ export default function Sidebar() {
     }
   }
 
-  const activeMobileNav = NAV.slice(0, 4)
-  const moreMobileNav = NAV.slice(4)
+  const visibleNav = NAV.filter(item => {
+    if (item.to === '/settings' || item.to === '/reports') {
+      return isAdmin
+    }
+    return true
+  })
+
+  const activeMobileNav = visibleNav.slice(0, 4)
+  const moreMobileNav = visibleNav.slice(4)
 
 
   return (
@@ -88,7 +95,7 @@ export default function Sidebar() {
           flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column',
           gap: '0.25rem', overflowY: 'auto', borderTop: '1.5px solid var(--bevel-top)'
         }}>
-          {NAV.map(({ to, Icon, label }) => (
+          {visibleNav.map(({ to, Icon, label }) => (
             <NavLink key={to} to={to} end={to === '/'}
               className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
               <Icon size={16} strokeWidth={2.2} style={{ flexShrink: 0 }} />

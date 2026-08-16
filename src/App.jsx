@@ -17,6 +17,13 @@ function ProtectedRoute({ children }) {
   return <Layout>{children}</Layout>
 }
 
+function AdminRoute({ children }) {
+  const { user, isAdmin } = useAuth()
+  if (!user) return <Navigate to="/login" replace />
+  if (!isAdmin) return <Navigate to="/" replace />
+  return <Layout>{children}</Layout>
+}
+
 function AppRoutes() {
   const { user } = useAuth()
   return (
@@ -36,8 +43,8 @@ function AppRoutes() {
       <Route path="/expenses"        element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
       <Route path="/expenses/new"    element={<ProtectedRoute><NewExpense /></ProtectedRoute>} />
       <Route path="/customers"       element={<ProtectedRoute><Customers /></ProtectedRoute>} />
-      <Route path="/reports"         element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-      <Route path="/settings"        element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/reports"         element={<AdminRoute><Reports /></AdminRoute>} />
+      <Route path="/settings"        element={<AdminRoute><Settings /></AdminRoute>} />
       <Route path="/eod"             element={<ProtectedRoute><EODReconciliation /></ProtectedRoute>} />
       <Route path="*"                element={<Navigate to="/" replace />} />
     </Routes>
