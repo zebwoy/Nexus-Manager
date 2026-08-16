@@ -30,9 +30,9 @@ export default async function handler(req, res) {
           if (!finalItemId && b.new_item) {
             const buyPrice = Number(b.amount) / Number(b.units || 1)
             const newIt = await client.query(
-              `INSERT INTO inventory_items (name, category, buy_price, sell_price, stock_qty)
-               VALUES ($1, $2, $3, $4, $5) RETURNING id, name`,
-              [b.new_item.name, b.new_item.category || 'Drinks', buyPrice, Number(b.new_item.sell_price), Number(b.units || 1)]
+              `INSERT INTO inventory_items (name, category, buy_price, sell_price, stock_qty, created_by)
+               VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name`,
+              [b.new_item.name, b.new_item.category || 'Drinks', buyPrice, Number(b.new_item.sell_price), Number(b.units || 1), userId || null]
             )
             finalItemId = newIt.rows[0].id
             itemName = newIt.rows[0].name
