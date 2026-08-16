@@ -13,69 +13,43 @@ export default async function handler(req, res) {
     const userId = req.headers['x-user-id']
     const currentOperator = req.headers['x-username']
 
-    // ─── DASHBOARD SNAPSHOT ─────────────────────────────────────
+    // ─── DASHBOARD SNAPSHOT ────────────────────────────────────────────
     if (target === 'snapshot' || url.includes('dashboard-snapshot')) {
       const trialUserRes = await pool.query("SELECT id FROM users WHERE username = 'trial'")
       const trialUserId = trialUserRes.rows[0]?.id || 0
 
-      if (currentOperator === 'trial') {
-        const r = await pool.query(`
-          SELECT
-            (SELECT COALESCE(SUM(total), 0.00) FROM sessions WHERE date = CURRENT_DATE AND created_by = $1) AS gaming_revenue,
-            (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE AND created_by = $1) AS walkin_revenue,
-            (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'session' AND date = CURRENT_DATE AND created_by = $1) AS session_sales_revenue,
-            (SELECT COALESCE(SUM(charge_price), 0.00) FROM recharges WHERE date = CURRENT_DATE AND created_by = $1) AS rc_revenue,
-            (SELECT COALESCE(SUM(amount_received), 0.00) FROM pancafe_sessions WHERE date = CURRENT_DATE AND created_by = $1) AS pancafe_revenue,
-            (SELECT COALESCE(SUM(credit), 0.00) FROM sessions WHERE credit > 0 AND created_by = $1) AS total_outstanding_credit,
-            -- Cash vs Online inflow breakdown (using session_payments)
-            (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'cash' AND created_at::date = CURRENT_DATE AND created_by = $1) AS cash_gaming,
-            (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'online' AND created_at::date = CURRENT_DATE AND created_by = $1) AS online_gaming,
-            (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN payment_received ELSE 0 END), 0.00)
-             FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE AND created_by = $1) AS cash_sales,
-            (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN payment_received ELSE 0 END), 0.00)
-             FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE AND created_by = $1) AS online_sales,
-            (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount_received ELSE 0 END), 0.00)
-             FROM pancafe_sessions WHERE date = CURRENT_DATE AND created_by = $1) AS cash_pancafe,
-            (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN amount_received ELSE 0 END), 0.00)
-             FROM pancafe_sessions WHERE date = CURRENT_DATE AND created_by = $1) AS online_pancafe,
-            (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount ELSE 0 END), 0.00)
-             FROM expenses WHERE date = CURRENT_DATE AND created_by = $1) AS cash_expenses,
-            -- Active session count
-            (SELECT COUNT(*) FROM sessions WHERE date = CURRENT_DATE AND time_out > NOW() AND created_by = $1) AS active_sessions,
-            (SELECT COUNT(*) FROM pancafe_sessions WHERE date = CURRENT_DATE AND time_out IS NULL AND created_by = $1) AS active_pancafe;
-        `, [trialUserId])
-        return ok(res, r.rows[0] || {})
-      } else {
-        await pool.query('DROP VIEW IF EXISTS today_snapshot CASCADE')
-        await pool.query(`
-          CREATE VIEW today_snapshot AS
-          SELECT
-            (SELECT COALESCE(SUM(total), 0.00) FROM sessions WHERE date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS gaming_revenue,
-            (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS walkin_revenue,
-            (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'session' AND date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS session_sales_revenue,
-            (SELECT COALESCE(SUM(charge_price), 0.00) FROM recharges WHERE date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS rc_revenue,
-            (SELECT COALESCE(SUM(amount_received), 0.00) FROM pancafe_sessions WHERE date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS pancafe_revenue,
-            (SELECT COALESCE(SUM(credit), 0.00) FROM sessions WHERE credit > 0 AND (created_by IS NULL OR created_by <> $1)) AS total_outstanding_credit,
-            -- Cash vs Online inflow breakdown (using session_payments)
-            (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'cash' AND created_at::date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS cash_gaming,
-            (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'online' AND created_at::date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS online_gaming,
-            (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN payment_received ELSE 0 END), 0.00)
-             FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS cash_sales,
-            (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN payment_received ELSE 0 END), 0.00)
-             FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS online_sales,
-            (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount_received ELSE 0 END), 0.00)
-             FROM pancafe_sessions WHERE date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS cash_pancafe,
-            (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN amount_received ELSE 0 END), 0.00)
-             FROM pancafe_sessions WHERE date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS online_pancafe,
-            (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount ELSE 0 END), 0.00)
-             FROM expenses WHERE date = CURRENT_DATE AND (created_by IS NULL OR created_by <> $1)) AS cash_expenses,
-            -- Active session count
-            (SELECT COUNT(*) FROM sessions WHERE date = CURRENT_DATE AND time_out > NOW() AND (created_by IS NULL OR created_by <> $1)) AS active_sessions,
-            (SELECT COUNT(*) FROM pancafe_sessions WHERE date = CURRENT_DATE AND time_out IS NULL AND (created_by IS NULL OR created_by <> $1)) AS active_pancafe;
-        `, [trialUserId])
-        const r = await pool.query('SELECT * FROM today_snapshot')
-        return ok(res, r.rows[0] || {})
-      }
+      // Build creator filter for both trial and production paths
+      // Trial: only see their own rows. Production: exclude trial rows.
+      const creatorClause = currentOperator === 'trial'
+        ? `AND created_by = $1`
+        : `AND (created_by IS NULL OR created_by <> $1)`
+
+      const r = await pool.query(`
+        SELECT
+          (SELECT COALESCE(SUM(total), 0.00) FROM sessions WHERE date = CURRENT_DATE ${creatorClause}) AS gaming_revenue,
+          (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE ${creatorClause}) AS walkin_revenue,
+          (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'session' AND date = CURRENT_DATE ${creatorClause}) AS session_sales_revenue,
+          (SELECT COALESCE(SUM(charge_price), 0.00) FROM recharges WHERE date = CURRENT_DATE ${creatorClause}) AS rc_revenue,
+          (SELECT COALESCE(SUM(amount_received), 0.00) FROM pancafe_sessions WHERE date = CURRENT_DATE ${creatorClause}) AS pancafe_revenue,
+          (SELECT COALESCE(SUM(credit), 0.00) FROM sessions WHERE credit > 0 ${creatorClause}) AS total_outstanding_credit,
+          -- Cash vs Online inflow breakdown (using session_payments)
+          (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'cash' AND created_at::date = CURRENT_DATE ${creatorClause}) AS cash_gaming,
+          (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'online' AND created_at::date = CURRENT_DATE ${creatorClause}) AS online_gaming,
+          (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN payment_received ELSE 0 END), 0.00)
+           FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE ${creatorClause}) AS cash_sales,
+          (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN payment_received ELSE 0 END), 0.00)
+           FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE ${creatorClause}) AS online_sales,
+          (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount_received ELSE 0 END), 0.00)
+           FROM pancafe_sessions WHERE date = CURRENT_DATE ${creatorClause}) AS cash_pancafe,
+          (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN amount_received ELSE 0 END), 0.00)
+           FROM pancafe_sessions WHERE date = CURRENT_DATE ${creatorClause}) AS online_pancafe,
+          (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount ELSE 0 END), 0.00)
+           FROM expenses WHERE date = CURRENT_DATE ${creatorClause}) AS cash_expenses,
+          -- Active session count
+          (SELECT COUNT(*) FROM sessions WHERE date = CURRENT_DATE AND time_out > NOW() ${creatorClause}) AS active_sessions,
+          (SELECT COUNT(*) FROM pancafe_sessions WHERE date = CURRENT_DATE AND time_out IS NULL ${creatorClause}) AS active_pancafe
+      `, [trialUserId])
+      return ok(res, r.rows[0] || {})
     }
 
     // ─── DASHBOARD CREDITS ──────────────────────────────────────

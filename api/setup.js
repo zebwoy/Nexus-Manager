@@ -74,8 +74,14 @@ export default async function handler(req, res) {
             await client.query(`DELETE FROM expenses WHERE created_by = $1`, [trialUserId])
             await client.query(`DELETE FROM day_openings WHERE created_by = $1`, [trialUserId])
             await client.query(`DELETE FROM inventory_items WHERE created_by = $1`, [trialUserId])
-            await client.query(`DELETE FROM customers WHERE id NOT IN (SELECT DISTINCT customer_id FROM sales WHERE customer_id IS NOT NULL)
-                               AND id NOT IN (SELECT DISTINCT customer_id FROM sessions WHERE customer_id IS NOT NULL)`)
+            // Only delete customers that are no longer referenced by ANY table with a FK to customers
+            await client.query(`
+              DELETE FROM customers
+              WHERE id NOT IN (SELECT DISTINCT customer_id FROM sales          WHERE customer_id IS NOT NULL)
+              AND   id NOT IN (SELECT DISTINCT customer_id FROM sessions       WHERE customer_id IS NOT NULL)
+              AND   id NOT IN (SELECT DISTINCT customer_id FROM recharges      WHERE customer_id IS NOT NULL)
+              AND   id NOT IN (SELECT DISTINCT customer_id FROM pancafe_sessions WHERE customer_id IS NOT NULL)
+            `)
             await client.query('COMMIT')
           } catch (e) {
             await client.query('ROLLBACK')
