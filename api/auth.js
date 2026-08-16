@@ -1,20 +1,13 @@
 import { getPool, ok, err } from './_db.js'
 
 export default async function handler(req, res) {
-  const pool = getPool()
-  const action = req.query.action
-
-  // Ensure role column exists
   try {
-    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'operator'")
-  } catch (e) {
-    // Ignore if table/col already altered
-  }
+    const pool = getPool()
+    const action = req.query.action
 
-  // ─── LOGIN: POST /api/auth-login ──────────────────────────────
-  if (action === 'login' || req.url.includes('auth-login')) {
-    if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
-    try {
+    // ─── LOGIN: POST /api/auth-login ──────────────────────────────
+    if (action === 'login' || req.url.includes('auth-login')) {
+      if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
       const { username, pin } = req.body || {}
       if (!username || !pin) return err(res, 'Username and PIN required')
 
@@ -36,14 +29,9 @@ export default async function handler(req, res) {
       
       if (result.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
       return ok(res, { user: result.rows[0] })
-    } catch (e) {
-      console.error(e)
-      return err(res, e, 500)
     }
-  }
 
-  // ─── USERS: GET, POST, DELETE /api/users ─────────────────────
-  try {
+    // ─── USERS: GET, POST, DELETE /api/users ─────────────────────
     if (req.method === 'GET') {
       let result
       try {
@@ -92,5 +80,6 @@ export default async function handler(req, res) {
     return err(res, e, 500)
   }
 }
+
 
 
