@@ -115,8 +115,17 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       const action = req.query.action
+      const currentOperator = req.headers['x-username']
+
       if (action === 'restore') {
         const id = req.query.id
+        // Trial user can only restore items they own
+        if (currentOperator === 'trial') {
+          const trialUserRes = await pool.query("SELECT id FROM users WHERE username = 'trial'")
+          const trialUserId = trialUserRes.rows[0]?.id
+          const ownerCheck = await pool.query('SELECT id FROM inventory_items WHERE id = $1 AND created_by = $2', [Number(id), trialUserId])
+          if (ownerCheck.rowCount === 0) return err(res, 'Access denied: Cannot restore production items from trial account', 403)
+        }
         await pool.query('UPDATE inventory_items SET is_active = TRUE WHERE id = $1', [Number(id)])
         await pool.query(
           `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,$3,$4)`,
@@ -136,6 +145,16 @@ export default async function handler(req, res) {
     if (req.method === 'PUT') {
       const id = req.query.id
       const b = req.body || {}
+      const currentOperator = req.headers['x-username']
+
+      // Trial user can only update items they own
+      if (currentOperator === 'trial') {
+        const trialUserRes = await pool.query("SELECT id FROM users WHERE username = 'trial'")
+        const trialUserId = trialUserRes.rows[0]?.id
+        const ownerCheck = await pool.query('SELECT id FROM inventory_items WHERE id = $1 AND created_by = $2', [Number(id), trialUserId])
+        if (ownerCheck.rowCount === 0) return err(res, 'Access denied: Cannot modify production items from trial account', 403)
+      }
+
       await pool.query(
         `UPDATE inventory_items
          SET name = $1, category = $2, sell_price = $3, buy_price = $4, stock_qty = $5
@@ -151,6 +170,16 @@ export default async function handler(req, res) {
 
     if (req.method === 'DELETE') {
       const id = req.query.id
+      const currentOperator = req.headers['x-username']
+
+      // Trial user can only delete items they own
+      if (currentOperator === 'trial') {
+        const trialUserRes = await pool.query("SELECT id FROM users WHERE username = 'trial'")
+        const trialUserId = trialUserRes.rows[0]?.id
+        const ownerCheck = await pool.query('SELECT id FROM inventory_items WHERE id = $1 AND created_by = $2', [Number(id), trialUserId])
+        if (ownerCheck.rowCount === 0) return err(res, 'Access denied: Cannot delete production items from trial account', 403)
+      }
+
       const r = await pool.query('UPDATE inventory_items SET is_active = FALSE WHERE id = $1 RETURNING name', [Number(id)])
       await pool.query(
         `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,$3,$4)`,

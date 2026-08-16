@@ -26,6 +26,17 @@ export default async function handler(req, res) {
       }
       if (req.method === 'POST') {
         const { settings } = req.body || {}
+        const currentOperator = req.headers['x-username']
+        
+        // Trial users: simulate the config update without writing to DB
+        if (currentOperator === 'trial') {
+          await pool.query(
+            `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,$3,$4)`,
+            [userId || null, 'trial', 'UPDATE_SETTINGS', '[SIMULATED] Attempted settings update']
+          )
+          return ok(res, { success: true })
+        }
+
         if (Array.isArray(settings)) {
           for (const s of settings) {
             await pool.query('UPDATE settings SET value = $1 WHERE key = $2', [s.value, s.key])

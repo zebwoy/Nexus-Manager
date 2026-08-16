@@ -290,6 +290,7 @@ export function Inventory() {
 // ─── FOREIGN SALE ───────────────────────────────────────────────
 export function WalkInSale() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [items, setItems] = useState([])
   const [cart, setCart] = useState([])
   const [customer, setCustomer] = useState({ id: null, name: '', shop_name: '', mobile: '' })
@@ -298,6 +299,7 @@ export function WalkInSale() {
   const [payMethod, setPayMethod] = useState('cash')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
 
   useEffect(() => { api.get('/inventory').then(d => setItems(d.items || [])) }, [])
 
@@ -355,12 +357,17 @@ export function WalkInSale() {
         payment_method: payMethod,
         items: cart.map(i => ({ item_id: i.id, qty: i.qty, unit_price: i.sell_price }))
       })
-      navigate('/inventory')
+      if (user?.username === 'trial') {
+        setTrialModal({ isOpen: true, action: 'Foreign Sale' })
+      } else {
+        navigate('/inventory')
+      }
     } catch (err) { setError(err.message) } finally { setLoading(false) }
   }
 
   return (
     <div>
+      <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => { setTrialModal({ isOpen: false, action: '' }); navigate('/inventory') }} />
       <div style={{ marginBottom: '2rem' }}>
         <h1 className="page-title">Foreign Sale</h1>
         <p className="page-sub">Cafeteria sale workstation for outside clients and neighboring shop owners</p>
@@ -572,10 +579,12 @@ export function Recharges() {
 
 export function NewRecharge() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [form, setForm] = useState({ name: '', mobile: '', customer_id: null, game_platform: '', cost_price: '', charge_price: '', payment_received: '', note: '', date: todayISO() })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [customerSuggestions, setCustomerSuggestions] = useState([])
+  const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
   const margin = form.cost_price && form.charge_price ? Number(form.charge_price) - Number(form.cost_price) : null
 
@@ -600,12 +609,17 @@ export function NewRecharge() {
 
     try {
       await api.post('/recharges', { ...form, cost_price: Number(form.cost_price), charge_price: Number(form.charge_price), payment_received: form.payment_received ? Number(form.payment_received) : null })
-      navigate('/recharges')
+      if (user?.username === 'trial') {
+        setTrialModal({ isOpen: true, action: 'Recharge Entry' })
+      } else {
+        navigate('/recharges')
+      }
     } catch (err) { setError(err.message) } finally { setLoading(false) }
   }
 
   return (
     <div style={{ maxWidth: '540px', margin: '0 auto' }}>
+      <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => { setTrialModal({ isOpen: false, action: '' }); navigate('/recharges') }} />
       <div style={{ marginBottom: '2rem' }}>
         <h1 className="page-title">New Recharge Entry</h1>
         <p className="page-sub">Log platform, store costs, and margins</p>
@@ -760,9 +774,11 @@ export function Expenses() {
 
 export function NewExpense() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [form, setForm] = useState({ category: 'Marketing', amount: '', note: '', date: todayISO() })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
 
   // Cafeteria expense specific state (restock or add new)
   const [inventory, setInventory] = useState([])
@@ -811,12 +827,17 @@ export function NewExpense() {
         } : null
       }
       await api.post('/expenses', payload)
-      navigate('/expenses')
+      if (user?.username === 'trial') {
+        setTrialModal({ isOpen: true, action: 'Expense Entry' })
+      } else {
+        navigate('/expenses')
+      }
     } catch (err) { setError(err.message) } finally { setLoading(false) }
   }
 
   return (
     <div style={{ maxWidth: '480px', margin: '0 auto' }}>
+      <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => { setTrialModal({ isOpen: false, action: '' }); navigate('/expenses') }} />
       <div style={{ marginBottom: '2rem' }}>
         <h1 className="page-title">New Expense Entry</h1>
         <p className="page-sub">Add administrative or inventory purchasing costs</p>

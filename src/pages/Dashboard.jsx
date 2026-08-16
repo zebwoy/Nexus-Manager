@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { formatRupees, formatDate, formatTime, todayISO } from '../lib/helpers'
-import { PageLoader, ErrorMsg, SectionHeader, Modal, Field, Spinner } from '../components/UI'
+import { PageLoader, ErrorMsg, SectionHeader, Modal, Field, Spinner, TrialWarningModal } from '../components/UI'
 import { Plus } from 'lucide-react'
 import LogSessionModal from '../components/LogSessionModal'
 
@@ -47,6 +47,7 @@ export default function Dashboard() {
   const [openingNote, setOpeningNote] = useState('')
   const [savingOpening, setSavingOpening] = useState(false)
   const [showLogModal, setShowLogModal] = useState(false)
+  const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
 
 
   const load = useCallback(async () => {
@@ -78,6 +79,9 @@ export default function Dashboard() {
     try {
       await api.post('/day-openings', { opening_cash: Number(openingCash), note: openingNote || null, date: todayISO() })
       setShowOpeningModal(false)
+      if (user?.username === 'trial') {
+        setTrialModal({ isOpen: true, action: 'Set Opening Cash Balance' })
+      }
     } catch (e) { setError(e.message) }
     finally { setSavingOpening(false) }
   }
@@ -98,6 +102,7 @@ export default function Dashboard() {
 
   return (
     <div>
+      <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => setTrialModal({ isOpen: false, action: '' })} />
       {/* Day-start modal */}
       <Modal open={showOpeningModal} onClose={() => setShowOpeningModal(false)} title="☀️ Good morning — Start of Day">
         <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.6 }}>

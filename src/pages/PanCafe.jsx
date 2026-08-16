@@ -3,11 +3,12 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatRupees, formatTime, formatDate, todayISO, validateName, validateMobile } from '../lib/helpers'
-
-import { PageLoader, EmptyState, ErrorMsg, Field, Modal, Spinner } from '../components/UI'
+import { useAuth } from '../context/AuthContext'
+import { PageLoader, EmptyState, ErrorMsg, Field, Modal, Spinner, TrialWarningModal } from '../components/UI'
 import LogSessionModal from '../components/LogSessionModal'
 
 export function PanCafe() {
+  const { user } = useAuth()
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -16,6 +17,7 @@ export function PanCafe() {
   const [closeForm, setCloseForm] = useState({ time_out: '', amount_received: '', payment_method: 'cash' })
   const [closeSaving, setCloseSaving] = useState(false)
   const [showLogModal, setShowLogModal] = useState(false)
+  const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
 
 
   useEffect(() => { load() }, [dateFilter])
@@ -41,12 +43,16 @@ export function PanCafe() {
       })
       setClosing(null)
       load()
+      if (user?.username === 'trial') {
+        setTrialModal({ isOpen: true, action: 'Close PanCafe Session' })
+      }
     } catch (e) { setError(e.message) }
     finally { setCloseSaving(false) }
   }
 
   return (
     <div>
+      <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => setTrialModal({ isOpen: false, action: '' })} />
       <LogSessionModal open={showLogModal} onClose={() => setShowLogModal(false)} />
       {/* Close session modal */}
       <Modal open={!!closing} onClose={() => setClosing(null)} title="Close PanCafe Session">
@@ -163,6 +169,7 @@ export function PanCafe() {
 // ─── New PanCafe Session ───────────────────────────────────────
 export function NewPanCafe() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [devices, setDevices] = useState([])
   const [plans, setPlans] = useState([])
   const [form, setForm] = useState({
@@ -174,6 +181,7 @@ export function NewPanCafe() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [customerSuggestions, setCustomerSuggestions] = useState([])
+  const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
 
   useEffect(() => {
     Promise.all([
@@ -225,7 +233,11 @@ export function NewPanCafe() {
         time_in: form.time_in ? new Date(`${form.date}T${form.time_in}`).toISOString() : null,
         time_out: form.time_out ? new Date(`${form.date}T${form.time_out}`).toISOString() : null,
       })
-      navigate('/pancafe')
+      if (user?.username === 'trial') {
+        setTrialModal({ isOpen: true, action: 'Log PanCafe Session' })
+      } else {
+        navigate('/pancafe')
+      }
     } catch (err) { setError(err.message) }
     finally { setLoading(false) }
   }
@@ -234,6 +246,7 @@ export function NewPanCafe() {
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+      <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => { setTrialModal({ isOpen: false, action: '' }); navigate('/pancafe') }} />
       <div style={{ marginBottom: '2rem' }}>
         <h1 className="page-title">Log PanCafe Session</h1>
         <p className="page-sub">Record a membership plan session</p>

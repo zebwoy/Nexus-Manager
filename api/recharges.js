@@ -7,11 +7,25 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const date = req.query.date
+      const currentOperator = req.headers['x-username']
       let q = `SELECT r.*, c.name, u.username AS created_by_username
                FROM recharges r LEFT JOIN customers c ON c.id = r.customer_id
                LEFT JOIN users u ON u.id = r.created_by`
       const vals = []
-      if (date) { q += ` WHERE r.date = $1`; vals.push(date) }
+      const clauses = []
+
+      if (currentOperator === 'trial') {
+        clauses.push(`u.username = 'trial'`)
+      } else {
+        clauses.push(`(u.username IS NULL OR u.username <> 'trial')`)
+      }
+
+      if (date) {
+        clauses.push(`r.date = $${vals.length + 1}`)
+        vals.push(date)
+      }
+
+      if (clauses.length > 0) q += ` WHERE ` + clauses.join(' AND ')
       q += ` ORDER BY r.created_at DESC`
       const r = await pool.query(q, vals)
       return ok(res, { recharges: r.rows })

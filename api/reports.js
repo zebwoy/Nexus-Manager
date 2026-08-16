@@ -4,32 +4,48 @@ export default async function handler(req, res) {
   const pool = getPool()
 
   try {
+    const currentOperator = req.headers['x-username']
     const month = req.query.month || new Date().toISOString().slice(0, 7)
     const [year, mon] = month.split('-')
     const start = `${year}-${mon}-01`
     const end = new Date(year, mon, 0).toISOString().slice(0, 10)
 
+    // Build trial ownership clause: trial user only sees their own data
+    let trialUserId = null
+    const isTrial = currentOperator === 'trial'
+    if (isTrial) {
+      const trialUserRes = await pool.query("SELECT id FROM users WHERE username = 'trial'")
+      trialUserId = trialUserRes.rows[0]?.id || 0
+    }
+    // For each query, sessionFilter applies to session/sale-based tables, directFilter to tables with direct created_by
+    const creatorFilter = isTrial
+      ? `AND created_by = ${trialUserId}`
+      : `AND (created_by IS NULL OR created_by <> ${trialUserId || 0})`
+    const sessionCreatorFilter = isTrial
+      ? `AND s.created_by = ${trialUserId}`
+      : `AND (s.created_by IS NULL OR s.created_by <> ${trialUserId || 0})`
+
     const [
       gaming, walkin, sessionSales, rc, pancafe, expenses, deviceStats, credits,
       inventoryCogs, rechargesCogs, pancafeCogs
     ] = await Promise.all([
-      pool.query(`SELECT COALESCE(SUM(total),0) AS v FROM sessions WHERE date BETWEEN $1 AND $2`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(total),0) AS v FROM sales WHERE sale_type='walkin' AND date BETWEEN $1 AND $2`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(total),0) AS v FROM sales WHERE sale_type='session' AND date BETWEEN $1 AND $2`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(charge_price),0) AS v FROM recharges WHERE date BETWEEN $1 AND $2`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(amount_received),0) AS v FROM pancafe_sessions WHERE date BETWEEN $1 AND $2`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(amount),0) AS v FROM expenses WHERE date BETWEEN $1 AND $2`, [start, end]),
+      pool.query(`SELECT COALESCE(SUM(total),0) AS v FROM sessions WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
+      pool.query(`SELECT COALESCE(SUM(total),0) AS v FROM sales WHERE sale_type='walkin' AND date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
+      pool.query(`SELECT COALESCE(SUM(total),0) AS v FROM sales WHERE sale_type='session' AND date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
+      pool.query(`SELECT COALESCE(SUM(charge_price),0) AS v FROM recharges WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
+      pool.query(`SELECT COALESCE(SUM(amount_received),0) AS v FROM pancafe_sessions WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
+      pool.query(`SELECT COALESCE(SUM(amount),0) AS v FROM expenses WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
       pool.query(`SELECT d.label AS device_label, COUNT(s.id)::int AS session_count, COALESCE(SUM(s.total),0) AS total_revenue
                   FROM sessions s JOIN devices d ON d.id = s.device_id
-                  WHERE s.date BETWEEN $1 AND $2 GROUP BY d.id, d.label ORDER BY session_count DESC`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(credit),0) AS v FROM sessions WHERE credit > 0`),
+                  WHERE s.date BETWEEN $1 AND $2 ${sessionCreatorFilter} GROUP BY d.id, d.label ORDER BY session_count DESC`, [start, end]),
+      pool.query(`SELECT COALESCE(SUM(credit),0) AS v FROM sessions WHERE credit > 0 ${creatorFilter}`),
       pool.query(`SELECT COALESCE(SUM(si.qty * ii.buy_price),0) AS v 
                   FROM sale_items si 
                   JOIN sales s ON s.id = si.sale_id 
                   JOIN inventory_items ii ON ii.id = si.item_id 
-                  WHERE s.date BETWEEN $1 AND $2`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(cost_price),0) AS v FROM recharges WHERE date BETWEEN $1 AND $2`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(amount_spent),0) AS v FROM pancafe_sessions WHERE date BETWEEN $1 AND $2`, [start, end]),
+                  WHERE s.date BETWEEN $1 AND $2 ${sessionCreatorFilter}`, [start, end]),
+      pool.query(`SELECT COALESCE(SUM(cost_price),0) AS v FROM recharges WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
+      pool.query(`SELECT COALESCE(SUM(amount_spent),0) AS v FROM pancafe_sessions WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
     ])
 
     const gross = [gaming, walkin, sessionSales, rc, pancafe].reduce((sum, r) => sum + Number(r.rows[0].v), 0)
