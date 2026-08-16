@@ -3,6 +3,7 @@ import { getPool, ok, err } from './_db.js'
 export default async function handler(req, res) {
   try {
     const pool = getPool()
+    const userId = req.headers['x-user-id']
     const resource = req.query.resource || (req.url.includes('devices') ? 'devices' : req.url.includes('pricing') ? 'pricing' : 'settings')
 
     // ─── DEVICES ─────────────────────────────────────────────

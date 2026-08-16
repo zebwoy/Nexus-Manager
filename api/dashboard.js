@@ -14,8 +14,9 @@ export default async function handler(req, res) {
 
     // ─── DASHBOARD SNAPSHOT ─────────────────────────────────────
     if (target === 'snapshot' || url.includes('dashboard-snapshot')) {
+      await pool.query('DROP VIEW IF EXISTS today_snapshot CASCADE')
       await pool.query(`
-        CREATE OR REPLACE VIEW today_snapshot AS
+        CREATE VIEW today_snapshot AS
         SELECT
           (SELECT COALESCE(SUM(total), 0.00) FROM sessions WHERE date = CURRENT_DATE) AS gaming_revenue,
           (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE) AS walkin_revenue,
