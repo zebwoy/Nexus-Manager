@@ -1,10 +1,10 @@
 import { getPool, ok, err } from './_db.js'
 
 export default async function handler(req, res) {
-  const pool = getPool()
-  const resource = req.query.resource || (req.url.includes('devices') ? 'devices' : req.url.includes('pricing') ? 'pricing' : 'settings')
-
   try {
+    const pool = getPool()
+    const resource = req.query.resource || (req.url.includes('devices') ? 'devices' : req.url.includes('pricing') ? 'pricing' : 'settings')
+
     // ─── DEVICES ─────────────────────────────────────────────
     if (resource === 'devices') {
       const r = await pool.query('SELECT * FROM devices ORDER BY type, label')
@@ -32,6 +32,9 @@ export default async function handler(req, res) {
         }
         return ok(res, { success: true })
       }
+      return err(res, 'Method not allowed', 405)
+    }
+
     // ─── PURGE TEST DATA ─────────────────────────────────────
     if (resource === 'purge' || req.url.includes('purge')) {
       if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
@@ -43,9 +46,9 @@ export default async function handler(req, res) {
     }
 
     return err(res, 'Invalid setup resource', 400)
-
   } catch (e) {
     console.error(e)
-    return err(res, 'Server error', 500)
+    return err(res, e, 500)
   }
 }
+
