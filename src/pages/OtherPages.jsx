@@ -1203,6 +1203,8 @@ export function Reports() {
 export function Settings() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin' || user?.username === 'trial'
+  const isRealAdmin = user?.role === 'admin' && user?.username !== 'trial'
+  const isTrial = user?.username === 'trial'
 
   const [users, setUsers] = useState([])
   const [settings, setSettings] = useState([])
