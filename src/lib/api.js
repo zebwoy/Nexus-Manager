@@ -17,10 +17,20 @@ async function request(path, options = {}) {
   }
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers })
-  const data = await res.json()
+  const text = await res.text()
+
+  let data
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch (e) {
+    if (!res.ok) {
+      throw new Error(`Server Error (${res.status}): Please check backend database connection or parameters.`)
+    }
+    throw new Error('Invalid response received from server.')
+  }
 
   if (!res.ok) {
-    throw new Error(data.error || `Request failed: ${res.status}`)
+    throw new Error(data.error || data.message || `Request failed with status ${res.status}`)
   }
   return data
 }

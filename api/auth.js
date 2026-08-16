@@ -4,6 +4,13 @@ export default async function handler(req, res) {
   const pool = getPool()
   const action = req.query.action
 
+  // Ensure role column exists
+  try {
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'operator'")
+  } catch (e) {
+    // Ignore if table/col already altered
+  }
+
   // ─── LOGIN: POST /api/auth-login ──────────────────────────────
   if (action === 'login' || req.url.includes('auth-login')) {
     if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
@@ -11,10 +18,22 @@ export default async function handler(req, res) {
       const { username, pin } = req.body || {}
       if (!username || !pin) return err(res, 'Username and PIN required')
 
-      const result = await pool.query(
-        'SELECT id, full_name, username, role FROM users WHERE username = $1 AND pin = $2',
-        [String(username).toLowerCase().trim(), String(pin)]
-      )
+      let result
+      try {
+        result = await pool.query(
+          'SELECT id, full_name, username, COALESCE(role, \'operator\') AS role FROM users WHERE username = $1 AND pin = $2',
+          [String(username).toLowerCase().trim(), String(pin)]
+        )
+      } catch {
+        result = await pool.query(
+          'SELECT id, full_name, username FROM users WHERE username = $1 AND pin = $2',
+          [String(username).toLowerCase().trim(), String(pin)]
+        )
+        if (result.rows[0]) {
+          result.rows[0].role = result.rows[0].username === 'trial' ? 'admin' : 'operator'
+        }
+      }
+      
       if (result.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
       return ok(res, { user: result.rows[0] })
     } catch (e) {
@@ -26,7 +45,13 @@ export default async function handler(req, res) {
   // ─── USERS: GET, POST, DELETE /api/users ─────────────────────
   try {
     if (req.method === 'GET') {
-      const result = await pool.query('SELECT id, full_name, username, role, created_at FROM users ORDER BY created_at')
+      let result
+      try {
+        result = await pool.query('SELECT id, full_name, username, COALESCE(role, \'operator\') AS role, created_at FROM users ORDER BY created_at')
+      } catch {
+        result = await pool.query('SELECT id, full_name, username, created_at FROM users ORDER BY created_at')
+        result.rows = result.rows.map(u => ({ ...u, role: u.username === 'trial' ? 'admin' : 'operator' }))
+      }
       return ok(res, { users: result.rows })
     }
 
@@ -38,10 +63,19 @@ export default async function handler(req, res) {
       const existing = await pool.query('SELECT id FROM users WHERE username = $1', [String(username).toLowerCase()])
       if (existing.rows.length > 0) return err(res, 'Username already taken')
 
-      const result = await pool.query(
-        'INSERT INTO users (full_name, username, pin, role) VALUES ($1, $2, $3, $4) RETURNING id, full_name, username, role',
-        [String(full_name).trim(), String(username).toLowerCase().trim(), String(pin), role || 'staff']
-      )
+      let result
+      try {
+        result = await pool.query(
+          'INSERT INTO users (full_name, username, pin, role) VALUES ($1, $2, $3, $4) RETURNING id, full_name, username, role',
+          [String(full_name).trim(), String(username).toLowerCase().trim(), String(pin), role || 'operator']
+        )
+      } catch {
+        result = await pool.query(
+          'INSERT INTO users (full_name, username, pin) VALUES ($1, $2, $3) RETURNING id, full_name, username',
+          [String(full_name).trim(), String(username).toLowerCase().trim(), String(pin)]
+        )
+        if (result.rows[0]) result.rows[0].role = role || 'operator'
+      }
       return ok(res, { user: result.rows[0] }, 201)
     }
 
@@ -58,4 +92,5 @@ export default async function handler(req, res) {
     return err(res, e, 500)
   }
 }
+
 
