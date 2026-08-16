@@ -941,15 +941,23 @@ export function NewExpense() {
 
 // ─── CUSTOMERS ────────────────────────────────────────────────
 export function Customers() {
+  const { user } = useAuth()
+  const isTrial = user?.username === 'trial'
+
   const [customers, setCustomers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [view, setView] = useState('session') // 'session' | 'cafeteria'
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { if (!isTrial) load() }, [view])
+
   const load = async () => {
-    try { setLoading(true); const d = await api.get('/customers'); setCustomers(d.customers || []) }
-    catch (err) { setError(err.message) } finally { setLoading(false) }
+    try {
+      setLoading(true)
+      const d = await api.get(`/customers?view=${view}`)
+      setCustomers(d.customers || [])
+    } catch (err) { setError(err.message) } finally { setLoading(false) }
   }
 
   const filtered = customers.filter(c =>
@@ -957,29 +965,81 @@ export function Customers() {
     c.mobile?.includes(search)
   )
 
+  if (isTrial) {
+    return (
+      <div>
+        <div style={{ marginBottom: '2rem' }}>
+          <h1 className="page-title">Client Registry</h1>
+          <p className="page-sub">Auto-accumulated from logged session entries</p>
+        </div>
+        <div className="card" style={{ textAlign: 'center', padding: '3rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+          <span style={{ fontSize: '2.5rem' }}>🔒</span>
+          <p style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>Client Registry Unavailable</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', maxWidth: '380px', lineHeight: 1.6 }}>
+            The client registry shows real customer data from production sessions.
+            Trial accounts cannot access production data — please create sessions with customer names to see them appear here.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       <div style={{ marginBottom: '2rem' }}>
         <h1 className="page-title">Client Registry</h1>
-        <p className="page-sub">Auto-accumulated from logged session entries</p>
+        <p className="page-sub">Auto-accumulated from logged session and cafeteria entries</p>
       </div>
 
       <ErrorMsg error={error} />
-      
-      <div className="card" style={{ padding: '0.85rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center' }}>
-        <input className="input" style={{ maxWidth: '380px', padding: '0.45rem 0.75rem' }} placeholder="Search client name or mobile registry..." value={search} onChange={e => setSearch(e.target.value)} />
+
+      {/* View Toggle + Search */}
+      <div className="card" style={{ padding: '0.85rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+        {/* Session / Cafeteria toggle */}
+        <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: '10px', padding: '3px', border: '1.5px solid var(--border)', gap: '2px' }}>
+          {[
+            { key: 'session',   label: '🎮 Gaming Sessions' },
+            { key: 'cafeteria', label: '☕ Cafeteria Sales'  },
+          ].map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => { setView(opt.key); setSearch('') }}
+              style={{
+                padding: '0.35rem 0.85rem', borderRadius: '8px', cursor: 'pointer', border: 'none',
+                fontSize: '0.8rem', fontWeight: 650,
+                background: view === opt.key ? 'var(--accent)' : 'transparent',
+                color: view === opt.key ? 'var(--accent-text-solid, #fff)' : 'var(--text-muted)',
+                transition: 'all 0.15s',
+              }}
+            >{opt.label}</button>
+          ))}
+        </div>
+        <input
+          className="input"
+          style={{ maxWidth: '320px', padding: '0.45rem 0.75rem', flex: 1 }}
+          placeholder="Search by name or mobile…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
       </div>
 
       {loading ? <PageLoader /> : filtered.length === 0 ? (
-        <EmptyState icon="👤" title="No Clients Registered" description="Clients register automatically when creating station sessions with names." />
+        <EmptyState
+          icon={view === 'session' ? '🎮' : '☕'}
+          title={view === 'session' ? 'No Session Clients' : 'No Cafeteria Clients'}
+          description={view === 'session'
+            ? 'Clients register automatically when creating gaming station sessions with names.'
+            : 'Cafeteria clients register when a walk-in sale is logged with a customer name.'}
+        />
       ) : (
         <div className="card-flush" style={{ overflowX: 'auto' }}>
           <table className="tbl">
             <thead>
               <tr>
-                {['Client Profile Name', 'Mobile Number', 'Member Registration Date', 'Total Session Logs'].map(h => (
-                  <th key={h}>{h}</th>
-                ))}
+                {view === 'session'
+                  ? ['Client Profile Name', 'Mobile Number', 'First Registered', 'Total Sessions'].map(h => <th key={h}>{h}</th>)
+                  : ['Client Profile Name', 'Mobile Number', 'Shop / Business', 'First Registered', 'Total Purchases'].map(h => <th key={h}>{h}</th>)
+                }
               </tr>
             </thead>
             <tbody>
@@ -987,8 +1047,13 @@ export function Customers() {
                 <tr key={c.id} style={{ background: idx % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent' }}>
                   <td className="table-cell" style={{ fontWeight: 700 }}>{c.name}</td>
                   <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-muted)' }}>{c.mobile || '—'}</td>
+                  {view === 'cafeteria' && (
+                    <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{c.shop_name || '—'}</td>
+                  )}
                   <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.85rem', color: 'var(--text-muted)' }}>{formatDate(c.created_at)}</td>
-                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>{c.session_count || 0} sessions</td>
+                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>
+                    {c.session_count || 0} {view === 'session' ? 'sessions' : 'purchases'}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1161,7 +1226,8 @@ export function Settings() {
       const [u, s] = await Promise.all([api.get('/users'), api.get('/settings')])
       setUsers(u.users || [])
       setSettings(s.settings || [])
-      if (isAdmin) {
+      // Only real admins (not trial) can see audit logs
+      if (isRealAdmin) {
         const audit = await api.get('/auth?action=audit')
         setAuditData(audit || { logs: [], sessions: [] })
       }
@@ -1209,14 +1275,16 @@ export function Settings() {
   }
 
   const saveSettings = async () => {
+    // For trial: show the popover immediately without updating the DB or showing a success msg
+    if (isTrial) {
+      setTrialModal({ isOpen: true, action: 'Modify System Settings' })
+      return
+    }
     setSaving(true)
     try {
       await api.post('/settings', { settings })
       setSaveMsg('Configuration updated!')
       setTimeout(() => setSaveMsg(''), 2000)
-      if (user?.username === 'trial') {
-        setTrialModal({ isOpen: true, action: 'Modify System Settings' })
-      }
     } catch (err) { setError(err.message) } finally { setSaving(false) }
   }
 
@@ -1289,11 +1357,17 @@ export function Settings() {
                     </p>
                   </div>
                 </div>
-                {isAdmin && (
-                  <button onClick={() => setResettingUser(u)} className="btn-secondary btn-sm" style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}>
-                    Reset PIN
-                  </button>
-                )}
+                {/* Reset PIN: for trial, immediately show trial popover — no modal */}
+                <button
+                  onClick={() => {
+                    if (isTrial) { setTrialModal({ isOpen: true, action: 'Reset Security PIN' }); return }
+                    setResettingUser(u)
+                  }}
+                  className="btn-secondary btn-sm"
+                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
+                >
+                  Reset PIN
+                </button>
               </div>
             ))}
           </div>
@@ -1328,8 +1402,8 @@ export function Settings() {
         </div>
       </div>
 
-      {/* Security & Audit Trail (Admin Only) */}
-      {isAdmin && (
+      {/* Security & Audit Trail — REAL admins only, trial excluded */}
+      {isRealAdmin && (
         <div className="card" style={{ marginBottom: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <p style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
             🔒 Security & Audit Trail
