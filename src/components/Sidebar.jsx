@@ -1,3 +1,7 @@
+import { useState } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { useTheme, ACCENTS } from '../context/ThemeContext'
 import { api } from '../lib/api'
 import { Modal, Spinner } from './UI'
 import {
@@ -5,6 +9,7 @@ import {
   Zap, TrendingDown, Users, BarChart2, Settings,
   Sun, Moon, LogOut, Menu, X, FileCheck, Trash2
 } from 'lucide-react'
+
 
 const NAV = [
   { to: '/',          Icon: LayoutDashboard, label: 'Dashboard'  },
