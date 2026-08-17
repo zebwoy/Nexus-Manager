@@ -2,9 +2,18 @@ import { getPool, ok, err } from './_db.js'
 
 export default async function handler(req, res) {
   const pool = getPool()
-  const userId = req.headers['x-user-id']
+  const rawUserId = req.headers['x-user-id']
+  const userId = rawUserId && !isNaN(Number(rawUserId)) ? Number(rawUserId) : null
 
   try {
+    await pool.query(`
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'cash';
+      ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_category_check;
+      ALTER TABLE expenses ADD CONSTRAINT expenses_category_check CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Other', 'Cafeteria'));
+      ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_payment_method_check;
+      ALTER TABLE expenses ADD CONSTRAINT expenses_payment_method_check CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed'));
+    `).catch(() => {})
+
     if (req.method === 'GET') {
       const date = req.query.date
       const currentOperator = req.headers['x-username']
@@ -50,7 +59,7 @@ export default async function handler(req, res) {
             const newIt = await client.query(
               `INSERT INTO inventory_items (name, category, buy_price, sell_price, stock_qty, created_by)
                VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name`,
-              [b.new_item.name, b.new_item.category || 'Drinks', buyPrice, Number(b.new_item.sell_price), Number(b.units || 1), userId || null]
+              [b.new_item.name, b.new_item.category || 'Drinks', buyPrice, Number(b.new_item.sell_price), Number(b.units || 1), userId]
             )
             finalItemId = newIt.rows[0].id
             itemName = newIt.rows[0].name
@@ -70,13 +79,13 @@ export default async function handler(req, res) {
           const noteDetails = `Cafeteria inventory purchase: ${b.units} units of ${itemName}. ${b.note || ''}`.trim()
           await client.query(
             `INSERT INTO expenses (date, category, amount, note, payment_method, created_by) VALUES ($1,$2,$3,$4,$5,$6)`,
-            [b.date, b.category, b.amount, noteDetails, b.payment_method || 'cash', userId || null]
+            [b.date, b.category, b.amount, noteDetails, b.payment_method || 'cash', userId]
           )
 
           // 4. Create an audit log
           await client.query(
             `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)`,
-            [userId || null, req.headers['x-username'] || 'system', 'CAFETERIA_EXPENSE', `Logged cafeteria inventory expense of ₹${b.amount} for ${b.units} units of ${itemName}`]
+            [userId, req.headers['x-username'] || 'system', 'CAFETERIA_EXPENSE', `Logged cafeteria inventory expense of ₹${b.amount} for ${b.units} units of ${itemName}`]
           )
 
           await client.query('COMMIT')
@@ -89,12 +98,12 @@ export default async function handler(req, res) {
         // Standard expense creation
         await pool.query(
           `INSERT INTO expenses (date, category, amount, note, payment_method, created_by) VALUES ($1,$2,$3,$4,$5,$6)`,
-          [b.date, b.category, b.amount, b.note || null, b.payment_method || 'cash', userId || null]
+          [b.date, b.category, b.amount, b.note || null, b.payment_method || 'cash', userId]
         )
         
         await pool.query(
           `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)`,
-          [userId || null, req.headers['x-username'] || 'system', 'CREATE_EXPENSE', `Logged expense of ₹${b.amount} (category: ${b.category})`]
+          [userId, req.headers['x-username'] || 'system', 'CREATE_EXPENSE', `Logged expense of ₹${b.amount} (category: ${b.category})`]
         )
         return ok(res, { success: true }, 201)
       }
@@ -102,7 +111,7 @@ export default async function handler(req, res) {
 
     return err(res, 'Method not allowed', 405)
   } catch (e) {
-    console.error(e)
-    return err(res, 'Server error', 500)
+    console.error('Expense handler error:', e)
+    return err(res, e.message || 'Server error', 500)
   }
 }

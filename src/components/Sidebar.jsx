@@ -334,7 +334,7 @@ export default function Sidebar() {
 
           <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
             <button onClick={handleConfirmSignOut} disabled={isPurging} className={isTrial ? "btn-danger" : "btn-primary"} style={{ flex: 1, padding: '0.65rem' }}>
-              {isPurging ? <><Spinner size="sm" /> Purging & Signing Out...</> : (isTrial ? "Purge Data & Sign Out" : "Sign Out")}
+              {isPurging ? <><Spinner size="sm" /> {isTrial ? "Purging & Signing Out..." : "Signing Out..."}</> : (isTrial ? "Purge Data & Sign Out" : "Sign Out")}
             </button>
             <button onClick={() => setShowSignOutModal(false)} className="btn-secondary" style={{ flex: 1, padding: '0.65rem' }}>
               Cancel

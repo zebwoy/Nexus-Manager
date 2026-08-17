@@ -266,8 +266,7 @@ export default async function handler(req, res) {
         JOIN devices d ON d.id = s.device_id
         LEFT JOIN users u ON u.id = s.created_by
       `
-      const vals = []
-      const clauses = []
+      const clauses = [`(s.is_deleted IS NULL OR s.is_deleted = FALSE)`]
       
       if (currentOperator === 'trial') {
         clauses.push(`u.username = 'trial'`)
@@ -410,9 +409,30 @@ export default async function handler(req, res) {
       } finally { client.release() }
     }
 
-    // ─── DELETE /api/sessions/:id (admin-audited) ─────────────────
+    // ─── POST /api/sessions?action=restore&id=X ─────────────────────
+    if (req.method === 'POST' && req.query.action === 'restore') {
+      const restoreId = Number(req.query.id)
+      if (!restoreId) return err(res, 'Session ID required', 400)
+
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        await client.query(`UPDATE sessions SET is_deleted = FALSE WHERE id = $1`, [restoreId])
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SESSION_RESTORE',$3)`,
+          [Number(userId || 0), req.headers['x-username'] || 'system', `Restored session #${restoreId}`]
+        )
+        await client.query('COMMIT')
+        return ok(res, { success: true })
+      } catch (e) {
+        await client.query('ROLLBACK')
+        console.error(e)
+        return err(res, e, 500)
+      } finally { client.release() }
+    }
+
+    // ─── DELETE /api/sessions/:id (admin-audited soft delete) ──────
     if (req.method === 'DELETE') {
-      // Extract id from URL path for base collection DELETE (e.g. ?id=123 or path param)
       const delId = Number(req.query.id)
       if (!delId) return err(res, 'Session ID required', 400)
       if (!userId) return err(res, 'Authentication required', 401)
@@ -420,7 +440,8 @@ export default async function handler(req, res) {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
-        // Fetch session details for audit
+        await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {})
+
         const sessR = await client.query(
           `SELECT s.*, d.label AS device_label FROM sessions s JOIN devices d ON d.id = s.device_id WHERE s.id = $1`,
           [delId]
@@ -428,15 +449,7 @@ export default async function handler(req, res) {
         if (sessR.rowCount === 0) { await client.query('ROLLBACK'); return err(res, 'Session not found', 404) }
         const sess = sessR.rows[0]
 
-        // Cascade delete
-        const saleIds = await client.query(`SELECT id FROM sales WHERE session_id = $1`, [delId])
-        for (const { id: sid } of saleIds.rows) {
-          await client.query(`DELETE FROM sale_items WHERE sale_id = $1`, [sid])
-        }
-        await client.query(`DELETE FROM sales WHERE session_id = $1`, [delId])
-        await client.query(`DELETE FROM session_payments WHERE session_id = $1`, [delId])
-        await client.query(`DELETE FROM session_players WHERE session_id = $1`, [delId])
-        await client.query(`DELETE FROM sessions WHERE id = $1`, [delId])
+        await client.query(`UPDATE sessions SET is_deleted = TRUE WHERE id = $1`, [delId])
 
         // Write audit
         await client.query(

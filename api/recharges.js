@@ -69,10 +69,30 @@ export default async function handler(req, res) {
 
   // ─── Base Collection Routes ───────────────────────────────────
   try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS recharges (
+          id SERIAL PRIMARY KEY,
+          customer_id INT REFERENCES customers(id),
+          date DATE NOT NULL DEFAULT CURRENT_DATE,
+          game_platform VARCHAR(100),
+          cost_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+          charge_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+          payment_received DECIMAL(10, 2),
+          note TEXT,
+          created_by INT REFERENCES users(id),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE recharges ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id);
+      ALTER TABLE recharges ADD COLUMN IF NOT EXISTS payment_received DECIMAL(10, 2);
+      ALTER TABLE recharges ADD COLUMN IF NOT EXISTS note TEXT;
+      ALTER TABLE recharges ADD COLUMN IF NOT EXISTS game_platform VARCHAR(100);
+    `).catch(() => {})
+
     if (req.method === 'GET') {
       const date = req.query.date
       const currentOperator = req.headers['x-username']
-      let q = `SELECT r.*, c.name, u.username AS created_by_username
+      let q = `SELECT r.*, (COALESCE(r.charge_price, 0) - COALESCE(r.cost_price, 0)) AS margin,
+                      c.name, u.username AS created_by_username
                FROM recharges r LEFT JOIN customers c ON c.id = r.customer_id
                LEFT JOIN users u ON u.id = r.created_by`
       const vals = []
