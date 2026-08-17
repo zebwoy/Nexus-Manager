@@ -8,8 +8,9 @@ export default async function handler(req, res) {
   try {
     await pool.query(`
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'cash';
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS vendor_name VARCHAR(200);
       ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_category_check;
-      ALTER TABLE expenses ADD CONSTRAINT expenses_category_check CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Other', 'Cafeteria'));
+      ALTER TABLE expenses ADD CONSTRAINT expenses_category_check CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Cafeteria'));
       ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_payment_method_check;
       ALTER TABLE expenses ADD CONSTRAINT expenses_payment_method_check CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed'));
     `).catch(() => {})
@@ -59,7 +60,7 @@ export default async function handler(req, res) {
             const newIt = await client.query(
               `INSERT INTO inventory_items (name, category, buy_price, sell_price, stock_qty, created_by)
                VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name`,
-              [b.new_item.name, b.new_item.category || 'Drinks', buyPrice, Number(b.new_item.sell_price), Number(b.units || 1), userId]
+              [b.new_item.name, b.new_item.category || 'Drinks', buyPrice, Number(b.new_item.sell_price), Math.round(Number(b.units || 1)), userId]
             )
             finalItemId = newIt.rows[0].id
             itemName = newIt.rows[0].name
@@ -70,7 +71,7 @@ export default async function handler(req, res) {
               `UPDATE inventory_items
                SET stock_qty = stock_qty + $1, buy_price = $2
                WHERE id = $3 RETURNING name`,
-              [Number(b.units || 1), buyPrice, finalItemId]
+              [Math.round(Number(b.units || 1)), buyPrice, finalItemId]
             )
             itemName = upIt.rows[0]?.name || ''
           }
@@ -97,13 +98,13 @@ export default async function handler(req, res) {
       } else {
         // Standard expense creation
         await pool.query(
-          `INSERT INTO expenses (date, category, amount, note, payment_method, created_by) VALUES ($1,$2,$3,$4,$5,$6)`,
-          [b.date, b.category, b.amount, b.note || null, b.payment_method || 'cash', userId]
+          `INSERT INTO expenses (date, category, amount, note, vendor_name, payment_method, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [b.date, b.category, b.amount, b.note || null, b.vendor_name || null, b.payment_method || 'cash', userId]
         )
         
         await pool.query(
           `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)`,
-          [userId, req.headers['x-username'] || 'system', 'CREATE_EXPENSE', `Logged expense of ₹${b.amount} (category: ${b.category})`]
+          [userId, req.headers['x-username'] || 'system', 'CREATE_EXPENSE', `Logged expense of ₹${b.amount} (category: ${b.category}${b.vendor_name ? ', vendor: ' + b.vendor_name : ''})`]
         )
         return ok(res, { success: true }, 201)
       }

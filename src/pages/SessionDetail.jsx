@@ -77,7 +77,7 @@ export default function SessionDetail() {
 
   // Payment collection
   const [collectAmount, setCollectAmount] = useState('')
-  const [collectMethod, setCollectMethod] = useState('cash')
+  const [collectOnline, setCollectOnline] = useState('')
   const [collectSaving, setCollectSaving] = useState(false)
 
   // Extension
@@ -237,18 +237,35 @@ export default function SessionDetail() {
   }
 
   const handleCollect = async () => {
-    if (!collectAmount || Number(collectAmount) <= 0) {
-      setError('Enter a valid amount')
-      return
-    }
+    const cashAmt = Number(collectAmount || 0)
+    const onlineAmt = Number(collectOnline || 0)
+    const totalCollecting = cashAmt + onlineAmt
+    if (totalCollecting <= 0) { setError('Enter a valid amount to collect'); return }
     setCollectSaving(true)
     try {
-      await api.post(`/sessions/${id}/payments`, {
-        amount: Number(collectAmount),
-        payment_method: collectMethod,
-        note: null,
-      })
+      // Determine method string
+      let method = 'cash'
+      if (cashAmt > 0 && onlineAmt > 0) method = 'split'
+      else if (onlineAmt > 0) method = 'online'
+
+      // Record cash portion
+      if (cashAmt > 0) {
+        await api.post(`/sessions/${id}/payments`, {
+          amount: cashAmt,
+          payment_method: 'cash',
+          note: onlineAmt > 0 ? `Split payment — cash portion` : null,
+        })
+      }
+      // Record online portion
+      if (onlineAmt > 0) {
+        await api.post(`/sessions/${id}/payments`, {
+          amount: onlineAmt,
+          payment_method: 'online',
+          note: cashAmt > 0 ? `Split payment — online portion` : null,
+        })
+      }
       setCollectAmount('')
+      setCollectOnline('')
       toast.success('Payment recorded')
       load()
     } catch (e) { setError(e.message) }
@@ -445,7 +462,8 @@ export default function SessionDetail() {
 
       {/* ── Header ───────────────────────────────────────────────── */}
       <div style={{ marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        {/* Single header row: Back | SESSION # | Edit | spacer | Delete */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
           <button onClick={() => navigate('/sessions')} className="btn-secondary btn-sm"
             style={{ padding: '0.3rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
             <ArrowLeft size={13} /> Back
@@ -453,13 +471,22 @@ export default function SessionDetail() {
           <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace" }}>
             SESSION #{s.id}
           </span>
+          <button onClick={openEditModal} className="btn-secondary btn-sm"
+            style={{ padding: '0.3rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem' }}>
+            <Edit3 size={13} /> Edit
+          </button>
           {isAdmin && (
             <button onClick={() => setShowDelete(true)} className="btn-secondary btn-sm"
-              style={{ marginLeft: 'auto', padding: '0.3rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem',
+              style={{ padding: '0.3rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem',
                 fontSize: '0.75rem', color: 'var(--danger)', borderColor: 'var(--danger-border)' }}>
               <Trash2 size={13} /> Delete
             </button>
           )}
+          {/* Panel toggle button — pushed to far right */}
+          <button onClick={() => setPanelOpen(true)} className="btn-primary btn-sm"
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '0.35rem 0.75rem' }}>
+            <SlidersHorizontal size={13} /> Actions
+          </button>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
@@ -468,10 +495,6 @@ export default function SessionDetail() {
               <h1 className="page-title" style={{ marginBottom: 0 }}>
                 {s.name || 'Anonymous Client'}
               </h1>
-              <button onClick={openEditModal} className="btn-secondary btn-sm"
-                style={{ padding: '0.25rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem' }}>
-                <Edit3 size={13} /> Edit
-              </button>
             </div>
             <p className="page-sub">
               {s.device_label} · {formatDate(s.date)} · {formatTime(s.time_in)} → {formatTime(s.time_out)}
@@ -482,11 +505,6 @@ export default function SessionDetail() {
             {isActive
               ? <><span className="badge-active-session animate-pulse">ACTIVE</span><Countdown timeOut={s.time_out} /></>
               : <span className="badge badge-warning">COMPLETED</span>}
-            {/* Panel toggle button */}
-            <button onClick={() => setPanelOpen(true)} className="btn-primary btn-sm"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '0.35rem 0.75rem', marginTop: '0.35rem' }}>
-              <SlidersHorizontal size={13} /> Actions
-            </button>
           </div>
         </div>
       </div>
@@ -560,30 +578,45 @@ export default function SessionDetail() {
         {/* ─── RIGHT COLUMN ─── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-          {/* Collect payment */}
-          {sectionCard('Collect Payment', <Banknote size={14} />, (
+          {/* Collect payment — only shown when there is an outstanding balance */}
+          {creditRemaining > 0 && sectionCard('Collect Payment', <Banknote size={14} />, (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {creditRemaining > 0 && (
-                <div style={{
-                  padding: '0.65rem 1rem', borderRadius: '10px',
-                  background: 'rgba(var(--danger-rgb, 220,38,38), 0.08)',
-                  border: '1px solid rgba(var(--danger-rgb, 220,38,38), 0.2)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}>
-                  <span style={{ fontSize: '0.8125rem', color: 'var(--danger)', fontWeight: 650 }}>Balance due</span>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--danger)' }}>
-                    {formatRupees(creditRemaining)}
-                  </span>
-                </div>
-              )}
-              <Field label="Amount to Collect (₹)">
-                <input type="number" className="input" placeholder={creditRemaining || 'Enter amount'}
-                  value={collectAmount} onChange={e => setCollectAmount(e.target.value)} />
-              </Field>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="label" style={{ marginBottom: 0 }}>Payment Method</span>
-                <PayMethodToggle value={collectMethod} onChange={setCollectMethod} />
+              <div style={{
+                padding: '0.65rem 1rem', borderRadius: '10px',
+                background: 'rgba(var(--danger-rgb, 220,38,38), 0.08)',
+                border: '1px solid rgba(var(--danger-rgb, 220,38,38), 0.2)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+              }}>
+                <span style={{ fontSize: '0.8125rem', color: 'var(--danger)', fontWeight: 650 }}>Balance due</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--danger)' }}>
+                  {formatRupees(creditRemaining)}
+                </span>
               </div>
+
+              {/* Cash / Online split — same pattern as session authorization */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <label className="label" style={{ marginBottom: 0 }}>Payment Breakdown</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <Field label="💵 Cash (₹)">
+                    <input type="number" className="input" placeholder="0"
+                      value={collectAmount} onChange={e => setCollectAmount(e.target.value)} />
+                  </Field>
+                  <Field label="📲 Online (₹)">
+                    <input type="number" className="input" placeholder="0"
+                      value={collectOnline} onChange={e => setCollectOnline(e.target.value)} />
+                  </Field>
+                </div>
+                {(Number(collectAmount) > 0 || Number(collectOnline) > 0) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem',
+                    color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>
+                    <span>Total being collected</span>
+                    <span style={{ fontWeight: 700, color: 'var(--accent-text)' }}>
+                      {formatRupees(Number(collectAmount || 0) + Number(collectOnline || 0))}
+                    </span>
+                  </div>
+                )}
+              </div>
+
               <button onClick={handleCollect} disabled={collectSaving} className="btn-primary"
                 style={{ padding: '0.65rem 1.25rem' }}>
                 {collectSaving ? <><Spinner size="sm" /> Recording...</> : 'Record Payment'}

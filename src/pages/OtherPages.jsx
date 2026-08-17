@@ -1164,12 +1164,19 @@ export function NewExpense() {
   const [newItemSellPrice, setNewItemSellPrice] = useState('')
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
-  const CATS = ['Marketing', 'Employee', 'Inventory', 'Other', 'Cafeteria']
+  const CATS = ['Marketing', 'Employee', 'Inventory', 'Cafeteria']
+  const [payMethod, setPayMethod] = useState('cash')
 
   useEffect(() => {
     if (form.category === 'Cafeteria') {
       api.get('/inventory')
-        .then(res => setInventory(res.items || []))
+        .then(res => {
+          const inv = res.items || []
+          setInventory(inv)
+          // If no existing items, default to new item mode
+          if (inv.length === 0) setCafeMode('new')
+          else setCafeMode('existing')
+        })
         .catch(err => setError('Failed to load inventory: ' + err.message))
     }
   }, [form.category])
@@ -1190,6 +1197,7 @@ export function NewExpense() {
       const payload = {
         ...form,
         amount: Number(form.amount),
+        payment_method: payMethod,
         units: form.category === 'Cafeteria' ? Number(units) : null,
         item_id: (form.category === 'Cafeteria' && cafeMode === 'existing') ? Number(itemId) : null,
         new_item: (form.category === 'Cafeteria' && cafeMode === 'new') ? {
@@ -1242,14 +1250,17 @@ export function NewExpense() {
               📦 Cafeteria Inventory Linkage
             </p>
             
+            {/* Only show Existing Item toggle if there's actually inventory */}
             <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button type="button" onClick={() => setCafeMode('existing')}
-                className={cafeMode === 'existing' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'} style={{ flex: 1, padding: '0.35rem' }}>
-                Existing Item
-              </button>
+              {inventory.length > 0 && (
+                <button type="button" onClick={() => setCafeMode('existing')}
+                  className={cafeMode === 'existing' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'} style={{ flex: 1, padding: '0.35rem' }}>
+                  Restock Existing Item
+                </button>
+              )}
               <button type="button" onClick={() => setCafeMode('new')}
                 className={cafeMode === 'new' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'} style={{ flex: 1, padding: '0.35rem' }}>
-                New Item
+                Add New Item
               </button>
             </div>
 
@@ -1296,10 +1307,33 @@ export function NewExpense() {
           </div>
         )}
         
-        <Field label="Description / Details">
-          <input className="input" placeholder="What was this logged for?" value={form.note} onChange={e => f('note', e.target.value)} />
+        <Field label="Vendor Name">
+          <input className="input" placeholder="e.g. Raj Traders" value={form.vendor_name || ''} onChange={e => f('vendor_name', e.target.value)} />
         </Field>
-        
+
+        <Field label="Vendor Address / Reference">
+          <input className="input" placeholder="Shop address or bill reference" value={form.note} onChange={e => f('note', e.target.value)} />
+        </Field>
+
+        {/* Payment Method toggle — same as sessions */}
+        <div>
+          <label className="label" style={{ marginBottom: '0.5rem' }}>Payment Method</label>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {['cash', 'online'].map(m => (
+              <button key={m} type="button" onClick={() => setPayMethod(m)}
+                style={{
+                  flex: 1, padding: '0.45rem 0.85rem', borderRadius: '10px', cursor: 'pointer',
+                  border: `1.5px solid ${payMethod === m ? 'var(--accent)' : 'var(--border)'}`,
+                  background: payMethod === m ? 'var(--accent-dim)' : 'var(--bg-input)',
+                  color: payMethod === m ? 'var(--accent-text)' : 'var(--text-muted)',
+                  fontWeight: 650, fontSize: '0.85rem'
+                }}>
+                {m === 'cash' ? '💵 Cash' : '📲 Online'}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: '0.85rem', marginTop: '0.5rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
           <button onClick={handleSubmit} disabled={loading} className="btn-primary" style={{ padding: '0.65rem 1.35rem' }}>
             {loading ? 'Storing...' : 'Save Expense Log'}
