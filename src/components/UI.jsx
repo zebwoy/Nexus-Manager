@@ -384,3 +384,26 @@ export function CustomNumberInput({ value, onChange, min, max, step = 1, placeho
     </div>
   )
 }
+
+// ─── FilterBar / ActionBar ─────────────────────────────────────────
+export function FilterBar({ children, style, className = '' }) {
+  return (
+    <div
+      className={`card ${className}`}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '0.75rem',
+        padding: '0.75rem 1.15rem',
+        borderRadius: '14px',
+        flexWrap: 'wrap',
+        marginBottom: '1.5rem',
+        ...style
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+export const ActionBar = FilterBar

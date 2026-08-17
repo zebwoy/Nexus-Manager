@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { formatRupees, formatTime, formatDate, formatDuration, todayISO, validateName, validateMobile, toISO, addMinutes } from '../lib/helpers'
-import { PageLoader, ErrorMsg, Field, Modal, Spinner, SlidePanel, PanelSection, ConfirmModal } from '../components/UI'
+import { PageLoader, ErrorMsg, Field, Modal, Spinner, SlidePanel, PanelSection, ConfirmModal, FilterBar } from '../components/UI'
 import { ArrowLeft, Plus, Minus, CreditCard, Banknote, Clock, ShoppingCart, History, Edit3, Trash2, SlidersHorizontal } from 'lucide-react'
 import { toast } from 'react-toastify'
 
@@ -461,52 +461,69 @@ export default function SessionDetail() {
       </SlidePanel>
 
       {/* ── Header ───────────────────────────────────────────────── */}
-      <div style={{ marginBottom: '2rem' }}>
-        {/* Single header row: Back | SESSION # | Edit | spacer | Delete */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-          <button onClick={() => navigate('/sessions')} className="btn-secondary btn-sm"
-            style={{ padding: '0.3rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <ArrowLeft size={13} /> Back
-          </button>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace" }}>
-            SESSION #{s.id}
-          </span>
-          <button onClick={openEditModal} className="btn-secondary btn-sm"
-            style={{ padding: '0.3rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem' }}>
-            <Edit3 size={13} /> Edit
-          </button>
-          {isAdmin && (
-            <button onClick={() => setShowDelete(true)} className="btn-secondary btn-sm"
-              style={{ padding: '0.3rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem',
-                fontSize: '0.75rem', color: 'var(--danger)', borderColor: 'var(--danger-border)' }}>
-              <Trash2 size={13} /> Delete
+      <div>
+        {/* Top bar row with 3rem bottom margin: Back | SESSION # | Status Indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button onClick={() => navigate('/sessions')} className="btn-secondary btn-sm"
+              style={{ padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <ArrowLeft size={13} /> Back
             </button>
-          )}
-          {/* Panel toggle button — pushed to far right */}
-          <button onClick={() => setPanelOpen(true)} className="btn-primary btn-sm"
-            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '0.35rem 0.75rem' }}>
-            <SlidersHorizontal size={13} /> Actions
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
-              <h1 className="page-title" style={{ marginBottom: 0 }}>
-                {s.name || 'Anonymous Client'}
-              </h1>
-            </div>
-            <p className="page-sub">
-              {s.device_label} · {formatDate(s.date)} · {formatTime(s.time_in)} → {formatTime(s.time_out)}
-              {s.mobile && <span style={{ marginLeft: '0.5rem', fontFamily: "'JetBrains Mono', monospace" }}>· {s.mobile}</span>}
-            </p>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>
+              SESSION #{s.id}
+            </span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             {isActive
               ? <><span className="badge-active-session animate-pulse">ACTIVE</span><Countdown timeOut={s.time_out} /></>
-              : <span className="badge badge-warning">COMPLETED</span>}
+              : <span className="badge badge-success">COMPLETED</span>}
           </div>
         </div>
+
+        {/* Customer Info row with Edit button beside customer name */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+            <h1 className="page-title" style={{ marginBottom: 0 }}>
+              {s.name || 'Anonymous Client'}
+            </h1>
+            <button onClick={openEditModal} className="btn-secondary btn-sm"
+              style={{ padding: '0.25rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem' }}>
+              <Edit3 size={13} /> Edit
+            </button>
+          </div>
+          <p className="page-sub">
+            {s.device_label} · {formatDate(s.date)} · {formatTime(s.time_in)} → {formatTime(s.time_out)}
+            {s.mobile && <span style={{ marginLeft: '0.5rem', fontFamily: "'JetBrains Mono', monospace" }}>· {s.mobile}</span>}
+          </p>
+        </div>
+
+        {/* Reusable Action / Filter Bar */}
+        <FilterBar style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button onClick={() => setPanelOpen(true)} className="btn-primary btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', padding: '0.45rem 0.85rem' }}>
+              <ShoppingCart size={14} /> Add Drinks / Snacks
+            </button>
+            {isActive && (
+              <button onClick={() => setPanelOpen(true)} className="btn-secondary btn-sm"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', padding: '0.45rem 0.85rem' }}>
+                <Clock size={14} /> Extend Time
+              </button>
+            )}
+          </div>
+
+          {isAdmin && (
+            <button onClick={() => setShowDelete(true)} className="btn-secondary btn-sm"
+              style={{
+                padding: '0.45rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem',
+                fontSize: '0.78rem', color: 'var(--danger)', borderColor: 'var(--danger-border)',
+                marginLeft: 'auto'
+              }}>
+              <Trash2 size={14} /> Delete Session
+            </button>
+          )}
+        </FilterBar>
       </div>
 
       <ErrorMsg error={error} />
