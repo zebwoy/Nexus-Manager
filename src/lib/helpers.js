@@ -1,10 +1,10 @@
-// Format currency in INR
+// ─── Currency ─────────────────────────────────────────────────
 export function formatRupees(amount) {
   if (amount == null) return '—'
   return `₹${Number(amount).toLocaleString('en-IN')}`
 }
 
-// Format duration from minutes
+// ─── Duration ─────────────────────────────────────────────────
 export function formatDuration(mins) {
   if (!mins) return '—'
   const h = Math.floor(mins / 60)
@@ -20,7 +20,7 @@ export const DURATION_OPTIONS = Array.from({ length: 16 }, (_, i) => {
   return { value: mins, label: formatDuration(mins) }
 })
 
-// Format time as HH:MM
+// ─── Time / Date ──────────────────────────────────────────────
 export function formatTime(dateStr) {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleTimeString('en-IN', {
@@ -28,7 +28,6 @@ export function formatTime(dateStr) {
   })
 }
 
-// Format date as DD MMM YYYY
 export function formatDate(dateStr) {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('en-IN', {
@@ -36,14 +35,17 @@ export function formatDate(dateStr) {
   })
 }
 
-// Add minutes to a date
 export function addMinutes(date, mins) {
   return new Date(new Date(date).getTime() + mins * 60000)
 }
 
-// Today's date as YYYY-MM-DD
+// Today's date as YYYY-MM-DD (local timezone, not UTC)
 export function todayISO() {
-  return new Date().toISOString().split('T')[0]
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 // Current time as HH:MM (for time inputs)
@@ -52,20 +54,50 @@ export function nowTimeInput() {
   return now.toTimeString().slice(0, 5)
 }
 
-// Combine date + time string into ISO string
-export function toISO(dateStr, timeStr) {
-  return new Date(`${dateStr}T${timeStr}`).toISOString()
+/**
+ * Combine a date string (YYYY-MM-DD) and a time string (HH:MM or HH:MM:SS)
+ * into an ISO string. If the resulting datetime is *before* a reference datetime
+ * (e.g., time_in), the date is auto-advanced by 1 day (post-midnight sessions).
+ *
+ * @param {string} dateStr  — e.g. "2025-01-15"
+ * @param {string} timeStr  — e.g. "23:45" or "00:15"
+ * @param {Date|null} reference — if provided and result < reference, adds 1 day
+ */
+export function toISO(dateStr, timeStr, reference = null) {
+  const dt = new Date(`${dateStr}T${timeStr}`)
+  if (reference && dt < new Date(reference)) {
+    // Crossed midnight — advance by one day
+    dt.setDate(dt.getDate() + 1)
+  }
+  return dt.toISOString()
 }
 
-// Validate mandatory name (First Name and Last Name required)
+// ─── Validation ───────────────────────────────────────────────
+
+/**
+ * Validate a full name (First + Last required).
+ * Used for customer lookups in sessions.
+ */
 export function validateName(name) {
-  if (!name || !name.trim()) return 'Full Name (First and Last Name) is required'
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length < 2) return 'Please enter both First Name and Last Name'
+  if (!name || !name.trim()) return 'Full Name is required'
+  // We now allow single-word names (e.g., anonymous clients)
   return null
 }
 
-// Validate 10-digit mobile number
+/**
+ * Validate a first name (at minimum one word required).
+ * Used in contexts like WalkIn Sale / Foreign Sale.
+ */
+export function validateFirstName(name) {
+  if (!name || !name.trim()) return 'Name is required'
+  return null
+}
+
+/**
+ * Validate a 10-digit mobile number.
+ * @param {string} mobile
+ * @param {boolean} required — if false, empty is allowed
+ */
 export function validateMobile(mobile, required = false) {
   if (!mobile || !mobile.trim()) {
     return required ? 'Mobile number is required' : null
@@ -74,4 +106,3 @@ export function validateMobile(mobile, required = false) {
   if (!/^\d{10}$/.test(clean)) return 'Mobile number must be exactly 10 numeric digits'
   return null
 }
-

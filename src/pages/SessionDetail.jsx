@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
 import { formatRupees, formatTime, formatDate, formatDuration, todayISO, validateName, validateMobile, toISO, addMinutes } from '../lib/helpers'
-import { PageLoader, ErrorMsg, Field, Modal, Spinner } from '../components/UI'
-import { ArrowLeft, Plus, Minus, CreditCard, Banknote, Clock, ShoppingCart, History, ChevronRight, Edit3 } from 'lucide-react'
+import { PageLoader, ErrorMsg, Field, Modal, Spinner, SlidePanel, PanelSection, ConfirmModal } from '../components/UI'
+import { ArrowLeft, Plus, Minus, CreditCard, Banknote, Clock, ShoppingCart, History, Edit3, Trash2, SlidersHorizontal } from 'lucide-react'
+import { toast } from 'react-toastify'
 
 
 // ─── Payment method toggle ────────────────────────────────────
@@ -60,12 +62,12 @@ function Countdown({ timeOut }) {
 export default function SessionDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { isAdmin } = useAuth()
 
   const [data, setData] = useState(null)
   const [inventory, setInventory] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [toast, setToast] = useState('')
 
   // Cart for adding items
   const [cart, setCart] = useState([])
@@ -81,9 +83,13 @@ export default function SessionDetail() {
   // Extension
   const [extMins, setExtMins] = useState(30)
   const [extSaving, setExtSaving] = useState(false)
-  const [extResult, setExtResult] = useState(null)
 
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  // Right slide panel
+  const [panelOpen, setPanelOpen] = useState(false)
+
+  // Delete
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -102,7 +108,7 @@ export default function SessionDetail() {
 
   // Edit details modal
   const [showEditModal, setShowEditModal] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', mobile: '', time_in: '', duration_mins: 60, remark: '' })
+  const [editForm, setEditForm] = useState({ name: '', mobile: '', time_in: '', remark: '' })
   const [editSaving, setEditSaving] = useState(false)
 
   const openEditModal = () => {
@@ -112,16 +118,13 @@ export default function SessionDetail() {
       name: s.name || '',
       mobile: s.mobile || '',
       time_in: timeInStr,
-      duration_mins: s.duration_mins || 60,
       remark: s.remark || '',
     })
     setShowEditModal(true)
   }
 
   const handleSaveEdit = async () => {
-    const nameErr = validateName(editForm.name)
-    if (nameErr) { setError(nameErr); return }
-    const mobileErr = validateMobile(editForm.mobile, true)
+    const mobileErr = validateMobile(editForm.mobile, false)
     if (mobileErr) { setError(mobileErr); return }
 
     setEditSaving(true)
@@ -135,12 +138,25 @@ export default function SessionDetail() {
         mobile: editForm.mobile,
         time_in: timeInISO,
         time_out: timeOutISO,
+        remark: editForm.remark,
       })
       setShowEditModal(false)
-      showToast('Session details updated ✓')
+      toast.success('Session details updated')
       load()
     } catch (e) { setError(e.message) }
     finally { setEditSaving(false) }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await api.delete(`/sessions?id=${id}`)
+      toast.success('Session deleted and audit recorded')
+      navigate('/sessions')
+    } catch (e) {
+      setError(e.message)
+      setShowDelete(false)
+    } finally { setDeleting(false) }
   }
 
   if (loading) return <PageLoader />
@@ -154,16 +170,15 @@ export default function SessionDetail() {
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
   const creditRemaining = Math.max(0, grandTotal - totalPaid)
 
-  // --- Compute extension preview ---
+  // Extension preview
   const currentEnd = s.time_out ? new Date(s.time_out) : new Date()
   const newEnd = addMinutes(currentEnd, extMins)
   const newEndTimeStr = newEnd.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-
   const perMinRate = Number(s.charge) / Number(s.duration_mins || 60)
   const extCharge = perMinRate * extMins
   const newOutstanding = creditRemaining + extCharge
 
-  // --- Cart helpers ---
+  // Cart helpers
   const addToCart = (item) => setCart(c => {
     const ex = c.find(i => i.id === item.id)
     if (ex) return c.map(i => i.id === item.id ? { ...i, qty: i.qty + 1 } : i)
@@ -195,7 +210,7 @@ export default function SessionDetail() {
       }
       setCart([])
       setCartPayNow(false)
-      showToast('Items added to session ✓')
+      toast.success('Cafe items added to session')
       load()
     } catch (e) { setError(e.message) }
     finally { setCartSaving(false) }
@@ -214,7 +229,7 @@ export default function SessionDetail() {
         note: null,
       })
       setCollectAmount('')
-      showToast('Payment recorded ✓')
+      toast.success('Payment recorded')
       load()
     } catch (e) { setError(e.message) }
     finally { setCollectSaving(false) }
@@ -222,14 +237,12 @@ export default function SessionDetail() {
 
   const handleExtend = async () => {
     setExtSaving(true)
-    setExtResult(null)
     try {
-      const res = await api.patch(`/sessions/${id}/extend`, {
+      await api.patch(`/sessions/${id}/extend`, {
         packets: extMins / 30,
         collect_now: 0,
       })
-      setExtResult(res)
-      showToast(`Session extended by ${extMins} mins ✓`)
+      toast.success(`Session extended by ${extMins} mins`)
       load()
     } catch (e) { setError(e.message) }
     finally { setExtSaving(false) }
@@ -249,27 +262,26 @@ export default function SessionDetail() {
 
   return (
     <div>
-      {/* Toast */}
-      {toast && (
-        <div style={{
-          position: 'fixed', top: '1.5rem', right: '1.5rem', zIndex: 100,
-          background: 'var(--success)', color: '#fff',
-          padding: '0.65rem 1.25rem', borderRadius: '12px',
-          fontWeight: 700, fontSize: '0.875rem',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
-          animation: 'slideDown 0.2s ease'
-        }}>{toast}</div>
-      )}
+      {/* Delete Confirm Modal */}
+      <ConfirmModal
+        open={showDelete}
+        onClose={() => setShowDelete(false)}
+        onConfirm={handleDelete}
+        loading={deleting}
+        title="Delete Session"
+        message={`Permanently delete session #${s.id} for ${s.name || 'Anonymous'}? This will also remove all associated cafe sales and payments. This action is audited and cannot be undone.`}
+        danger
+      />
 
       {/* Edit Details Modal */}
       <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Session Details">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-          <Field label="Customer Full Name (First & Last Name)" required>
+          <Field label="Customer Name">
             <input className="input" value={editForm.name}
-              onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="John Doe" />
+              onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="Name" />
           </Field>
 
-          <Field label="Mobile Number (10 Digits)" required>
+          <Field label="Mobile Number (optional)">
             <input className="input" value={editForm.mobile}
               onChange={e => setEditForm(f => ({ ...f, mobile: e.target.value.replace(/\D/g, '') }))} placeholder="9876543210" maxLength={10} />
           </Field>
@@ -277,6 +289,11 @@ export default function SessionDetail() {
           <Field label="Time In">
             <input type="time" className="input" value={editForm.time_in}
               onChange={e => setEditForm(f => ({ ...f, time_in: e.target.value }))} />
+          </Field>
+
+          <Field label="Remark">
+            <input className="input" value={editForm.remark}
+              onChange={e => setEditForm(f => ({ ...f, remark: e.target.value }))} placeholder="Notes..." />
           </Field>
 
           <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem', marginTop: '0.5rem' }}>
@@ -290,42 +307,173 @@ export default function SessionDetail() {
         </div>
       </Modal>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.75rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-            <button onClick={() => navigate('/sessions')} className="btn-secondary btn-sm"
-              style={{ padding: '0.3rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <ArrowLeft size={13} /> Back
-            </button>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace" }}>
-              SESSION #{s.id}
-            </span>
+      {/* ── Slide Panel ─────────────────────────────────────────── */}
+      <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Session Actions">
+        {/* Add Cafe Items */}
+        <PanelSection title="Add Cafe Items" icon={<ShoppingCart size={13} />}>
+          {/* Product grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '0.5rem' }}>
+            {inventory.filter(i => i.stock_qty > 0).map(item => {
+              const inCart = cart.find(c => c.id === item.id)
+              return (
+                <button key={item.id} onClick={() => addToCart(item)}
+                  className="card"
+                  style={{
+                    padding: '0.65rem', cursor: 'pointer', textAlign: 'left',
+                    border: inCart ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                    background: inCart ? 'var(--accent-dim)' : 'var(--bg-card)'
+                  }}>
+                  <p style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--text)', marginBottom: '0.2rem' }}>{item.name}</p>
+                  <p style={{ fontSize: '0.78rem', fontWeight: 750, fontFamily: "'JetBrains Mono', monospace", color: 'var(--accent-text)' }}>
+                    {formatRupees(item.sell_price)}
+                  </p>
+                  {inCart && (
+                    <span className="badge badge-accent" style={{ fontSize: '0.6rem', marginTop: '0.2rem' }}>×{inCart.qty}</span>
+                  )}
+                </button>
+              )
+            })}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <h1 className="page-title" style={{ marginBottom: '0.15rem' }}>
-              {s.name || 'Anonymous Client'}
-            </h1>
-            <button onClick={openEditModal} className="btn-secondary btn-sm"
-              style={{ padding: '0.25rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem' }}>
-              <Edit3 size={13} /> Edit Details
+
+          {/* Cart summary */}
+          {cart.length > 0 && (
+            <div style={{ background: 'var(--bg-input)', borderRadius: '10px', padding: '0.85rem', border: '1px solid var(--border)' }}>
+              {cart.map(item => (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 650, color: 'var(--text)' }}>{item.name}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <button onClick={() => updateCartQty(item.id, item.qty - 1)} className="btn-secondary btn-icon"
+                      style={{ width: '1.35rem', height: '1.35rem', borderRadius: '4px', padding: 0 }}><Minus size={10} /></button>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: '0.8rem', minWidth: '1rem', textAlign: 'center' }}>{item.qty}</span>
+                    <button onClick={() => updateCartQty(item.id, item.qty + 1)} className="btn-secondary btn-icon"
+                      style={{ width: '1.35rem', height: '1.35rem', borderRadius: '4px', padding: 0 }}><Plus size={10} /></button>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', color: 'var(--text-muted)', minWidth: '3rem', textAlign: 'right' }}>
+                      {formatRupees(item.sell_price * item.qty)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.6rem', display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text)' }}>Cart Total</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--accent-text)' }}>{formatRupees(cartTotal)}</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="label" style={{ marginBottom: 0 }}>Payment Status</span>
+                  <select className="input" style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}
+                    value={cartPayNow ? 'pay_now' : 'add_bill'} onChange={e => setCartPayNow(e.target.value === 'pay_now')}>
+                    <option value="add_bill">Add to Session Bill</option>
+                    <option value="pay_now">Collect Payment Now</option>
+                  </select>
+                </div>
+                {cartPayNow && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="label" style={{ marginBottom: 0 }}>Pay Method</span>
+                    <PayMethodToggle value={cartPayMethod} onChange={setCartPayMethod} />
+                  </div>
+                )}
+              </div>
+              <button onClick={handleAddItems} disabled={cartSaving} className="btn-primary" style={{ width: '100%', marginTop: '0.75rem' }}>
+                {cartSaving ? <><Spinner size="sm" /> Adding...</> : `Add to Session — ${formatRupees(cartTotal)}`}
+              </button>
+            </div>
+          )}
+        </PanelSection>
+
+        {/* Extend Session */}
+        {isActive && (
+          <PanelSection title="Extend Session" icon={<Clock size={13} />}>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button onClick={() => setExtMins(30)}
+                className={extMins === 30 ? 'btn-primary' : 'btn-secondary'}
+                style={{ flex: 1, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}>
+                + 30 Mins
+              </button>
+              <button onClick={() => setExtMins(60)}
+                className={extMins === 60 ? 'btn-primary' : 'btn-secondary'}
+                style={{ flex: 1, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}>
+                + 1 Hour
+              </button>
+            </div>
+
+            <div style={{
+              padding: '0.75rem 1rem', borderRadius: '12px',
+              background: 'var(--bg-input)', border: '1px solid var(--border)',
+              display: 'flex', flexDirection: 'column', gap: '0.5rem',
+              fontSize: '0.8125rem'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Extend Until</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--text)' }}>{newEndTimeStr}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Extension Cost</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--accent-text)' }}>{formatRupees(extCharge)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 650 }}>New Balance Due</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--danger)' }}>{formatRupees(newOutstanding)}</span>
+              </div>
+            </div>
+
+            <button onClick={handleExtend} disabled={extSaving} className="btn-primary" style={{ padding: '0.65rem 1.25rem' }}>
+              {extSaving ? <><Spinner size="sm" /> Extending...</> : `Confirm Extension`}
             </button>
-          </div>
-          <p className="page-sub">
-            {s.device_label} · {formatDate(s.date)} · {formatTime(s.time_in)} → {formatTime(s.time_out)}
-            {s.mobile && <span style={{ marginLeft: '0.5rem', fontFamily: "'JetBrains Mono', monospace" }}>· {s.mobile}</span>}
-          </p>
+          </PanelSection>
+        )}
+      </SlidePanel>
+
+      {/* ── Header ───────────────────────────────────────────────── */}
+      <div style={{ marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <button onClick={() => navigate('/sessions')} className="btn-secondary btn-sm"
+            style={{ padding: '0.3rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <ArrowLeft size={13} /> Back
+          </button>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace" }}>
+            SESSION #{s.id}
+          </span>
+          {isAdmin && (
+            <button onClick={() => setShowDelete(true)} className="btn-secondary btn-sm"
+              style={{ marginLeft: 'auto', padding: '0.3rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem',
+                fontSize: '0.75rem', color: 'var(--danger)', borderColor: 'var(--danger-border)' }}>
+              <Trash2 size={13} /> Delete
+            </button>
+          )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
-          {isActive
-            ? <><span className="badge-active-session animate-pulse">ACTIVE</span><Countdown timeOut={s.time_out} /></>
-            : <span className="badge badge-warning">COMPLETED</span>}
+
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+              <h1 className="page-title" style={{ marginBottom: 0 }}>
+                {s.name || 'Anonymous Client'}
+              </h1>
+              <button onClick={openEditModal} className="btn-secondary btn-sm"
+                style={{ padding: '0.25rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem' }}>
+                <Edit3 size={13} /> Edit
+              </button>
+            </div>
+            <p className="page-sub">
+              {s.device_label} · {formatDate(s.date)} · {formatTime(s.time_in)} → {formatTime(s.time_out)}
+              {s.mobile && <span style={{ marginLeft: '0.5rem', fontFamily: "'JetBrains Mono', monospace" }}>· {s.mobile}</span>}
+            </p>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+            {isActive
+              ? <><span className="badge-active-session animate-pulse">ACTIVE</span><Countdown timeOut={s.time_out} /></>
+              : <span className="badge badge-warning">COMPLETED</span>}
+            {/* Panel toggle button */}
+            <button onClick={() => setPanelOpen(true)} className="btn-primary btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '0.35rem 0.75rem', marginTop: '0.35rem' }}>
+              <SlidersHorizontal size={13} /> Actions
+            </button>
+          </div>
         </div>
       </div>
 
-
       <ErrorMsg error={error} />
 
+      {/* ── Two-column grid ─────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem' }}>
 
         {/* ─── LEFT COLUMN ─── */}
@@ -368,100 +516,21 @@ export default function SessionDetail() {
             </div>
           ))}
 
-          {/* Add cafe items */}
-          {sectionCard('Add Cafe Items', <ShoppingCart size={14} />, (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Product grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.5rem' }}>
-                {inventory.filter(i => i.stock_qty > 0).map(item => {
-                  const inCart = cart.find(c => c.id === item.id)
-                  return (
-                    <button key={item.id} onClick={() => addToCart(item)}
-                      className="card"
-                      style={{
-                        padding: '0.75rem', cursor: 'pointer', textAlign: 'left',
-                        border: inCart ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-                        background: inCart ? 'var(--accent-dim)' : 'var(--bg-card)'
-                      }}>
-                      <p style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text)', marginBottom: '0.25rem' }}>{item.name}</p>
-                      <p style={{ fontSize: '0.8rem', fontWeight: 750, fontFamily: "'JetBrains Mono', monospace", color: 'var(--accent-text)' }}>
-                        {formatRupees(item.sell_price)}
-                      </p>
-                      {inCart && (
-                        <span className="badge badge-accent" style={{ fontSize: '0.6rem', marginTop: '0.25rem' }}>×{inCart.qty}</span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* Cart summary */}
-              {cart.length > 0 && (
-                <div style={{ background: 'var(--bg-input)', borderRadius: '10px', padding: '0.85rem', border: '1px solid var(--border)' }}>
-                  {cart.map(item => (
-                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '0.8125rem', fontWeight: 650, color: 'var(--text)' }}>{item.name}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <button onClick={() => updateCartQty(item.id, item.qty - 1)} className="btn-secondary btn-icon"
-                          style={{ width: '1.35rem', height: '1.35rem', borderRadius: '4px', padding: 0 }}><Minus size={10} /></button>
-                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: '0.8rem', minWidth: '1rem', textAlign: 'center' }}>{item.qty}</span>
-                        <button onClick={() => updateCartQty(item.id, item.qty + 1)} className="btn-secondary btn-icon"
-                          style={{ width: '1.35rem', height: '1.35rem', borderRadius: '4px', padding: 0 }}><Plus size={10} /></button>
-                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', color: 'var(--text-muted)', minWidth: '3rem', textAlign: 'right' }}>
-                          {formatRupees(item.sell_price * item.qty)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                  <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.6rem', display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                    <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text)' }}>Cart Total</span>
-                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--accent-text)' }}>{formatRupees(cartTotal)}</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className="label" style={{ marginBottom: 0 }}>Payment Status</span>
-                      <select className="input" style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}
-                        value={cartPayNow ? 'pay_now' : 'add_bill'} onChange={e => setCartPayNow(e.target.value === 'pay_now')}>
-                        <option value="add_bill">Add to Session Bill</option>
-                        <option value="pay_now">Collect Payment Now</option>
-                      </select>
-                    </div>
-                    {cartPayNow && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className="label" style={{ marginBottom: 0 }}>Pay Method</span>
-                        <PayMethodToggle value={cartPayMethod} onChange={setCartPayMethod} />
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={handleAddItems} disabled={cartSaving} className="btn-primary" style={{ width: '100%', marginTop: '0.75rem' }}>
-                    {cartSaving ? <><Spinner size="sm" /> Adding...</> : `Add to Session — ${formatRupees(cartTotal)}`}
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* Payment history */}
-          {payments.length > 0 && sectionCard('Payment History', <History size={14} />, (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-              {payments.map((p, i) => (
-                <div key={p.id} style={{
+          {/* Players section (if console) */}
+          {players.length > 0 && sectionCard('Player Allocations', '👥', (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              {players.map((p, i) => (
+                <div key={i} style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '0.55rem 0.75rem', borderRadius: '8px',
+                  padding: '0.5rem 0.75rem', borderRadius: '8px',
                   background: i % 2 === 0 ? 'var(--bg-input)' : 'transparent',
                   fontSize: '0.8125rem'
                 }}>
-                  <div>
-                    <span style={{ fontWeight: 650, color: 'var(--text)' }}>{formatRupees(p.amount)}</span>
-                    <span className={`badge ${p.payment_method === 'cash' ? 'badge-accent' : 'badge-warning'}`}
-                      style={{ fontSize: '0.6rem', marginLeft: '0.5rem' }}>
-                      {p.payment_method}
-                    </span>
-                    {p.note && <span style={{ color: 'var(--text-faint)', marginLeft: '0.5rem' }}>— {p.note}</span>}
+                  <span style={{ fontWeight: 650, color: 'var(--text)' }}>Player {p.player_number}</span>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    {!p.own_controller && <span className="badge badge-accent" style={{ fontSize: '0.65rem' }}>Rented controller</span>}
+                    {Number(p.extra_person_fee) > 0 && <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>Extra seat</span>}
                   </div>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontFamily: "'JetBrains Mono', monospace" }}>
-                    {formatTime(p.created_at)}
-                  </span>
                 </div>
               ))}
             </div>
@@ -502,62 +571,35 @@ export default function SessionDetail() {
             </div>
           ))}
 
-          {/* Extend session */}
-          {isActive && sectionCard('Extend Session', <Clock size={14} />, (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => setExtMins(30)}
-                  className={extMins === 30 ? 'btn-primary' : 'btn-secondary'}
-                  style={{ flex: 1, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}>
-                  + 30 Mins
-                </button>
-                <button onClick={() => setExtMins(60)}
-                  className={extMins === 60 ? 'btn-primary' : 'btn-secondary'}
-                  style={{ flex: 1, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}>
-                  + 1 Hour
-                </button>
-              </div>
-
-              <div style={{
-                padding: '0.75rem 1rem', borderRadius: '12px',
-                background: 'var(--bg-input)', border: '1px solid var(--border)',
-                display: 'flex', flexDirection: 'column', gap: '0.5rem',
-                fontSize: '0.8125rem'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Extend Until</span>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--text)' }}>
-                    {newEndTimeStr}
+          {/* Payment history — right column */}
+          {payments.length > 0 && sectionCard('Payment History', <History size={14} />, (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              {payments.map((p, i) => (
+                <div key={p.id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '0.55rem 0.75rem', borderRadius: '8px',
+                  background: i % 2 === 0 ? 'var(--bg-input)' : 'transparent',
+                  fontSize: '0.8125rem'
+                }}>
+                  <div>
+                    <span style={{ fontWeight: 650, color: 'var(--text)' }}>{formatRupees(p.amount)}</span>
+                    <span className={`badge ${p.payment_method === 'cash' ? 'badge-accent' : 'badge-warning'}`}
+                      style={{ fontSize: '0.6rem', marginLeft: '0.5rem' }}>
+                      {p.payment_method}
+                    </span>
+                    {p.note && <span style={{ color: 'var(--text-faint)', marginLeft: '0.5rem' }}>— {p.note}</span>}
+                  </div>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontFamily: "'JetBrains Mono', monospace" }}>
+                    {formatTime(p.created_at)}
                   </span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Extension Cost</span>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--accent-text)' }}>
-                    {formatRupees(extCharge)}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 650 }}>New Balance Due</span>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--danger)' }}>
-                    {formatRupees(newOutstanding)}
-                  </span>
-                </div>
-              </div>
-
-              <button onClick={handleExtend} disabled={extSaving} className="btn-primary"
-                style={{ padding: '0.65rem 1.25rem' }}>
-                {extSaving ? <><Spinner size="sm" /> Extending...</> : `Confirm Extension`}
-              </button>
+              ))}
             </div>
           ))}
         </div>
       </div>
 
       <style>{`
-        @keyframes slideDown {
-          from { opacity: 0; transform: translateY(-12px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }

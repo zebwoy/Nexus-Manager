@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
-import { formatRupees, formatDate, todayISO, validateName, validateMobile } from '../lib/helpers'
-import { PageLoader, EmptyState, ErrorMsg, Field, Modal, TrialWarningModal } from '../components/UI'
-import { Plus, Trash2, ShoppingBag } from 'lucide-react'
+import { formatRupees, formatDate, formatTime, todayISO, validateName, validateMobile, validateFirstName } from '../lib/helpers'
+import { PageLoader, EmptyState, ErrorMsg, Field, Modal, TrialWarningModal, ConfirmModal, Spinner, Tabs } from '../components/UI'
+import { Plus, Trash2, ShoppingBag, Edit3, RefreshCw, TrendingUp, Percent, Banknote } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { toast } from 'react-toastify'
 
@@ -12,10 +12,14 @@ import { toast } from 'react-toastify'
 export function Inventory() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin' || user?.username === 'trial'
+  const isRealAdmin = user?.role === 'admin' && user?.username !== 'trial'
 
+  const [tab, setTab] = useState('stock')
   const [items, setItems] = useState([])
+  const [sales, setSales] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [dateFilter, setDateFilter] = useState(todayISO())
   
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ name: '', category: 'Drinks', buy_price: '', sell_price: '', stock_qty: '' })
@@ -28,7 +32,13 @@ export function Inventory() {
   const [saving, setSaving] = useState(false)
   const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
 
-  useEffect(() => { load() }, [])
+  // Sales edit & delete state
+  const [editSale, setEditSale] = useState(null)
+  const [editSaleSaving, setEditSaleSaving] = useState(false)
+  const [deleteSaleId, setDeleteSaleId] = useState(null)
+  const [deleteSaleSaving, setDeleteSaleSaving] = useState(false)
+
+  useEffect(() => { load() }, [tab, dateFilter])
   useEffect(() => {
     const handleClose = () => setActivePopover(null)
     window.addEventListener('click', handleClose)
@@ -36,7 +46,16 @@ export function Inventory() {
   }, [])
 
   const load = async () => {
-    try { setLoading(true); const d = await api.get('/inventory'); setItems(d.items || []) }
+    try {
+      setLoading(true)
+      if (tab === 'stock') {
+        const d = await api.get('/inventory')
+        setItems(d.items || [])
+      } else {
+        const d = await api.get(`/sales${dateFilter ? `?date=${dateFilter}` : ''}`)
+        setSales(d.sales || [])
+      }
+    }
     catch (err) { setError(err.message) } finally { setLoading(false) }
   }
 
@@ -113,15 +132,93 @@ export function Inventory() {
     }
   }
 
+  // Sales edit & delete handlers
+  const handleEditSale = async () => {
+    if (!editSale) return
+    setEditSaleSaving(true)
+    try {
+      await api.patch(`/sales/${editSale.id}`, {
+        date: editSale.date,
+        total: Number(editSale.total),
+        payment_received: Number(editSale.payment_received),
+        payment_method: editSale.payment_method,
+      })
+      toast.success('Sale record updated')
+      setEditSale(null)
+      load()
+    } catch (e) { setError(e.message) }
+    finally { setEditSaleSaving(false) }
+  }
+
+  const handleDeleteSale = async () => {
+    if (!deleteSaleId) return
+    setDeleteSaleSaving(true)
+    try {
+      await api.delete(`/sales/${deleteSaleId}`)
+      toast.success('Walk-in sale deleted, stock restored, and audit recorded')
+      setDeleteSaleId(null)
+      load()
+    } catch (e) { setError(e.message); setDeleteSaleId(null) }
+    finally { setDeleteSaleSaving(false) }
+  }
+
   const CATEGORIES = ['Drinks', 'Snacks', 'Other']
 
   return (
     <div>
       <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => setTrialModal({ isOpen: false, action: '' })} />
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+
+      {/* Edit Sale Modal */}
+      <Modal open={!!editSale} onClose={() => setEditSale(null)} title="Edit Walk-in Sale Record">
+        {editSale && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+            <Field label="Sale Date">
+              <input type="date" className="input" value={editSale.date || ''}
+                onChange={e => setEditSale(s => ({ ...s, date: e.target.value }))} />
+            </Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <Field label="Total Amount (₹)">
+                <input type="number" className="input" value={editSale.total || ''}
+                  onChange={e => setEditSale(s => ({ ...s, total: e.target.value }))} />
+              </Field>
+              <Field label="Payment Received (₹)">
+                <input type="number" className="input" value={editSale.payment_received || ''}
+                  onChange={e => setEditSale(s => ({ ...s, payment_received: e.target.value }))} />
+              </Field>
+            </div>
+            <Field label="Payment Method">
+              <select className="input" value={editSale.payment_method || 'cash'}
+                onChange={e => setEditSale(s => ({ ...s, payment_method: e.target.value }))}>
+                <option value="cash">Cash</option>
+                <option value="online">Online / UPI</option>
+                <option value="credit">Credit / Due</option>
+              </select>
+            </Field>
+            <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
+              <button onClick={handleEditSale} disabled={editSaleSaving} className="btn-primary" style={{ flex: 1 }}>
+                {editSaleSaving ? <><Spinner size="sm" /> Saving...</> : 'Save Changes'}
+              </button>
+              <button onClick={() => setEditSale(null)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Delete Sale Confirm Modal */}
+      <ConfirmModal
+        open={!!deleteSaleId}
+        onClose={() => setDeleteSaleId(null)}
+        onConfirm={handleDeleteSale}
+        loading={deleteSaleSaving}
+        title="Delete Walk-in Sale"
+        message="Permanently delete this walk-in sale? Item stock quantities will be restored to inventory automatically. This action is audited."
+        danger
+      />
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="page-title">Cafeteria</h1>
-          <p className="page-sub">Refreshment drinks, snacks, and cafeteria stock levels</p>
+          <p className="page-sub">Refreshment drinks, snacks, inventory stock, and walk-in sales logs</p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <Link to="/inventory/sell" className="btn-secondary" style={{ padding: '0.6rem 1.25rem' }}><ShoppingBag size={15} />Foreign Sale</Link>
@@ -129,94 +226,188 @@ export function Inventory() {
         </div>
       </div>
       
+      <Tabs
+        tabs={[
+          { key: 'stock', label: '📦 Stock Catalog' },
+          { key: 'sales', label: '🛍️ Walk-in Sales Log' },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
+
       <ErrorMsg error={error} />
       
-      {loading ? <PageLoader /> : items.length === 0 ? (
-        <EmptyState title="No Cafeteria Stock" description="Log products to track cafeteria inventory and calculate accurate profits."
-          action={<button onClick={() => setShowAdd(true)} className="btn-primary">Add Item</button>} />
-      ) : (
-        <div className="card-flush" style={{ overflowX: 'auto', overflowY: 'visible' }}>
-          <table className="tbl" style={{ overflow: 'visible' }}>
-            <thead>
-              <tr>
-                {['Item name', 'Category', 'Unit Cost', 'Retail Price', 'Stock Level', 'Terminal Status'].map(h => (
-                  <th key={h}>{h}</th>
-                ))}
-                {isAdmin && <th>Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item, idx) => (
-                <tr key={item.id} style={{ background: idx % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent' }}>
-                  <td className="table-cell" style={{ fontWeight: 700 }}>{item.name}</td>
-                  <td className="table-cell"><span className="badge badge-neutral">{item.category}</span></td>
-                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(item.buy_price)}</td>
-                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 650 }}>{formatRupees(item.sell_price)}</td>
-                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{item.stock_qty}</td>
-                  <td className="table-cell">
-                    {item.stock_qty <= 0
-                      ? <span className="badge badge-danger">Depleted</span>
-                      : item.stock_qty <= 5
-                        ? <span className="badge badge-warning">Low Stock</span>
-                        : <span className="badge badge-success">In Stock</span>}
-                  </td>
-                  {isAdmin && (
-                    <td className="table-cell" style={{ position: 'relative', overflow: 'visible' }}>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActivePopover(activePopover === item.id ? null : item.id)
-                        }}
-                        className="btn-secondary btn-sm"
-                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.725rem' }}
-                      >
-                        ⚙️ Manage
-                      </button>
-                      
-                      {activePopover === item.id && (
-                        <div style={{
-                          position: 'absolute', right: '10px', top: '100%', zIndex: 1000,
-                          background: 'var(--bg-elevated)', border: '1.5px solid var(--border)',
-                          borderRadius: '8px', padding: '0.5rem', minWidth: '120px',
-                          display: 'flex', flexDirection: 'column', gap: '0.25rem',
-                          boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-                        }}>
-                          <button 
-                            onClick={() => {
-                              setEditItem(item)
-                              setEditForm({
-                                name: item.name,
-                                category: item.category,
-                                buy_price: item.buy_price,
-                                sell_price: item.sell_price,
-                                stock_qty: item.stock_qty
-                              })
-                              setShowEdit(true)
-                              setActivePopover(null)
-                            }}
-                            className="btn-secondary btn-sm"
-                            style={{ width: '100%', textAlign: 'left', padding: '0.35rem 0.5rem', fontSize: '0.725rem' }}
-                          >
-                            ✏️ Edit Details
-                          </button>
-                          <button 
-                            onClick={() => {
-                              handleDelete(item)
-                              setActivePopover(null)
-                            }}
-                            className="btn-danger btn-sm"
-                            style={{ width: '100%', textAlign: 'left', padding: '0.35rem 0.5rem', fontSize: '0.725rem' }}
-                          >
-                            🗑️ Delete Item
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  )}
+      {/* TAB 1: STOCK CATALOG */}
+      {tab === 'stock' && (
+        loading ? <PageLoader /> : items.length === 0 ? (
+          <EmptyState title="No Cafeteria Stock" description="Log products to track cafeteria inventory and calculate accurate profits."
+            action={<button onClick={() => setShowAdd(true)} className="btn-primary">Add Item</button>} />
+        ) : (
+          <div className="card-flush" style={{ overflowX: 'auto', overflowY: 'visible' }}>
+            <table className="tbl" style={{ overflow: 'visible' }}>
+              <thead>
+                <tr>
+                  {['Item name', 'Category', 'Unit Cost', 'Retail Price', 'Stock Level', 'Terminal Status'].map(h => (
+                    <th key={h}>{h}</th>
+                  ))}
+                  {isAdmin && <th>Actions</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {items.map((item, idx) => (
+                  <tr key={item.id} style={{ background: idx % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent' }}>
+                    <td className="table-cell" style={{ fontWeight: 700 }}>{item.name}</td>
+                    <td className="table-cell"><span className="badge badge-neutral">{item.category}</span></td>
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(item.buy_price)}</td>
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 650 }}>{formatRupees(item.sell_price)}</td>
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{item.stock_qty}</td>
+                    <td className="table-cell">
+                      {item.stock_qty <= 0
+                        ? <span className="badge badge-danger">Depleted</span>
+                        : item.stock_qty <= 5
+                          ? <span className="badge badge-warning">Low Stock</span>
+                          : <span className="badge badge-success">In Stock</span>}
+                    </td>
+                    {isAdmin && (
+                      <td className="table-cell" style={{ position: 'relative', overflow: 'visible' }}>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePopover(activePopover === item.id ? null : item.id)
+                          }}
+                          className="btn-secondary btn-sm"
+                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.725rem' }}
+                        >
+                          ⚙️ Manage
+                        </button>
+                        
+                        {activePopover === item.id && (
+                          <div style={{
+                            position: 'absolute', right: '10px', top: '100%', zIndex: 1000,
+                            background: 'var(--bg-elevated)', border: '1.5px solid var(--border)',
+                            borderRadius: '8px', padding: '0.5rem', minWidth: '120px',
+                            display: 'flex', flexDirection: 'column', gap: '0.25rem',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                          }}>
+                            <button 
+                              onClick={() => {
+                                setEditItem(item)
+                                setEditForm({
+                                  name: item.name,
+                                  category: item.category,
+                                  buy_price: item.buy_price,
+                                  sell_price: item.sell_price,
+                                  stock_qty: item.stock_qty
+                                })
+                                setShowEdit(true)
+                                setActivePopover(null)
+                              }}
+                              className="btn-secondary btn-sm"
+                              style={{ width: '100%', textAlign: 'left', padding: '0.35rem 0.5rem', fontSize: '0.725rem' }}
+                            >
+                              ✏️ Edit Details
+                            </button>
+                            <button 
+                              onClick={() => {
+                                handleDelete(item)
+                                setActivePopover(null)
+                              }}
+                              className="btn-danger btn-sm"
+                              style={{ width: '100%', textAlign: 'left', padding: '0.35rem 0.5rem', fontSize: '0.725rem' }}
+                            >
+                              🗑️ Delete Item
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
+
+      {/* TAB 2: WALK-IN SALES LOG */}
+      {tab === 'sales' && (
+        <div>
+          <div className="card" style={{
+            display: 'flex', alignItems: 'center', gap: '0.75rem',
+            padding: '0.85rem 1.25rem', marginBottom: '1.25rem'
+          }}>
+            <label className="label" style={{ marginBottom: 0 }}>Filter Date</label>
+            <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="input" style={{ width: 'auto', padding: '0.45rem 0.75rem' }} />
+            <button onClick={() => setDateFilter('')} className="btn-secondary btn-sm" style={{ padding: '0.45rem 0.75rem' }}>Show All Dates</button>
+          </div>
+
+          {loading ? <PageLoader /> : sales.length === 0 ? (
+            <EmptyState icon="🛍️" title="No Walk-in Sales" description="No foreign cafeteria sales logged for the selected period."
+              action={<Link to="/inventory/sell" className="btn-primary">New Foreign Sale</Link>} />
+          ) : (
+            <div className="card-flush" style={{ overflowX: 'auto' }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    {['#', 'Client Name', 'Items Purchased', 'Total', 'Payment', 'Date / Time', 'Operator', ...(isRealAdmin ? ['Actions'] : [])].map(h => (
+                      <th key={h}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sales.map((sa, idx) => {
+                    const itemSummary = (sa.items || []).filter(i => i.name).map(i => `${i.name} ×${i.qty}`).join(', ')
+                    const isFullyPaid = Number(sa.payment_received || sa.total) >= Number(sa.total)
+                    return (
+                      <tr key={sa.id} style={{ background: idx % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent' }}>
+                        <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.725rem', color: 'var(--text-faint)' }}>#{sa.id}</td>
+                        <td className="table-cell" style={{ fontWeight: 700 }}>
+                          {sa.customer_name || 'Walk-in Client'}
+                          {sa.shop_name && <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginLeft: '0.35rem' }}>({sa.shop_name})</span>}
+                        </td>
+                        <td className="table-cell" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '220px' }}>
+                          {itemSummary || 'Cafeteria items'}
+                        </td>
+                        <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 750, color: 'var(--text)' }}>
+                          {formatRupees(sa.total)}
+                        </td>
+                        <td className="table-cell">
+                          <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                            <span className={`badge ${sa.payment_method === 'cash' ? 'badge-accent' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
+                              {sa.payment_method}
+                            </span>
+                            {isFullyPaid
+                              ? <span className="badge badge-success" style={{ fontSize: '0.6rem' }}>Paid</span>
+                              : <span className="badge badge-danger" style={{ fontSize: '0.6rem' }}>Due: {formatRupees(Number(sa.total) - Number(sa.payment_received || 0))}</span>}
+                          </div>
+                        </td>
+                        <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.725rem', color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>
+                          {formatDate(sa.date || sa.created_at)} {formatTime(sa.created_at)}
+                        </td>
+                        <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontWeight: 600 }}>
+                          @{sa.created_by_username || 'system'}
+                        </td>
+                        {isRealAdmin && (
+                          <td className="table-cell">
+                            <div style={{ display: 'flex', gap: '0.35rem' }}>
+                              <button onClick={() => setEditSale({ ...sa })} className="btn-secondary btn-sm"
+                                style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem' }}>
+                                <Edit3 size={11} /> Edit
+                              </button>
+                              <button onClick={() => setDeleteSaleId(sa.id)} className="btn-secondary btn-sm"
+                                style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: 'var(--danger)', borderColor: 'var(--danger-border)' }}>
+                                <Trash2 size={11} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -337,7 +528,7 @@ export function WalkInSale() {
     if (cart.length === 0) { setError('Cart is empty'); return }
     
     if (customer.name) {
-      const nameErr = validateName(customer.name)
+      const nameErr = validateFirstName(customer.name)
       if (nameErr) { setError(nameErr); return }
     }
     const mobileErr = validateMobile(customer.mobile)
@@ -413,7 +604,7 @@ export function WalkInSale() {
               <p style={{ fontSize: '0.75rem', fontWeight: 750, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Foreign Client Identity
               </p>
-              <Field label="Person Full Name (First & Last Name)">
+              <Field label="Client Name (First Name required)">
                 <div style={{ position: 'relative' }}>
                   <input className="input" placeholder="e.g. Rahul Sharma" value={customer.name} onChange={e => handleNameChange(e.target.value)} />
                   {customerSuggestions.length > 0 && (
@@ -507,10 +698,20 @@ export function WalkInSale() {
 
 // ─── RECHARGES ────────────────────────────────────────────────
 export function Recharges() {
+  const { isAdmin, user } = useAuth()
+  const isTrial = user?.username === 'trial'
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dateFilter, setDateFilter] = useState(todayISO())
+
+  // Edit state
+  const [editItem, setEditItem] = useState(null)
+  const [editSaving, setEditSaving] = useState(false)
+
+  // Delete state
+  const [deleteId, setDeleteId] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { load() }, [dateFilter])
   
@@ -519,8 +720,98 @@ export function Recharges() {
     catch (err) { setError(err.message) } finally { setLoading(false) }
   }
 
+  const handleEdit = async () => {
+    if (!editItem) return
+    setEditSaving(true)
+    try {
+      await api.patch(`/recharges/${editItem.id}`, {
+        game_platform: editItem.game_platform,
+        cost_price: Number(editItem.cost_price),
+        charge_price: Number(editItem.charge_price),
+        payment_received: editItem.payment_received ? Number(editItem.payment_received) : null,
+        note: editItem.note,
+        date: editItem.date,
+      })
+      toast.success('Recharge updated')
+      setEditItem(null)
+      load()
+    } catch (e) { setError(e.message) }
+    finally { setEditSaving(false) }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await api.delete(`/recharges/${deleteId}`)
+      toast.success('Recharge deleted and audit recorded')
+      setDeleteId(null)
+      load()
+    } catch (e) { setError(e.message); setDeleteId(null) }
+    finally { setDeleting(false) }
+  }
+
   return (
     <div>
+      {/* Edit Modal */}
+      <Modal open={!!editItem} onClose={() => setEditItem(null)} title="Edit Recharge">
+        {editItem && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+            <Field label="Platform">
+              <input className="input" value={editItem.game_platform || ''}
+                onChange={e => setEditItem(p => ({ ...p, game_platform: e.target.value }))} />
+            </Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <Field label="Cost Price (₹)">
+                <input type="number" className="input" value={editItem.cost_price || ''}
+                  onChange={e => setEditItem(p => ({ ...p, cost_price: e.target.value }))} />
+              </Field>
+              <Field label="Charge Price (₹)">
+                <input type="number" className="input" value={editItem.charge_price || ''}
+                  onChange={e => setEditItem(p => ({ ...p, charge_price: e.target.value }))} />
+              </Field>
+            </div>
+            {/* Smart margin preview */}
+            {editItem.cost_price && editItem.charge_price && (() => {
+              const m = Number(editItem.charge_price) - Number(editItem.cost_price)
+              const pct = (m / Number(editItem.cost_price) * 100).toFixed(1)
+              return (
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <span className={`badge ${m >= 0 ? 'badge-success' : 'badge-danger'}`}>
+                    {m >= 0 ? '+' : ''}{formatRupees(m)}
+                  </span>
+                  <span className="badge badge-accent">{pct}% margin</span>
+                </div>
+              )
+            })()}
+            <Field label="Payment Received (₹)">
+              <input type="number" className="input" value={editItem.payment_received || ''}
+                onChange={e => setEditItem(p => ({ ...p, payment_received: e.target.value }))} />
+            </Field>
+            <Field label="Note">
+              <input className="input" value={editItem.note || ''}
+                onChange={e => setEditItem(p => ({ ...p, note: e.target.value }))} />
+            </Field>
+            <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
+              <button onClick={handleEdit} disabled={editSaving} className="btn-primary" style={{ flex: 1 }}>
+                {editSaving ? <><Spinner size="sm" /> Saving...</> : 'Save Changes'}
+              </button>
+              <button onClick={() => setEditItem(null)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Delete Confirm */}
+      <ConfirmModal
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+        loading={deleting}
+        title="Delete Recharge"
+        message="Permanently delete this recharge entry? This action is audited."
+        danger
+      />
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="page-title">Platform Recharges</h1>
@@ -547,7 +838,7 @@ export function Recharges() {
           <table className="tbl">
             <thead>
               <tr>
-                {['Client Profile', 'Game Platform', 'System Cost', 'Amount Charged', 'Net Profit', 'Cash Received', 'System Note', 'Operator'].map(h => (
+                {['Client Profile', 'Game Platform', 'System Cost', 'Amount Charged', 'Net Profit', 'Cash Received', 'System Note', 'Operator', ...(isAdmin && !isTrial ? ['Actions'] : [])].map(h => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -567,6 +858,20 @@ export function Recharges() {
                   <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{r.payment_received != null ? formatRupees(r.payment_received) : '—'}</td>
                   <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{r.note || '—'}</td>
                   <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontWeight: 600 }}>@{r.created_by_username || 'system'}</td>
+                  {isAdmin && !isTrial && (
+                    <td className="table-cell">
+                      <div style={{ display: 'flex', gap: '0.35rem' }}>
+                        <button onClick={() => setEditItem({ ...r })} className="btn-secondary btn-sm"
+                          style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem' }}>
+                          <Edit3 size={11} /> Edit
+                        </button>
+                        <button onClick={() => setDeleteId(r.id)} className="btn-secondary btn-sm"
+                          style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: 'var(--danger)', borderColor: 'var(--danger-border)' }}>
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -581,12 +886,27 @@ export function NewRecharge() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [form, setForm] = useState({ name: '', mobile: '', customer_id: null, game_platform: '', cost_price: '', charge_price: '', payment_received: '', note: '', date: todayISO() })
+  const [platforms, setPlatforms] = useState([])
+  const [customPlatform, setCustomPlatform] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [customerSuggestions, setCustomerSuggestions] = useState([])
   const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
-  const margin = form.cost_price && form.charge_price ? Number(form.charge_price) - Number(form.cost_price) : null
+
+  useEffect(() => {
+    api.get('/platforms').then(d => {
+      setPlatforms(d.platforms || [])
+      if (d.platforms?.length > 0) {
+        f('game_platform', d.platforms[0].name)
+      }
+    }).catch(() => {})
+  }, [])
+
+  const cost = Number(form.cost_price || 0)
+  const charge = Number(form.charge_price || 0)
+  const margin = form.cost_price !== '' && form.charge_price !== '' ? charge - cost : null
+  const marginPct = cost > 0 && margin !== null ? ((margin / cost) * 100).toFixed(1) : null
 
   const handleNameChange = async (val) => {
     f('name', val)
@@ -598,7 +918,7 @@ export function NewRecharge() {
 
   const handleSubmit = async () => {
     if (form.name) {
-      const nameErr = validateName(form.name)
+      const nameErr = validateFirstName(form.name)
       if (nameErr) { setError(nameErr); return }
     }
     const mobileErr = validateMobile(form.mobile)
@@ -650,8 +970,21 @@ export function NewRecharge() {
               )}
             </div>
           </Field>
+
           <Field label="Recharge Platform">
-            <input className="input" placeholder="e.g. BGMI, Steam, EA Play" value={form.game_platform} onChange={e => f('game_platform', e.target.value)} />
+            {!customPlatform && platforms.length > 0 ? (
+              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                <select className="input" style={{ flex: 1 }} value={form.game_platform} onChange={e => {
+                  if (e.target.value === '__custom__') setCustomPlatform(true)
+                  else f('game_platform', e.target.value)
+                }}>
+                  {platforms.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  <option value="__custom__">+ Other Custom Platform</option>
+                </select>
+              </div>
+            ) : (
+              <input className="input" placeholder="e.g. Steam, EA Play..." value={form.game_platform} onChange={e => f('game_platform', e.target.value)} />
+            )}
           </Field>
         </div>
         
@@ -664,11 +997,29 @@ export function NewRecharge() {
           </Field>
         </div>
 
+        {/* Smart Margin Calculator Card */}
         {margin !== null && (
-          <div style={{ display: 'flex' }}>
-            <span className={`badge ${margin >= 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '0.85rem', padding: '0.4rem 0.75rem', fontFamily: "'JetBrains Mono', monospace" }}>
-              Net Platform Margin: {formatRupees(margin)}
-            </span>
+          <div style={{
+            padding: '0.85rem 1.15rem', borderRadius: '12px',
+            background: margin >= 0 ? 'rgba(var(--success-rgb, 34,197,94), 0.08)' : 'rgba(var(--danger-rgb, 239,68,68), 0.08)',
+            border: `1px solid ${margin >= 0 ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+          }}>
+            <div>
+              <p style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
+                ⚡ Smart Margin Calculator
+              </p>
+              <p style={{ fontSize: '1.1rem', fontWeight: 800, color: margin >= 0 ? 'var(--success)' : 'var(--danger)', fontFamily: "'JetBrains Mono', monospace", marginTop: '0.15rem' }}>
+                {margin >= 0 ? '+' : ''}{formatRupees(margin)}
+              </p>
+            </div>
+            {marginPct !== null && (
+              <div style={{ textAlign: 'right' }}>
+                <span className={`badge ${margin >= 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem', fontFamily: "'JetBrains Mono', monospace" }}>
+                  {marginPct}% margin
+                </span>
+              </div>
+            )}
           </div>
         )}
         
@@ -687,7 +1038,7 @@ export function NewRecharge() {
         
         <div style={{ display: 'flex', gap: '0.85rem', marginTop: '0.5rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
           <button onClick={handleSubmit} disabled={loading} className="btn-primary" style={{ padding: '0.65rem 1.35rem' }}>
-            {loading ? 'Logging RC...' : 'Log Recharge Entry'}
+            {loading ? <><Spinner size="sm" /> Logging RC...</> : 'Log Recharge Entry'}
           </button>
           <button onClick={() => navigate('/recharges')} className="btn-secondary" style={{ padding: '0.65rem 1.35rem' }}>Abort Command</button>
         </div>
@@ -1208,6 +1559,7 @@ export function Settings() {
 
   const [users, setUsers] = useState([])
   const [settings, setSettings] = useState([])
+  const [platforms, setPlatforms] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showAddUser, setShowAddUser] = useState(false)
@@ -1218,21 +1570,25 @@ export function Settings() {
   const [resettingUser, setResettingUser] = useState(null)
   const [newPin, setNewPin] = useState('')
   const [resetSaving, setResetSaving] = useState(false)
-  const [auditData, setAuditData] = useState({ logs: [], sessions: [] })
   const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
+
+  // Platform management state
+  const [showAddPlatform, setShowAddPlatform] = useState(false)
+  const [newPlatform, setNewPlatform] = useState({ name: '', description: '' })
+  const [platformSaving, setPlatformSaving] = useState(false)
 
   useEffect(() => { load() }, [])
   const load = async () => {
     try {
       setLoading(true)
-      const [u, s] = await Promise.all([api.get('/users'), api.get('/settings')])
+      const [u, s, p] = await Promise.all([
+        api.get('/users'),
+        api.get('/settings'),
+        api.get('/platforms'),
+      ])
       setUsers(u.users || [])
       setSettings(s.settings || [])
-      // Only real admins (not trial) can see audit logs
-      if (isRealAdmin) {
-        const audit = await api.get('/auth?action=audit')
-        setAuditData(audit || { logs: [], sessions: [] })
-      }
+      setPlatforms(p.platforms || [])
     }
     catch (err) { setError(err.message) } finally { setLoading(false) }
   }
@@ -1272,12 +1628,32 @@ export function Settings() {
     }
   }
 
+  const handleAddPlatform = async () => {
+    if (!newPlatform.name?.trim()) { setError('Platform name is required'); return }
+    setPlatformSaving(true)
+    try {
+      await api.post('/platforms', newPlatform)
+      setShowAddPlatform(false)
+      setNewPlatform({ name: '', description: '' })
+      toast.success('Recharge platform added')
+      load()
+    } catch (e) { setError(e.message) }
+    finally { setPlatformSaving(false) }
+  }
+
+  const handleDeletePlatform = async (pId) => {
+    try {
+      await api.delete(`/platforms?id=${pId}`)
+      toast.success('Platform removed')
+      load()
+    } catch (e) { setError(e.message) }
+  }
+
   const handleSettingChange = (key, value) => {
     setSettings(s => s.map(r => r.key === key ? { ...r, value } : r))
   }
 
   const saveSettings = async () => {
-    // For trial: show the popover immediately without updating the DB or showing a success msg
     if (isTrial) {
       setTrialModal({ isOpen: true, action: 'Modify System Settings' })
       return
@@ -1318,7 +1694,7 @@ export function Settings() {
       <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => setTrialModal({ isOpen: false, action: '' })} />
       <div style={{ marginBottom: '2rem' }}>
         <h1 className="page-title">Settings Console</h1>
-        <p className="page-sub">Manage system variables and staff directory</p>
+        <p className="page-sub">Manage system variables, platforms, and staff directory</p>
       </div>
       
       <ErrorMsg error={error} />
@@ -1359,7 +1735,6 @@ export function Settings() {
                     </p>
                   </div>
                 </div>
-                {/* Reset PIN: for trial, immediately show trial popover — no modal */}
                 <button
                   onClick={() => {
                     if (isTrial) { setTrialModal({ isOpen: true, action: 'Reset Security PIN' }); return }
@@ -1404,82 +1779,37 @@ export function Settings() {
         </div>
       </div>
 
-      {/* Security & Audit Trail — REAL admins only, trial excluded */}
-      {isRealAdmin && (
-        <div className="card" style={{ marginBottom: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <p style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
-            🔒 Security & Audit Trail
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {/* Login Sessions */}
-            <div>
-              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)', marginBottom: '0.65rem' }}>Operator Login Sessions</p>
-              {auditData.sessions?.length === 0 ? (
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No operator sessions logged.</p>
-              ) : (
-                <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px' }}>
-                  <table className="tbl" style={{ fontSize: '0.75rem' }}>
-                    <thead>
-                      <tr>
-                        <th>Operator</th>
-                        <th>Logged In</th>
-                        <th>Logged Out</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {auditData.sessions?.map(sess => (
-                        <tr key={sess.id}>
-                          <td style={{ fontWeight: 700, color: 'var(--text)' }}>@{sess.username}</td>
-                          <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-muted)' }}>{new Date(sess.login_at).toLocaleString('en-IN')}</td>
-                          <td style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                            {sess.logout_at ? new Date(sess.logout_at).toLocaleString('en-IN') : (
-                              <span className="badge-active-session animate-pulse" style={{ fontSize: '0.65rem' }}>ACTIVE NOW</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Audit Logs */}
-            <div>
-              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)', marginBottom: '0.65rem' }}>Critical System Audit Logs</p>
-              {auditData.logs?.length === 0 ? (
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No audit events logged.</p>
-              ) : (
-                <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px' }}>
-                  <table className="tbl" style={{ fontSize: '0.75rem' }}>
-                    <thead>
-                      <tr>
-                        <th>User</th>
-                        <th>Action</th>
-                        <th>Details</th>
-                        <th>Timestamp</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {auditData.logs?.map(log => (
-                        <tr key={log.id}>
-                          <td style={{ fontWeight: 700, color: 'var(--text)' }}>@{log.username || 'system'}</td>
-                          <td>
-                            <span className="badge badge-accent" style={{ fontSize: '0.6rem' }}>{log.action}</span>
-                          </td>
-                          <td style={{ color: 'var(--text-muted)', fontSize: '0.725rem' }}>{log.details}</td>
-                          <td style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.7rem', color: 'var(--text-faint)' }}>{new Date(log.created_at).toLocaleString('en-IN')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
+      {/* Recharge Platforms Master Panel */}
+      <div className="card" style={{ marginBottom: '1.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
+          <p style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>🎮 Recharge Platforms Master</p>
+          <button onClick={() => setShowAddPlatform(true)} className="btn-primary btn-sm">+ Add Platform</button>
         </div>
-      )}
+
+        {platforms.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '1rem 0' }}>No platforms registered</p>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            {platforms.map(p => (
+              <div key={p.id} style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                padding: '0.45rem 0.75rem', borderRadius: '8px',
+                background: 'var(--bg-input)', border: '1px solid var(--border)',
+                fontSize: '0.8125rem', fontWeight: 650
+              }}>
+                <span style={{ color: 'var(--text)' }}>{p.name}</span>
+                {p.description && <span style={{ fontSize: '0.7rem', color: 'var(--text-faint)' }}>({p.description})</span>}
+                {isRealAdmin && (
+                  <button onClick={() => handleDeletePlatform(p.id)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: 0, marginLeft: '0.25rem' }}>
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Production Cleanup / Purge Section */}
       <div className="card" style={{ border: '1.5px solid var(--danger-border)', background: 'var(--danger-dim)' }}>
@@ -1493,6 +1823,27 @@ export function Settings() {
           Purge Test Data
         </button>
       </div>
+
+      {/* Add Platform Modal */}
+      <Modal open={showAddPlatform} onClose={() => setShowAddPlatform(false)} title="Add Recharge Platform">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <Field label="Platform Name" required>
+            <input className="input" placeholder="e.g. Nintendo eShop, Riot Points..."
+              value={newPlatform.name} onChange={e => setNewPlatform(p => ({ ...p, name: e.target.value }))} />
+          </Field>
+          <Field label="Description (optional)">
+            <input className="input" placeholder="e.g. Nintendo Switch games"
+              value={newPlatform.description} onChange={e => setNewPlatform(p => ({ ...p, description: e.target.value }))} />
+          </Field>
+
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1.5px solid var(--border)' }}>
+            <button onClick={handleAddPlatform} disabled={platformSaving} className="btn-primary" style={{ flex: 1 }}>
+              {platformSaving ? <><Spinner size="sm" /> Adding...</> : 'Add Platform'}
+            </button>
+            <button onClick={() => setShowAddPlatform(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Add Staff Modal */}
       <Modal open={showAddUser} onClose={() => setShowAddUser(false)} title="Add Console Staff Account">

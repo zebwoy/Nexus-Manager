@@ -7,7 +7,7 @@ import { Modal, Spinner } from './UI'
 import {
   LayoutDashboard, Monitor, Coffee, Package,
   Zap, TrendingDown, Users, BarChart2, Settings,
-  Sun, Moon, LogOut, Menu, X, FileCheck, Trash2
+  Sun, Moon, LogOut, Menu, X, FileCheck, Trash2, Shield
 } from 'lucide-react'
 
 
@@ -19,8 +19,9 @@ const NAV = [
   { to: '/expenses',  Icon: TrendingDown,    label: 'Expenses'   },
   { to: '/customers', Icon: Users,           label: 'Customers'  },
   { to: '/eod',       Icon: FileCheck,       label: 'EOD Reconciliation' },
-  { to: '/reports',   Icon: BarChart2,       label: 'Reports'    },
-  { to: '/settings',  Icon: Settings,        label: 'Settings'   },
+  { to: '/reports',   Icon: BarChart2,       label: 'Reports',   adminOnly: true },
+  { to: '/audit',     Icon: Shield,          label: 'Audit Trail', adminOnly: true, noTrial: true },
+  { to: '/settings',  Icon: Settings,        label: 'Settings',  adminOnly: true },
 ]
 
 export default function Sidebar() {
@@ -51,9 +52,10 @@ export default function Sidebar() {
   }
 
   const visibleNav = NAV.filter(item => {
-    if (item.to === '/settings' || item.to === '/reports') {
-      return isAdmin
+    if (item.adminOnly) {
+      if (!isAdmin) return false
     }
+    if (item.noTrial && isTrial) return false
     return true
   })
 

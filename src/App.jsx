@@ -10,6 +10,7 @@ import NewSession from './pages/NewSession'
 import SessionDetail from './pages/SessionDetail'
 import { PanCafe, NewPanCafe } from './pages/PanCafe'
 import { Inventory, WalkInSale, Recharges, NewRecharge, Expenses, NewExpense, Customers, Reports, Settings, EODReconciliation } from './pages/OtherPages'
+import Audit from './pages/Audit'
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
@@ -44,6 +45,7 @@ function AppRoutes() {
       <Route path="/expenses/new"    element={<ProtectedRoute><NewExpense /></ProtectedRoute>} />
       <Route path="/customers"       element={<ProtectedRoute><Customers /></ProtectedRoute>} />
       <Route path="/reports"         element={<AdminRoute><Reports /></AdminRoute>} />
+      <Route path="/audit"           element={<AdminRoute><Audit /></AdminRoute>} />
       <Route path="/settings"        element={<AdminRoute><Settings /></AdminRoute>} />
       <Route path="/eod"             element={<ProtectedRoute><EODReconciliation /></ProtectedRoute>} />
       <Route path="*"                element={<Navigate to="/" replace />} />

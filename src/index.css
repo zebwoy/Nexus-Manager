@@ -1,9 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ── Google Fonts ─────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 @layer base {
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -425,12 +426,60 @@
   }
 }
 
-/* ── Scrollbar ── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-input); }
+/* ── Scrollbar — thin & subtle ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+/* ── Hide number input native spinners ── */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
 
 /* ── Spinner animation ── */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinner { animation: spin 0.65s linear infinite; }
+
+/* ── Slide panel animations ── */
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes slideOutRight {
+  from { transform: translateX(0);    opacity: 1; }
+  to   { transform: translateX(100%); opacity: 0; }
+}
+
+/* ── Tab bar ── */
+.tab-bar {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0;
+  margin-bottom: 1.5rem;
+}
+.tab-item {
+  padding: 0.55rem 1rem;
+  border-radius: 8px 8px 0 0;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-bottom: none;
+  transition: all 0.15s;
+  background: transparent;
+  position: relative;
+  bottom: -2px;
+}
+.tab-item.active {
+  color: var(--accent-text);
+  background: var(--bg-card);
+  border-color: var(--border);
+  border-bottom-color: var(--bg-card);
+}
+.tab-item:hover:not(.active) {
+  color: var(--text);
+  background: var(--bg-input);
+}

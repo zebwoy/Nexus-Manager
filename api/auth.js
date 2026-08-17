@@ -24,6 +24,23 @@ export default async function handler(req, res) {
           login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           logout_at TIMESTAMP WITH TIME ZONE
       );
+      CREATE TABLE IF NOT EXISTS recharge_platforms (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(100) NOT NULL UNIQUE,
+          description TEXT,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
+    // Seed default platforms if empty
+    await pool.query(`
+      INSERT INTO recharge_platforms (name, description) VALUES
+        ('PSN', 'PlayStation Network'),
+        ('Xbox Live', 'Xbox/Microsoft Gaming'),
+        ('Steam', 'Valve Steam Platform'),
+        ('EA Play', 'EA Games Subscription'),
+        ('GamePass', 'Xbox Game Pass')
+      ON CONFLICT (name) DO NOTHING;
     `)
 
     try {

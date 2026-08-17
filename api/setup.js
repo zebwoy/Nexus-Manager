@@ -18,6 +18,30 @@ export default async function handler(req, res) {
       return ok(res, { pricing: r.rows })
     }
 
+    // ─── PLATFORMS ────────────────────────────────────────────
+    if (resource === 'platforms') {
+      if (req.method === 'GET') {
+        const r = await pool.query('SELECT * FROM recharge_platforms WHERE is_active = TRUE ORDER BY name')
+        return ok(res, { platforms: r.rows })
+      }
+      if (req.method === 'POST') {
+        const b = req.body || {}
+        if (!b.name?.trim()) return err(res, 'Platform name is required', 400)
+        const r = await pool.query(
+          `INSERT INTO recharge_platforms (name, description) VALUES ($1, $2)
+           ON CONFLICT (name) DO UPDATE SET is_active = TRUE RETURNING *`,
+          [b.name.trim(), b.description || null]
+        )
+        return ok(res, { platform: r.rows[0] }, 201)
+      }
+      if (req.method === 'DELETE') {
+        const id = req.query.id
+        await pool.query(`UPDATE recharge_platforms SET is_active = FALSE WHERE id = $1`, [Number(id)])
+        return ok(res, { success: true })
+      }
+      return err(res, 'Method not allowed', 405)
+    }
+
     // ─── SETTINGS ────────────────────────────────────────────
     if (resource === 'settings') {
       if (req.method === 'GET') {

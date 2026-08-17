@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { DURATION_OPTIONS, formatRupees, todayISO, nowTimeInput, toISO, addMinutes, formatDuration, validateName, validateMobile } from '../lib/helpers'
 import { Field, ErrorMsg, Spinner } from '../components/UI'
+import { Banknote, CreditCard, Smartphone } from 'lucide-react'
 
 const DEVICE_TYPES = { PC: 'PC', XBOX: 'XBOX', PS: 'PS' }
 
@@ -25,10 +26,12 @@ export default function NewSession() {
     duration_mins: 60,
     date: todayISO(),
     time_in: nowTimeInput(),
-    payment_received: '',
-    payment_method: 'cash',
     remark: '',
   })
+
+  // Payment split
+  const [cashAmount, setCashAmount] = useState('')
+  const [onlineAmount, setOnlineAmount] = useState('')
 
   // PC controller state
   const [pcControllers, setPcControllers] = useState(0)
@@ -50,7 +53,6 @@ export default function NewSession() {
         api.get('/settings'),
       ])
       setDevices(devData.devices || [])
-      // Build pricing map: { PC: { 30: 40, 60: 70, ... }, XBOX: {...}, PS: {...} }
       const map = {}
       for (const row of (priceData.pricing || [])) {
         if (!map[row.device_type]) map[row.device_type] = {}
@@ -65,12 +67,11 @@ export default function NewSession() {
     } catch (err) { setError(err.message) }
   }
 
-  // Recompute charge whenever device/duration/players/controllers change
+  // Recompute charge and time_out whenever relevant fields change
   useEffect(() => {
     const base = pricing[form.device_type]?.[form.duration_mins] || 0
     setCharge(base)
 
-    // Compute time out
     if (form.time_in && form.duration_mins) {
       const dt = new Date(`${form.date}T${form.time_in}`)
       const tout = addMinutes(dt, form.duration_mins)
@@ -78,7 +79,6 @@ export default function NewSession() {
     }
   }, [form.device_type, form.duration_mins, form.time_in, form.date, pricing])
 
-  // Controller totals
   const controllerTotal = (() => {
     if (form.device_type === 'PC') return pcControllers * settings.controller_fee
     if (!form.device_type) return 0
@@ -94,6 +94,12 @@ export default function NewSession() {
   })()
 
   const total = charge + controllerTotal + extraPersonTotal
+
+  // Payment totals
+  const cash   = cashAmount   !== '' ? Number(cashAmount)   : 0
+  const online = onlineAmount !== '' ? Number(onlineAmount) : 0
+  const totalPaid = cash + online
+  const credit = Math.max(0, total - totalPaid)
 
   const handleDeviceChange = (deviceId) => {
     const dev = devices.find(d => d.id === Number(deviceId))
@@ -129,7 +135,7 @@ export default function NewSession() {
     const nameErr = validateName(form.name)
     if (nameErr) { setError(nameErr); return }
 
-    const mobileErr = validateMobile(form.mobile, true)
+    const mobileErr = validateMobile(form.mobile, false) // optional
     if (mobileErr) { setError(mobileErr); return }
 
     if (!form.device_id || !form.duration_mins) {
@@ -140,10 +146,9 @@ export default function NewSession() {
     setLoading(true)
     setError('')
     try {
-      const timeInISO  = toISO(form.date, form.time_in)
-      const timeOutISO = toISO(form.date, timeOut)
-      const payment    = form.payment_received !== '' ? Number(form.payment_received) : null
-      const credit     = payment != null ? Math.max(0, total - payment) : null
+      const timeInISO = toISO(form.date, form.time_in)
+      // Post-midnight: if time_out hour < time_in hour, advance date by 1 day
+      const timeOutISO = toISO(form.date, timeOut, timeInISO)
 
       const playersPayload = form.device_type === 'PC'
         ? Array.from({ length: pcControllers }, (_, i) => ({
@@ -159,10 +164,12 @@ export default function NewSession() {
             extra_person_fee: i + 1 >= (settings.extra_person_from || 3) ? settings.extra_person_fee : 0,
           }))
 
-      await api.post('/sessions', {
+      // Determine payment payload
+      const hasSplit = cashAmount !== '' || onlineAmount !== ''
+      const payload = {
         customer_id: form.customer_id,
-        name: form.name,
-        mobile: form.mobile,
+        name: form.name || null,
+        mobile: form.mobile || null,
         device_id: Number(form.device_id),
         duration_mins: Number(form.duration_mins),
         time_in: timeInISO,
@@ -172,13 +179,20 @@ export default function NewSession() {
         controller_total: controllerTotal,
         extra_person_total: extraPersonTotal,
         total,
-        payment_received: payment,
         credit,
         remark: form.remark,
-        payment_method: form.payment_method,
         players: playersPayload,
-      })
+      }
 
+      if (hasSplit) {
+        payload.cash_amount   = cash
+        payload.online_amount = online
+      } else {
+        payload.payment_received = 0
+        payload.payment_method   = 'credit'
+      }
+
+      await api.post('/sessions', payload)
       navigate('/sessions')
     } catch (err) {
       setError(err.message)
@@ -188,6 +202,14 @@ export default function NewSession() {
   }
 
   const isConsole = form.device_type === 'XBOX' || form.device_type === 'PS'
+
+  // Detect post-midnight crossing for display
+  const crossesMidnight = (() => {
+    if (!form.time_in || !timeOut) return false
+    const [h1] = form.time_in.split(':').map(Number)
+    const [h2] = timeOut.split(':').map(Number)
+    return h2 < h1
+  })()
 
   return (
     <div style={{ maxWidth: '640px', margin: '0 auto' }}>
@@ -231,7 +253,7 @@ export default function NewSession() {
               )}
             </div>
           </Field>
-          <Field label="Mobile Phone (10 digits)" required>
+          <Field label="Mobile Phone (optional)">
             <input className="input" placeholder="e.g. 9876543210" maxLength={10}
               value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: e.target.value.replace(/\D/g, '') }))} />
           </Field>
@@ -267,11 +289,19 @@ export default function NewSession() {
             <input type="time" className="input" value={form.time_in}
               onChange={e => setForm(f => ({ ...f, time_in: e.target.value }))} />
           </Field>
-          <Field label="Est. Termination">
-            <input type="time" className="input" style={{ background: 'rgba(0,0,0,0.1)', cursor: 'not-allowed' }}
+          <Field label={crossesMidnight ? 'Est. Termination (+1 day)' : 'Est. Termination'}>
+            <input type="time" className="input" style={{ background: 'rgba(0,0,0,0.1)', cursor: 'not-allowed',
+              ...(crossesMidnight ? { color: 'var(--warning)', fontWeight: 700 } : {}) }}
               value={timeOut} readOnly />
           </Field>
         </div>
+        {crossesMidnight && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem',
+            background: 'rgba(var(--warning-rgb, 234,179,8), 0.08)', border: '1px solid rgba(234,179,8,0.2)',
+            borderRadius: '8px', fontSize: '0.8rem', color: 'var(--warning)', fontWeight: 600 }}>
+            🌙 Post-midnight session — time-out will be recorded on the next calendar day
+          </div>
+        )}
 
         {/* Console Accessories Section */}
         {form.device_type === 'PC' && (
@@ -353,7 +383,7 @@ export default function NewSession() {
           </div>
         )}
 
-        {/* Bill Summary (Analog-style Receipt Slip) */}
+        {/* Bill Summary */}
         {form.device_id && (
           <div style={{
             background: 'var(--bg-input)',
@@ -397,42 +427,51 @@ export default function NewSession() {
           </div>
         )}
 
-        {/* Row 4: Payment Received, Method & Remark */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-          <div>
-            <Field label="Payment Received (₹)">
-              <input type="number" className="input" placeholder="Leave empty for credit"
-                value={form.payment_received}
-                onChange={e => setForm(f => ({ ...f, payment_received: e.target.value }))} />
+        {/* Payment Collection — Split Cash / Online */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            💳 Payment Collection
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <Field label="Cash Received (₹)">
+              <div style={{ position: 'relative' }}>
+                <Banknote size={13} style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-faint)', pointerEvents: 'none' }} />
+                <input type="number" className="input" placeholder="0"
+                  style={{ paddingLeft: '2rem' }}
+                  value={cashAmount}
+                  onChange={e => setCashAmount(e.target.value)} />
+              </div>
             </Field>
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.65rem' }}>
-              {['cash', 'online', 'credit'].map(m => (
-                <button key={m} onClick={() => setForm(f => ({ ...f, payment_method: m }))}
-                  style={{
-                    padding: '0.35rem 0.75rem', borderRadius: '8px', cursor: 'pointer',
-                    border: `1.5px solid ${form.payment_method === m ? 'var(--accent)' : 'var(--border)'}`,
-                    background: form.payment_method === m ? 'var(--accent-dim)' : 'var(--bg-input)',
-                    color: form.payment_method === m ? 'var(--accent-text)' : 'var(--text-muted)',
-                    fontWeight: 650, fontSize: '0.75rem', textTransform: 'capitalize',
-                    transition: 'all 0.15s'
-                  }}>{m}</button>
-              ))}
-            </div>
+            <Field label="Online Received (₹)">
+              <div style={{ position: 'relative' }}>
+                <Smartphone size={13} style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-faint)', pointerEvents: 'none' }} />
+                <input type="number" className="input" placeholder="0"
+                  style={{ paddingLeft: '2rem' }}
+                  value={onlineAmount}
+                  onChange={e => setOnlineAmount(e.target.value)} />
+              </div>
+            </Field>
           </div>
-          <Field label="Console Remark / Notes">
-            <input className="input" placeholder="Access codes, extra hardware notes..."
-              value={form.remark} onChange={e => setForm(f => ({ ...f, remark: e.target.value }))} />
-          </Field>
+
+          {/* Payment summary strip */}
+          {(cashAmount !== '' || onlineAmount !== '') && (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              {cash > 0 && <span className="badge badge-accent" style={{ fontSize: '0.7rem' }}>Cash: {formatRupees(cash)}</span>}
+              {online > 0 && <span className="badge badge-warning" style={{ fontSize: '0.7rem' }}>Online: {formatRupees(online)}</span>}
+              {totalPaid > 0 && total > 0 && (
+                credit > 0
+                  ? <span className="badge badge-danger" style={{ fontSize: '0.7rem' }}>Outstanding: {formatRupees(credit)}</span>
+                  : <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>✓ Fully Paid</span>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Unpaid Credit Warning */}
-        {form.payment_received !== '' && Number(form.payment_received) < total && (
-          <div style={{ display: 'flex' }}>
-            <span className="badge badge-danger">
-              Outstanding Credit: {formatRupees(total - Number(form.payment_received))}
-            </span>
-          </div>
-        )}
+        {/* Remark */}
+        <Field label="Console Remark / Notes">
+          <input className="input" placeholder="Access codes, extra hardware notes..."
+            value={form.remark} onChange={e => setForm(f => ({ ...f, remark: e.target.value }))} />
+        </Field>
 
         {/* Action Controls */}
         <div style={{ display: 'flex', gap: '0.85rem', paddingTop: '0.5rem', borderTop: '1.5px solid var(--border)' }}>

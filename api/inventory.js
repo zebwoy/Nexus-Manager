@@ -8,9 +8,63 @@ export default async function handler(req, res) {
 
   // ─── SALES ──────────────────────────────────────────────────
   if (isSales) {
+    const username = req.headers['x-username']
+    // Detect per-sale operations: /api/sales/:id
+    const saleIdMatch = (req.url || '').match(/[?&]sale_id=(\d+)/) || (req.url || '').match(/\/sales\/(\d+)/)
+    const saleId = saleIdMatch ? Number(saleIdMatch[1]) : (req.query.sale_id ? Number(req.query.sale_id) : null)
+
+    // ── Per-sale PATCH ────────────────────────────────────────
+    if (saleId && req.method === 'PATCH') {
+      try {
+        const b = req.body || {}
+        const updates = []; const vals = []; let idx = 1
+        if (b.date             !== undefined) { updates.push(`date = $${idx++}`);             vals.push(b.date) }
+        if (b.total            !== undefined) { updates.push(`total = $${idx++}`);            vals.push(Number(b.total)) }
+        if (b.payment_received !== undefined) { updates.push(`payment_received = $${idx++}`); vals.push(Number(b.payment_received)) }
+        if (b.payment_method   !== undefined) { updates.push(`payment_method = $${idx++}`);   vals.push(b.payment_method) }
+        if (updates.length === 0) return err(res, 'No fields to update', 400)
+        vals.push(saleId)
+        await pool.query(`UPDATE sales SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
+        await pool.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SALE_EDIT',$3)`,
+          [userId || null, username || 'system', `Edited walk-in sale #${saleId}`]
+        )
+        return ok(res, { success: true })
+      } catch (e) { console.error(e); return err(res, e, 500) }
+    }
+
+    // ── Per-sale DELETE ───────────────────────────────────────
+    if (saleId && req.method === 'DELETE') {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        // Restore stock
+        const itemsR = await client.query(`SELECT item_id, qty FROM sale_items WHERE sale_id = $1`, [saleId])
+        for (const { item_id, qty } of itemsR.rows) {
+          await client.query(`UPDATE inventory_items SET stock_qty = stock_qty + $1 WHERE id = $2`, [qty, item_id])
+        }
+        const saleR = await client.query(`SELECT * FROM sales WHERE id = $1`, [saleId])
+        await client.query(`DELETE FROM sale_items WHERE sale_id = $1`, [saleId])
+        await client.query(`DELETE FROM sales WHERE id = $1`, [saleId])
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SALE_DELETE',$3)`,
+          [Number(userId), username || 'system',
+           `Deleted walk-in sale #${saleId} | Date: ${saleR.rows[0]?.date} | Total: ₹${saleR.rows[0]?.total}`]
+        )
+        await client.query('COMMIT')
+        return ok(res, { success: true })
+      } catch (e) {
+        await client.query('ROLLBACK')
+        console.error(e)
+        return err(res, e, 500)
+      } finally { client.release() }
+    }
+
     try {
       if (req.method === 'GET') {
         const sessionId = req.query.session_id
+        const date = req.query.date
+
         if (sessionId) {
           const r = await pool.query(
             `SELECT sa.id, sa.total, sa.payment_received, sa.payment_method, sa.created_at,
@@ -26,7 +80,31 @@ export default async function handler(req, res) {
           )
           return ok(res, { sales: r.rows })
         }
-        return err(res, 'session_id required for GET')
+
+        // Walk-in sales log (foreign sales)
+        const currentOperator = req.headers['x-username']
+        const trialUserRes = await pool.query("SELECT id FROM users WHERE username = 'trial'")
+        const trialUserId = trialUserRes.rows[0]?.id || 0
+        const creatorClause = currentOperator === 'trial'
+          ? `AND sa.created_by = ${trialUserId}`
+          : `AND (sa.created_by IS NULL OR sa.created_by <> ${trialUserId})`
+        const dateClause = date ? `AND sa.date = '${date}'` : ''
+
+        const r = await pool.query(`
+          SELECT sa.id, sa.date, sa.total, sa.payment_received, sa.payment_method, sa.created_at,
+                 c.name AS customer_name, c.mobile AS customer_mobile, c.shop_name,
+                 u.username AS created_by_username,
+                 json_agg(json_build_object('name', ii.name, 'qty', si.qty, 'unit_price', si.unit_price)) AS items
+          FROM sales sa
+          LEFT JOIN customers c ON c.id = sa.customer_id
+          LEFT JOIN users u ON u.id = sa.created_by
+          LEFT JOIN sale_items si ON si.sale_id = sa.id
+          LEFT JOIN inventory_items ii ON ii.id = si.item_id
+          WHERE sa.sale_type = 'walkin' ${creatorClause} ${dateClause}
+          GROUP BY sa.id, c.name, c.mobile, c.shop_name, u.username
+          ORDER BY sa.created_at DESC
+        `)
+        return ok(res, { sales: r.rows })
       }
 
       if (req.method === 'POST') {
@@ -82,13 +160,13 @@ export default async function handler(req, res) {
         } finally { client.release() }
       }
 
-
       return err(res, 'Method not allowed', 405)
     } catch (e) {
       console.error(e)
       return err(res, 'Server error', 500)
     }
   }
+
 
   // ─── INVENTORY ──────────────────────────────────────────────
   try {

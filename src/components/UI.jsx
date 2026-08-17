@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, Loader2, Inbox, X } from 'lucide-react'
+import { AlertCircle, CheckCircle, Loader2, Inbox, X, AlertTriangle } from 'lucide-react'
 
 export function Spinner({ size = 'md' }) {
   const s = size === 'sm' ? 14 : size === 'lg' ? 28 : 20
@@ -204,7 +204,7 @@ export function TrialWarningModal({ open, onClose, actionName }) {
             fontSize: '0.875rem'
           }}
         >
-          Acknowledge & Continue
+          Acknowledge &amp; Continue
         </button>
       </div>
 
@@ -222,6 +222,130 @@ export function TrialWarningModal({ open, onClose, actionName }) {
           50% { box-shadow: 0 0 15px 5px rgba(239, 68, 68, 0.2); }
         }
       `}</style>
+    </div>
+  )
+}
+
+// ─── SlidePanel ─────────────────────────────────────────────────
+// Versatile right-anchored drawer. Accepts any children.
+export function SlidePanel({ open, onClose, title, width = '420px', children }) {
+  return (
+    <>
+      {/* Backdrop */}
+      {open && (
+        <div
+          onClick={onClose}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+            animation: 'fadeIn 0.2s ease'
+          }}
+        />
+      )}
+
+      {/* Panel */}
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 201,
+        width, maxWidth: '95vw',
+        background: 'var(--bg-card)',
+        borderLeft: '1.5px solid var(--border)',
+        boxShadow: '-8px 0 32px rgba(0,0,0,0.35)',
+        display: 'flex', flexDirection: 'column',
+        transform: open ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        willChange: 'transform',
+      }}>
+        {/* Panel header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '1.15rem 1.5rem',
+          borderBottom: '1.5px solid var(--border)',
+          background: 'rgba(0,0,0,0.04)',
+          flexShrink: 0,
+        }}>
+          <p style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em' }}>{title}</p>
+          <button onClick={onClose} className="btn-secondary btn-icon"
+            style={{ borderRadius: '50%', width: '1.85rem', height: '1.85rem' }}
+            aria-label="Close panel">
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Scrollable body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem' }}>
+          {children}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── PanelSection ───────────────────────────────────────────────
+// A titled section card for use inside SlidePanel
+export function PanelSection({ title, icon, children }) {
+  return (
+    <div className="card" style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <p style={{
+        fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)',
+        textTransform: 'uppercase', letterSpacing: '0.08em',
+        borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem',
+        display: 'flex', alignItems: 'center', gap: '0.5rem'
+      }}>{icon} {title}</p>
+      {children}
+    </div>
+  )
+}
+
+// ─── Tabs ───────────────────────────────────────────────────────
+export function Tabs({ tabs, active, onChange }) {
+  return (
+    <div className="tab-bar">
+      {tabs.map(t => (
+        <button
+          key={t.key}
+          className={`tab-item${active === t.key ? ' active' : ''}`}
+          onClick={() => onChange(t.key)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ─── ConfirmModal ───────────────────────────────────────────────
+export function ConfirmModal({ open, onClose, onConfirm, title, message, danger = true, loading = false }) {
+  if (!open) return null
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div className="card" style={{
+        position: 'relative', zIndex: 10, width: '100%', maxWidth: '380px', padding: 0,
+        boxShadow: '0 10px 40px rgba(0,0,0,0.4)',
+        animation: 'modalOpen 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+      }}>
+        <div style={{ padding: '1.5rem', textAlign: 'center' }}>
+          <div style={{
+            width: '3rem', height: '3rem', borderRadius: '50%', margin: '0 auto 1rem',
+            background: danger ? 'var(--danger-dim)' : 'var(--accent-dim)',
+            border: `1.5px solid ${danger ? 'var(--danger-border)' : 'var(--accent)'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <AlertTriangle size={18} style={{ color: danger ? 'var(--danger)' : 'var(--accent-text)' }} />
+          </div>
+          <p style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text)', marginBottom: '0.5rem' }}>{title}</p>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1.5rem' }}>{message}</p>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button onClick={onClose} className="btn-secondary" style={{ flex: 1 }} disabled={loading}>Cancel</button>
+            <button onClick={onConfirm} className="btn-primary" style={{
+              flex: 1,
+              background: danger ? 'linear-gradient(180deg, var(--danger) 0%, #b91c1c 100%)' : undefined
+            }} disabled={loading}>
+              {loading ? <Spinner size="sm" /> : (danger ? 'Delete' : 'Confirm')}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

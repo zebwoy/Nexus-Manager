@@ -299,15 +299,33 @@ export default async function handler(req, res) {
       const {
         customer_id, name, mobile, shop_name, device_id, duration_mins,
         time_in, time_out, date, charge, controller_total,
-        extra_person_total, total, payment_received, credit, remark,
-        players, payment_method
+        extra_person_total, total, credit, remark,
+        players, payment_method,
+        // Split payment support: cash_amount + online_amount (new)
+        cash_amount, online_amount, payment_received,
       } = body
 
-      const finalPayment = (payment_received !== null && payment_received !== undefined && payment_received !== '')
-        ? Number(payment_received) : 0.00
+      // Resolve split vs single payment
+      const cashAmt   = Number(cash_amount   || 0)
+      const onlineAmt = Number(online_amount  || 0)
+      const hasSplit  = (cash_amount !== undefined || online_amount !== undefined)
+      const finalPayment = hasSplit
+        ? cashAmt + onlineAmt
+        : (payment_received !== null && payment_received !== undefined && payment_received !== '')
+          ? Number(payment_received) : 0.00
+
       const finalCredit = (credit !== null && credit !== undefined && credit !== '')
         ? Number(credit) : Math.max(0, total - finalPayment)
-      const finalMethod = payment_method || (finalCredit > 0 ? 'credit' : 'cash')
+
+      // Determine primary payment method
+      let finalMethod
+      if (hasSplit) {
+        if (cashAmt > 0 && onlineAmt > 0) finalMethod = 'split'
+        else if (onlineAmt > 0) finalMethod = 'online'
+        else finalMethod = 'cash'
+      } else {
+        finalMethod = payment_method || (finalCredit > 0 ? 'credit' : 'cash')
+      }
 
       const client = await pool.connect()
       try {
@@ -349,10 +367,23 @@ export default async function handler(req, res) {
         )
         const sessionId = result.rows[0].id
 
-        if (finalPayment > 0) {
+        // Insert split payment rows
+        if (hasSplit) {
+          if (cashAmt > 0) {
+            await client.query(
+              `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by) VALUES ($1,$2,'cash','Initial cash payment',$3)`,
+              [sessionId, cashAmt, userId || null]
+            )
+          }
+          if (onlineAmt > 0) {
+            await client.query(
+              `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by) VALUES ($1,$2,'online','Initial online payment',$3)`,
+              [sessionId, onlineAmt, userId || null]
+            )
+          }
+        } else if (finalPayment > 0) {
           await client.query(
-            `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by)
-             VALUES ($1,$2,$3,'Initial payment',$4)`,
+            `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by) VALUES ($1,$2,$3,'Initial payment',$4)`,
             [sessionId, finalPayment, finalMethod === 'credit' ? 'cash' : finalMethod, userId || null]
           )
         }
@@ -360,8 +391,7 @@ export default async function handler(req, res) {
         if (players?.length) {
           for (const p of players) {
             await client.query(
-              `INSERT INTO session_players (session_id, player_number, own_controller, controller_fee, extra_person_fee)
-               VALUES ($1,$2,$3,$4,$5)`,
+              `INSERT INTO session_players (session_id, player_number, own_controller, controller_fee, extra_person_fee) VALUES ($1,$2,$3,$4,$5)`,
               [sessionId, p.player_number, p.own_controller, p.controller_fee, p.extra_person_fee]
             )
           }
@@ -372,6 +402,50 @@ export default async function handler(req, res) {
       } catch (e) {
         await client.query('ROLLBACK')
         throw e
+      } finally { client.release() }
+    }
+
+    // ─── DELETE /api/sessions/:id (admin-audited) ─────────────────
+    if (req.method === 'DELETE') {
+      // Extract id from URL path for base collection DELETE (e.g. ?id=123 or path param)
+      const delId = Number(req.query.id)
+      if (!delId) return err(res, 'Session ID required', 400)
+      if (!userId) return err(res, 'Authentication required', 401)
+
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        // Fetch session details for audit
+        const sessR = await client.query(
+          `SELECT s.*, d.label AS device_label FROM sessions s JOIN devices d ON d.id = s.device_id WHERE s.id = $1`,
+          [delId]
+        )
+        if (sessR.rowCount === 0) { await client.query('ROLLBACK'); return err(res, 'Session not found', 404) }
+        const sess = sessR.rows[0]
+
+        // Cascade delete
+        const saleIds = await client.query(`SELECT id FROM sales WHERE session_id = $1`, [delId])
+        for (const { id: sid } of saleIds.rows) {
+          await client.query(`DELETE FROM sale_items WHERE sale_id = $1`, [sid])
+        }
+        await client.query(`DELETE FROM sales WHERE session_id = $1`, [delId])
+        await client.query(`DELETE FROM session_payments WHERE session_id = $1`, [delId])
+        await client.query(`DELETE FROM session_players WHERE session_id = $1`, [delId])
+        await client.query(`DELETE FROM sessions WHERE id = $1`, [delId])
+
+        // Write audit
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SESSION_DELETE',$3)`,
+          [Number(userId), req.headers['x-username'] || 'system',
+           `Deleted session #${delId} | Device: ${sess.device_label} | Date: ${sess.date} | Total: ₹${sess.total}`]
+        )
+
+        await client.query('COMMIT')
+        return ok(res, { success: true })
+      } catch (e) {
+        await client.query('ROLLBACK')
+        console.error(e)
+        return err(res, e, 500)
       } finally { client.release() }
     }
 
