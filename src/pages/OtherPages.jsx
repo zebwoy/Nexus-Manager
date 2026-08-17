@@ -29,6 +29,7 @@ export function Inventory() {
   const [editForm, setEditForm] = useState({ name: '', category: 'Drinks', buy_price: '', sell_price: '', stock_qty: '' })
   
   const [activePopover, setActivePopover] = useState(null)
+  const [popoverPos, setPopoverPos] = useState({ top: 0, right: 0 })
   const [saving, setSaving] = useState(false)
   const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
 
@@ -243,8 +244,9 @@ export function Inventory() {
           <EmptyState title="No Cafeteria Stock" description="Log products to track cafeteria inventory and calculate accurate profits."
             action={<button onClick={() => setShowAdd(true)} className="btn-primary">Add Item</button>} />
         ) : (
-          <div className="card-flush" style={{ overflowX: 'auto', overflowY: 'visible' }}>
-            <table className="tbl" style={{ overflow: 'visible' }}>
+          <>
+            <div className="card-flush" style={{ overflowX: 'auto', overflowY: 'visible' }}>
+              <table className="tbl" style={{ overflow: 'visible' }}>
               <thead>
                 <tr>
                   {['Item name', 'Category', 'Unit Cost', 'Retail Price', 'Stock Level', 'Terminal Status'].map(h => (
@@ -269,10 +271,12 @@ export function Inventory() {
                           : <span className="badge badge-success">In Stock</span>}
                     </td>
                     {isAdmin && (
-                      <td className="table-cell" style={{ position: 'relative', overflow: 'visible' }}>
+                      <td className="table-cell">
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            setPopoverPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
                             setActivePopover(activePopover === item.id ? null : item.id)
                           }}
                           className="btn-secondary btn-sm"
@@ -280,45 +284,6 @@ export function Inventory() {
                         >
                           ⚙️ Manage
                         </button>
-                        
-                        {activePopover === item.id && (
-                          <div style={{
-                            position: 'absolute', right: '10px', top: '100%', zIndex: 1000,
-                            background: 'var(--bg-elevated)', border: '1.5px solid var(--border)',
-                            borderRadius: '8px', padding: '0.5rem', minWidth: '120px',
-                            display: 'flex', flexDirection: 'column', gap: '0.25rem',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-                          }}>
-                            <button 
-                              onClick={() => {
-                                setEditItem(item)
-                                setEditForm({
-                                  name: item.name,
-                                  category: item.category,
-                                  buy_price: item.buy_price,
-                                  sell_price: item.sell_price,
-                                  stock_qty: item.stock_qty
-                                })
-                                setShowEdit(true)
-                                setActivePopover(null)
-                              }}
-                              className="btn-secondary btn-sm"
-                              style={{ width: '100%', textAlign: 'left', padding: '0.35rem 0.5rem', fontSize: '0.725rem' }}
-                            >
-                              ✏️ Edit Details
-                            </button>
-                            <button 
-                              onClick={() => {
-                                handleDelete(item)
-                                setActivePopover(null)
-                              }}
-                              className="btn-danger btn-sm"
-                              style={{ width: '100%', textAlign: 'left', padding: '0.35rem 0.5rem', fontSize: '0.725rem' }}
-                            >
-                              🗑️ Delete Item
-                            </button>
-                          </div>
-                        )}
                       </td>
                     )}
                   </tr>
@@ -326,6 +291,62 @@ export function Inventory() {
               </tbody>
             </table>
           </div>
+
+          {/* Fixed floating popover — renders outside table flow to prevent layout breaks */}
+          {activePopover !== null && (() => {
+            const item = items.find(i => i.id === activePopover)
+            if (!item) return null
+            return (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: popoverPos.top,
+                  right: popoverPos.right,
+                  zIndex: 9999,
+                  background: 'var(--bg-elevated)',
+                  border: '1.5px solid var(--border)',
+                  borderRadius: '10px',
+                  padding: '0.4rem',
+                  minWidth: '140px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.25rem',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => {
+                    setEditItem(item)
+                    setEditForm({
+                      name: item.name,
+                      category: item.category,
+                      buy_price: item.buy_price,
+                      sell_price: item.sell_price,
+                      stock_qty: item.stock_qty
+                    })
+                    setShowEdit(true)
+                    setActivePopover(null)
+                  }}
+                  className="btn-secondary btn-sm"
+                  style={{ width: '100%', textAlign: 'left', padding: '0.4rem 0.65rem', fontSize: '0.775rem' }}
+                >
+                  ✏️ Edit Details
+                </button>
+                <button
+                  onClick={() => {
+                    handleDelete(item)
+                    setActivePopover(null)
+                  }}
+                  className="btn-danger btn-sm"
+                  style={{ width: '100%', textAlign: 'left', padding: '0.4rem 0.65rem', fontSize: '0.775rem' }}
+                >
+                  🗑️ Delete Item
+                </button>
+              </div>
+            )
+          })()}
+          </>
         )
       )}
 
