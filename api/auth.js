@@ -49,6 +49,8 @@ export default async function handler(req, res) {
         ALTER TABLE expenses ADD CONSTRAINT expenses_category_check CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Other', 'Cafeteria'));
         ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id);
 
+        ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+
         ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_payment_method_check;
         ALTER TABLE sessions ADD CONSTRAINT sessions_payment_method_check CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed'));
 

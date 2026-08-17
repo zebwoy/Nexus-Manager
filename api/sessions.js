@@ -253,6 +253,8 @@ export default async function handler(req, res) {
   // ─── Base /api/sessions Collection Routes ───────────────────
   try {
     if (req.method === 'GET') {
+      await pool.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE').catch(() => {})
+
       const currentOperator = req.headers['x-username']
       const date = req.query.date
       const limit = req.query.limit ? Number(req.query.limit) : null
