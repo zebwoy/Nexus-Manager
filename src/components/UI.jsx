@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, Loader2, Inbox, X, AlertTriangle } from 'lucide-react'
+import { AlertCircle, CheckCircle, Loader2, Inbox, X, AlertTriangle, Minus, Plus } from 'lucide-react'
 
 export function Spinner({ size = 'md' }) {
   const s = size === 'sm' ? 14 : size === 'lg' ? 28 : 20
@@ -346,6 +346,41 @@ export function ConfirmModal({ open, onClose, onConfirm, title, message, danger 
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Custom Number Input (Themed Stepper) ──────────────────────
+export function CustomNumberInput({ value, onChange, min, max, step = 1, placeholder, prefix = '₹', style }) {
+  const num = Number(value || 0)
+  const dec = () => onChange(Math.max(min ?? -Infinity, num - step))
+  const inc = () => onChange(Math.min(max ?? Infinity, num + step))
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', position: 'relative', ...style }}>
+      <button type="button" onClick={dec} className="btn-secondary"
+        style={{ borderRadius: '10px 0 0 10px', padding: '0.45rem 0.65rem', borderRight: 'none', height: '2.5rem' }}>
+        <Minus size={13} />
+      </button>
+      <div style={{ position: 'relative', flex: 1 }}>
+        {prefix && (
+          <span style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', fontSize: '0.8125rem', color: 'var(--text-faint)', fontWeight: 700, pointerEvents: 'none' }}>
+            {prefix}
+          </span>
+        )}
+        <input
+          type="number"
+          className="input"
+          style={{ borderRadius: 0, textAlign: prefix ? 'left' : 'center', paddingLeft: prefix ? '1.75rem' : '0.75rem', height: '2.5rem' }}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+        />
+      </div>
+      <button type="button" onClick={inc} className="btn-secondary"
+        style={{ borderRadius: '0 10px 10px 0', padding: '0.45rem 0.65rem', borderLeft: 'none', height: '2.5rem' }}>
+        <Plus size={13} />
+      </button>
     </div>
   )
 }

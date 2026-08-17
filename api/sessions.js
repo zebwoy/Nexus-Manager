@@ -330,6 +330,11 @@ export default async function handler(req, res) {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
+        // Ensure constraint allows 'split' payment method
+        await client.query(`
+          ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_payment_method_check;
+          ALTER TABLE sessions ADD CONSTRAINT sessions_payment_method_check CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed'));
+        `).catch(() => {})
 
         let cid = customer_id
         if (!cid && name) {

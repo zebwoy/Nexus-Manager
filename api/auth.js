@@ -48,9 +48,15 @@ export default async function handler(req, res) {
         ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_category_check;
         ALTER TABLE expenses ADD CONSTRAINT expenses_category_check CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Other', 'Cafeteria'));
         ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id);
+
+        ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_payment_method_check;
+        ALTER TABLE sessions ADD CONSTRAINT sessions_payment_method_check CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed'));
+
+        ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_payment_method_check;
+        ALTER TABLE sales ADD CONSTRAINT sales_payment_method_check CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed'));
       `)
     } catch (e) {
-      console.error('Failed to update expenses or inventory constraints:', e)
+      console.error('Failed to update constraints:', e)
     }
 
     // ─── LOGOUT: POST /api/auth-logout ─────────────────────────────
