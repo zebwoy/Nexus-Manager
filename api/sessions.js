@@ -266,6 +266,7 @@ export default async function handler(req, res) {
         JOIN devices d ON d.id = s.device_id
         LEFT JOIN users u ON u.id = s.created_by
       `
+      const vals = []
       const clauses = [`(s.is_deleted IS NULL OR s.is_deleted = FALSE)`]
       
       if (currentOperator === 'trial') {
