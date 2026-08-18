@@ -84,15 +84,6 @@ export default function SuperAdminLayout({ children }) {
               <UserButton afterSignOutUrl="/" />
             </SignedIn>
 
-            <Link
-              to="/"
-              className="btn-secondary btn-sm"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', padding: '0.35rem 0.75rem' }}
-            >
-              <ExternalLink size={13} />
-              Launch Cafe Console
-            </Link>
-
             <button onClick={toggleDark} className="btn-secondary btn-sm" style={{ padding: '0.35rem 0.65rem' }}>
               {isDark ? <Sun size={14} /> : <Moon size={14} />}
             </button>

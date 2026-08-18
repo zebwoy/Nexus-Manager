@@ -295,6 +295,22 @@ export default function Login() {
               Launch Demo <ArrowRight size={13} />
             </button>
           </div>
+
+          {/* Console Tint Picker (Light Mode Only) */}
+          {!isDark && (
+            <div className="card" style={{ padding: '0.65rem 1.15rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px' }}>
+              <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Console Tint
+              </span>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                {Object.entries(ACCENTS).map(([id, a]) => (
+                  <button key={id} onClick={() => setAccentId(id)} title={a.label}
+                    className={`accent-swatch ${accentId === id ? 'selected' : ''}`}
+                    style={{ background: a.value, width: '18px', height: '18px' }} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ─── RIGHT PANEL: Authentication Terminal Card ─── */}
@@ -555,22 +571,6 @@ export default function Login() {
               </div>
             )}
           </div>
-
-          {/* Bottom Accent Picker Card (Light Mode Only) */}
-          {!isDark && (
-            <div className="card" style={{ padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Console Tint
-              </span>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                {Object.entries(ACCENTS).map(([id, a]) => (
-                  <button key={id} onClick={() => setAccentId(id)} title={a.label}
-                    className={`accent-swatch ${accentId === id ? 'selected' : ''}`}
-                    style={{ background: a.value, width: '18px', height: '18px' }} />
-                ))}
-              </div>
-            </div>
-          )}
 
         </div>
 
