@@ -598,22 +598,17 @@ export default function Login() {
                       <p style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)', margin: 0 }}>
                         Cloud Organization Access
                       </p>
-                      <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: 1.5, marginTop: '0.35rem', maxWidth: '300px' }}>
-                        Sign in with your Google or Email account to manage multi-tenant schemas, billing, and fleet telemetry.
+                      <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: 1.5, marginTop: '0.35rem', maxWidth: '320px' }}>
+                        Sign in with the Google or Email address assigned by your Platform Super Admin to access your provisioned cafe console.
                       </p>
                     </div>
 
                     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                       <SignInButton mode="modal">
-                        <button type="button" className="btn-primary" style={{ width: '100%', padding: '0.65rem', fontWeight: 750 }}>
-                          Sign In with Clerk
+                        <button type="button" className="btn-primary" style={{ width: '100%', padding: '0.75rem', fontWeight: 750, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                          Sign In with Clerk / Google
                         </button>
                       </SignInButton>
-                      <SignUpButton mode="modal">
-                        <button type="button" className="btn-secondary" style={{ width: '100%', padding: '0.65rem', fontWeight: 650 }}>
-                          Register New Organization
-                        </button>
-                      </SignUpButton>
                     </div>
                   </div>
                 </SignedOut>

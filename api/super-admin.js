@@ -94,11 +94,25 @@ export default async function handler(req, res) {
         return err(res, 'Organization name and Admin email are required', 400)
       }
 
-      // Generate slug and schema name
-      const rawSlug = (slug || name).toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40)
-      const uniqueSlug = `${rawSlug}_${Math.random().toString(36).slice(2, 6)}`
-      const schemaName = `tenant_${uniqueSlug}`
-      const orgId = `org_${uniqueSlug}`
+      // Generate clean initialism slug and schema name
+      let baseSlug = (slug || name).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20)
+      if (!baseSlug) baseSlug = 'org'
+
+      let candidateSchema = `tenant_${baseSlug}`
+      let suffix = 1
+      while (true) {
+        const exists = await pool.query(
+          'SELECT 1 FROM public.tenants WHERE schema_name = $1',
+          [candidateSchema]
+        )
+        if (exists.rows.length === 0) break
+        suffix++
+        candidateSchema = `tenant_${baseSlug}_${suffix}`
+      }
+
+      const finalSlug = candidateSchema.replace('tenant_', '')
+      const schemaName = candidateSchema
+      const orgId = `org_${finalSlug}`
 
       const client = await pool.connect()
       try {
@@ -107,18 +121,16 @@ export default async function handler(req, res) {
         // 1. Insert into public.tenants registry
         const tenantR = await client.query(
           `INSERT INTO public.tenants
-            (org_id, name, slug, schema_name, admin_email, admin_name, plan, max_devices, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            (org_id, name, slug, schema_name, admin_email, plan, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING *`,
           [
             orgId,
             name.trim(),
-            uniqueSlug,
+            finalSlug,
             schemaName,
             admin_email.trim().toLowerCase(),
-            admin_name || null,
             plan || 'pro',
-            Number(max_devices || 20),
             superAdminEmail
           ]
         )
@@ -127,7 +139,15 @@ export default async function handler(req, res) {
         // 2. Provision PostgreSQL schema & template tables
         await provisionTenantSchema(pool, schemaName)
 
-        // 3. Log Super Admin Audit Trail
+        // 3. Pre-seed admin user in the newly provisioned tenant schema
+        const adminUsername = admin_email.trim().toLowerCase().split('@')[0]
+        await client.query(`
+          INSERT INTO "${schemaName}".users (full_name, username, pin, role)
+          VALUES ('Cafe Administrator', $1, '1234', 'admin')
+          ON CONFLICT (username) DO NOTHING
+        `, [adminUsername])
+
+        // 4. Log Super Admin Audit Trail
         await client.query(
           `INSERT INTO public.super_admin_audit_logs (super_admin_id, super_admin_email, action, target_org_id, details)
            VALUES ($1, $2, 'CREATE_TENANT', $3, $4)`,

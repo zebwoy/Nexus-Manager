@@ -6,6 +6,15 @@ import { PageLoader, ErrorMsg, Modal, ConfirmModal, Field, Spinner, FilterBar } 
 import { Building2, Plus, Search, Edit3, Trash2, Power, RotateCcw, ExternalLink, ShieldAlert, CheckCircle, Monitor, Gamepad2 } from 'lucide-react'
 import { toast } from 'react-toastify'
 
+export function generateInitialismSlug(name) {
+  if (!name) return ''
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  if (words.length >= 2) {
+    return words.map(w => w[0]).join('').toLowerCase().replace(/[^a-z0-9]/g, '')
+  }
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12)
+}
+
 export default function TenantManagement() {
   const navigate = useNavigate()
   const [tenants, setTenants] = useState([])
@@ -19,9 +28,7 @@ export default function TenantManagement() {
     name: '',
     slug: '',
     admin_email: '',
-    admin_name: '',
-    plan: 'pro',
-    max_devices: 20
+    plan: 'pro'
   })
   const [creating, setCreating] = useState(false)
 
@@ -30,9 +37,7 @@ export default function TenantManagement() {
   const [editForm, setEditForm] = useState({
     name: '',
     admin_email: '',
-    admin_name: '',
     plan: 'pro',
-    max_devices: 20,
     status: 'active'
   })
   const [editing, setEditing] = useState(false)
@@ -70,7 +75,7 @@ export default function TenantManagement() {
       const res = await api.post('/super-admin?action=tenants', createForm)
       toast.success(`Organization "${res.tenant.name}" created and schema provisioned!`)
       setShowCreateModal(false)
-      setCreateForm({ name: '', slug: '', admin_email: '', admin_name: '', plan: 'pro', max_devices: 20 })
+      setCreateForm({ name: '', slug: '', admin_email: '', plan: 'pro' })
       loadTenants()
     } catch (e) {
       setError(e.message)
@@ -84,9 +89,7 @@ export default function TenantManagement() {
     setEditForm({
       name: t.name,
       admin_email: t.admin_email,
-      admin_name: t.admin_name || '',
       plan: t.plan || 'pro',
-      max_devices: t.max_devices || 20,
       status: t.status || 'active'
     })
   }
@@ -166,7 +169,7 @@ export default function TenantManagement() {
   return (
     <div>
       {/* Create Modal */}
-      <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create New Organization &amp; Schema">
+      <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create New Organization & Provision Schema">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <Field label="Organization / Cafe Name" required>
             <input
@@ -175,58 +178,50 @@ export default function TenantManagement() {
               value={createForm.name}
               onChange={e => {
                 const name = e.target.value
-                const autoSlug = name.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30)
-                setCreateForm(f => ({ ...f, name, slug: f.slug ? f.slug : autoSlug }))
+                const autoSlug = generateInitialismSlug(name)
+                setCreateForm(f => ({ ...f, name, slug: autoSlug }))
               }}
+              autoFocus
             />
           </Field>
 
-          <Field label="Unique Schema Slug" required>
+          <Field label="Auto-Assigned Schema Slug (Read-Only)">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input
+                className="input"
+                value={createForm.slug ? `tenant_${createForm.slug}` : 'tenant_...'}
+                readOnly
+                style={{ opacity: 0.85, background: 'var(--bg-input)', cursor: 'not-allowed', fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}
+              />
+              <span className="badge badge-accent" style={{ flexShrink: 0, fontSize: '0.7rem' }}>
+                Auto-Slug
+              </span>
+            </div>
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-faint)', marginTop: '0.25rem' }}>
+              Generated from the first letters of each word in the cafe name.
+            </p>
+          </Field>
+
+          <Field label="Assign Admin Email (Clerk / Google Account)" required>
             <input
+              type="email"
               className="input"
-              placeholder="e.g. pixel_forge"
-              value={createForm.slug}
-              onChange={e => setCreateForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))}
+              placeholder="e.g. admin@pixelforge.com"
+              value={createForm.admin_email}
+              onChange={e => setCreateForm(f => ({ ...f, admin_email: e.target.value }))}
             />
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              The admin will sign in with this exact email to manage this gaming lounge.
+            </p>
           </Field>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <Field label="Admin Email (Clerk Account)" required>
-              <input
-                type="email"
-                className="input"
-                placeholder="admin@pixelforge.com"
-                value={createForm.admin_email}
-                onChange={e => setCreateForm(f => ({ ...f, admin_email: e.target.value }))}
-              />
-            </Field>
-            <Field label="Admin Full Name">
-              <input
-                className="input"
-                placeholder="Chris Evans"
-                value={createForm.admin_name}
-                onChange={e => setCreateForm(f => ({ ...f, admin_name: e.target.value }))}
-              />
-            </Field>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <Field label="Subscription Plan">
-              <select className="input" value={createForm.plan} onChange={e => setCreateForm(f => ({ ...f, plan: e.target.value }))}>
-                <option value="starter">Starter (10 Stations)</option>
-                <option value="pro">Pro (25 Stations)</option>
-                <option value="enterprise">Enterprise (Unlimited)</option>
-              </select>
-            </Field>
-            <Field label="Max Station Limit">
-              <input
-                type="number"
-                className="input"
-                value={createForm.max_devices}
-                onChange={e => setCreateForm(f => ({ ...f, max_devices: e.target.value }))}
-              />
-            </Field>
-          </div>
+          <Field label="Subscription Plan">
+            <select className="input" value={createForm.plan} onChange={e => setCreateForm(f => ({ ...f, plan: e.target.value }))}>
+              <option value="starter">Starter Plan</option>
+              <option value="pro">Pro Lounge Plan</option>
+              <option value="enterprise">Enterprise Franchise Plan</option>
+            </select>
+          </Field>
 
           <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
             <button onClick={handleCreateOrg} disabled={creating} className="btn-primary" style={{ flex: 1 }}>
@@ -243,29 +238,22 @@ export default function TenantManagement() {
           <Field label="Organization Name">
             <input className="input" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
           </Field>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <Field label="Assigned Admin Email" required>
-              <input className="input" value={editForm.admin_email} onChange={e => setEditForm(f => ({ ...f, admin_email: e.target.value }))} />
-            </Field>
-            <Field label="Admin Full Name">
-              <input className="input" value={editForm.admin_name} onChange={e => setEditForm(f => ({ ...f, admin_name: e.target.value }))} />
-            </Field>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <Field label="Plan">
-              <select className="input" value={editForm.plan} onChange={e => setEditForm(f => ({ ...f, plan: e.target.value }))}>
-                <option value="starter">Starter</option>
-                <option value="pro">Pro</option>
-                <option value="enterprise">Enterprise</option>
-              </select>
-            </Field>
-            <Field label="Status">
-              <select className="input" value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}>
-                <option value="active">Active</option>
-                <option value="suspended">Suspended</option>
-              </select>
-            </Field>
-          </div>
+          <Field label="Assigned Admin Email" required>
+            <input type="email" className="input" value={editForm.admin_email} onChange={e => setEditForm(f => ({ ...f, admin_email: e.target.value }))} />
+          </Field>
+          <Field label="Plan">
+            <select className="input" value={editForm.plan} onChange={e => setEditForm(f => ({ ...f, plan: e.target.value }))}>
+              <option value="starter">Starter Plan</option>
+              <option value="pro">Pro Lounge Plan</option>
+              <option value="enterprise">Enterprise Franchise Plan</option>
+            </select>
+          </Field>
+          <Field label="Organization Status">
+            <select className="input" value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}>
+              <option value="active">Active (Operational)</option>
+              <option value="suspended">Suspended (Access Disabled)</option>
+            </select>
+          </Field>
 
           <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
             <button onClick={handleSaveEdit} disabled={editing} className="btn-primary" style={{ flex: 1 }}>
@@ -368,8 +356,7 @@ export default function TenantManagement() {
                     </code>
                   </td>
                   <td>
-                    <p style={{ margin: 0, fontWeight: 650, fontSize: '0.8rem', color: 'var(--text)' }}>{t.admin_name || 'Admin'}</p>
-                    <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>{t.admin_email}</span>
+                    <span style={{ fontSize: '0.825rem', fontWeight: 650, color: 'var(--text)' }}>{t.admin_email}</span>
                   </td>
                   <td>
                     <span className="badge badge-accent" style={{ textTransform: 'uppercase', fontSize: '0.65rem' }}>
@@ -408,16 +395,16 @@ export default function TenantManagement() {
                       <button
                         onClick={() => handleToggleStatus(t)}
                         className="btn-secondary btn-sm"
-                        style={{ padding: '0.3rem 0.55rem', color: t.status === 'active' ? 'var(--warning)' : 'var(--success)' }}
-                        title={t.status === 'active' ? 'Suspend Organization' : 'Activate Organization'}
+                        style={{ padding: '0.3rem 0.55rem' }}
+                        title={t.status === 'active' ? 'Suspend Access' : 'Activate Access'}
                       >
-                        <Power size={13} />
+                        <Power size={13} style={{ color: t.status === 'active' ? 'var(--warning)' : 'var(--success)' }} />
                       </button>
                       <button
                         onClick={() => setResetTenant(t)}
                         className="btn-secondary btn-sm"
                         style={{ padding: '0.3rem 0.55rem' }}
-                        title="Reset Test Transactions"
+                        title="Reset transactional data"
                       >
                         <RotateCcw size={13} />
                       </button>
@@ -425,7 +412,7 @@ export default function TenantManagement() {
                         onClick={() => setDeleteTenant(t)}
                         className="btn-secondary btn-sm"
                         style={{ padding: '0.3rem 0.55rem', color: 'var(--danger)' }}
-                        title="Delete Organization & Drop Schema"
+                        title="Delete Organization"
                       >
                         <Trash2 size={13} />
                       </button>
