@@ -2,8 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatDate } from '../../lib/helpers'
-import { PageLoader, ErrorMsg, Modal, ConfirmModal, Field, Spinner, FilterBar } from '../../components/UI'
-import { Building2, Plus, Search, Edit3, Trash2, Power, RotateCcw, ExternalLink, ShieldAlert, CheckCircle, Monitor, Gamepad2 } from 'lucide-react'
+import { PageLoader, ErrorMsg, Modal, ConfirmModal, Field, Spinner } from '../../components/UI'
+import {
+  Building2, Plus, Search, Edit3, Trash2, Power, RotateCcw,
+  ExternalLink, Shield, Monitor, Gamepad2, Database, Mail,
+  CheckCircle2, AlertCircle, X, Sparkles, Filter, Users
+} from 'lucide-react'
 import { toast } from 'react-toastify'
 
 export function generateInitialismSlug(name) {
@@ -21,6 +25,7 @@ export default function TenantManagement() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all') // 'all' | 'active' | 'suspended'
 
   // Create modal
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -151,30 +156,40 @@ export default function TenantManagement() {
   }
 
   const handleImpersonate = (t) => {
-    // Store active tenant schema in localStorage for testing / session switching
     localStorage.setItem('nexus_tenant_schema', t.schema_name)
     localStorage.setItem('nexus_tenant_name', t.name)
     toast.success(`Switched context to "${t.name}" (${t.schema_name})`)
     navigate('/')
   }
 
-  const filteredTenants = tenants.filter(t =>
-    t.name?.toLowerCase().includes(search.toLowerCase()) ||
-    t.admin_email?.toLowerCase().includes(search.toLowerCase()) ||
-    t.schema_name?.toLowerCase().includes(search.toLowerCase())
-  )
+  const activeCount = tenants.filter(t => t.status === 'active').length
+  const suspendedCount = tenants.filter(t => t.status === 'suspended').length
+
+  const filteredTenants = tenants.filter(t => {
+    const matchesSearch =
+      t.name?.toLowerCase().includes(search.toLowerCase()) ||
+      t.admin_email?.toLowerCase().includes(search.toLowerCase()) ||
+      t.schema_name?.toLowerCase().includes(search.toLowerCase()) ||
+      t.org_id?.toLowerCase().includes(search.toLowerCase())
+
+    const matchesStatus =
+      statusFilter === 'all' || t.status === statusFilter
+
+    return matchesSearch && matchesStatus
+  })
 
   if (loading) return <PageLoader />
 
   return (
-    <div>
-      {/* Create Modal */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+
+      {/* ─── CREATE MODAL ─── */}
       <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create New Organization & Provision Schema">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <Field label="Organization / Cafe Name" required>
             <input
               className="input"
-              placeholder="e.g. Pixel Forge Cyber Cafe"
+              placeholder="e.g. Velocity Gaming Lounge"
               value={createForm.name}
               onChange={e => {
                 const name = e.target.value
@@ -187,18 +202,21 @@ export default function TenantManagement() {
 
           <Field label="Auto-Assigned Schema Slug (Read-Only)">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <input
-                className="input"
-                value={createForm.slug ? `tenant_${createForm.slug}` : 'tenant_...'}
-                readOnly
-                style={{ opacity: 0.85, background: 'var(--bg-input)', cursor: 'not-allowed', fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}
-              />
+              <div style={{
+                flex: 1, padding: '0.65rem 0.85rem', borderRadius: '10px',
+                background: 'var(--bg-input)', border: '1px solid var(--border)',
+                fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: '0.85rem',
+                color: 'var(--accent-text)', display: 'flex', alignItems: 'center', gap: '0.5rem'
+              }}>
+                <Database size={15} style={{ color: 'var(--accent)' }} />
+                <span>{createForm.slug ? `tenant_${createForm.slug}` : 'tenant_...'}</span>
+              </div>
               <span className="badge badge-accent" style={{ flexShrink: 0, fontSize: '0.7rem' }}>
                 Auto-Slug
               </span>
             </div>
-            <p style={{ fontSize: '0.7rem', color: 'var(--text-faint)', marginTop: '0.25rem' }}>
-              Generated from the first letters of each word in the cafe name.
+            <p style={{ fontSize: '0.725rem', color: 'var(--text-faint)', marginTop: '0.35rem' }}>
+              Automatically initialised from the first letter of each word in the cafe name.
             </p>
           </Field>
 
@@ -206,33 +224,33 @@ export default function TenantManagement() {
             <input
               type="email"
               className="input"
-              placeholder="e.g. admin@pixelforge.com"
+              placeholder="e.g. owner@velocitygaming.com"
               value={createForm.admin_email}
               onChange={e => setCreateForm(f => ({ ...f, admin_email: e.target.value }))}
             />
-            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
               The admin will sign in with this exact email to manage this gaming lounge.
             </p>
           </Field>
 
           <Field label="Subscription Plan">
             <select className="input" value={createForm.plan} onChange={e => setCreateForm(f => ({ ...f, plan: e.target.value }))}>
-              <option value="starter">Starter Plan</option>
-              <option value="pro">Pro Lounge Plan</option>
-              <option value="enterprise">Enterprise Franchise Plan</option>
+              <option value="starter">Starter Plan (Up to 10 Stations)</option>
+              <option value="pro">Pro Lounge Plan (Up to 25 Stations)</option>
+              <option value="enterprise">Enterprise Franchise Plan (Unlimited)</option>
             </select>
           </Field>
 
           <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
             <button onClick={handleCreateOrg} disabled={creating} className="btn-primary" style={{ flex: 1 }}>
-              {creating ? <><Spinner size="sm" /> Provisioning...</> : 'Provision Organization'}
+              {creating ? <><Spinner size="sm" /> Provisioning Schema...</> : 'Provision Organization'}
             </button>
             <button onClick={() => setShowCreateModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
           </div>
         </div>
       </Modal>
 
-      {/* Edit / Assign Admin Modal */}
+      {/* ─── EDIT MODAL ─── */}
       <Modal open={!!editTenant} onClose={() => setEditTenant(null)} title={`Edit ${editTenant?.name}`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <Field label="Organization Name">
@@ -264,18 +282,17 @@ export default function TenantManagement() {
         </div>
       </Modal>
 
-      {/* Delete Confirmation */}
+      {/* ─── CONFIRMATION MODALS ─── */}
       <ConfirmModal
         open={!!deleteTenant}
         onClose={() => setDeleteTenant(null)}
         onConfirm={handleDeleteTenant}
         loading={deleting}
-        title="Delete Organization &amp; Drop Schema"
+        title="Delete Organization & Drop Schema"
         message={`Are you sure you want to permanently delete "${deleteTenant?.name}"? This will DROP the PostgreSQL schema "${deleteTenant?.schema_name}" with CASCADE and erase all associated sessions, inventory, and ledger history.`}
         danger
       />
 
-      {/* Reset Confirmation */}
       <ConfirmModal
         open={!!resetTenant}
         onClose={() => setResetTenant(null)}
@@ -285,145 +302,315 @@ export default function TenantManagement() {
         message={`Are you sure you want to purge all transactional session, sales, and expense logs for "${resetTenant?.name}"? System configurations, devices, and inventory catalog items will be preserved.`}
       />
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.75rem' }}>
+      {/* ─── TOP HEADER BAR ─── */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+        flexWrap: 'wrap', gap: '1.25rem'
+      }}>
         <div>
-          <h1 className="page-title" style={{ margin: 0 }}>
-            Organizations &amp; Tenant Schemas
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+            padding: '0.25rem 0.75rem', borderRadius: '100px',
+            background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+            marginBottom: '0.65rem'
+          }}>
+            <span className="led-indicator led-green" style={{ width: '6px', height: '6px' }} />
+            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent-text)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Multi-Tenant Schema Architecture
+            </span>
+          </div>
+          <h1 className="page-title" style={{ margin: 0, fontSize: '1.85rem', fontWeight: 900, letterSpacing: '-0.03em' }}>
+            Organizations &amp; Schemas
           </h1>
-          <p className="page-sub" style={{ marginTop: '0.35rem' }}>
-            {tenants.length} total organizations · PostgreSQL Schema-per-tenant isolation
+          <p className="page-sub" style={{ marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+            Provision isolated PostgreSQL schemas, assign lounge owner emails, and oversee fleet infrastructure.
           </p>
         </div>
 
         <button
           onClick={() => setShowCreateModal(true)}
           className="btn-primary"
-          style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.6rem 1.15rem' }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            padding: '0.65rem 1.25rem', fontSize: '0.875rem', fontWeight: 800,
+            boxShadow: '0 4px 14px rgba(0,0,0,0.15)'
+          }}
         >
-          <Plus size={16} />
+          <Plus size={16} strokeWidth={2.5} />
           Create Organization
         </button>
       </div>
 
       <ErrorMsg error={error} />
 
-      {/* Filter Bar */}
-      <FilterBar style={{ marginBottom: '1.5rem' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
-          <Search size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+      {/* ─── KPI SUMMARY TILES ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+        <div className="card" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6' }}>
+            <Building2 size={20} />
+          </div>
+          <div>
+            <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Lounges</p>
+            <p style={{ margin: '0.15rem 0 0', fontSize: '1.35rem', fontWeight: 900, color: 'var(--text)', lineHeight: 1 }}>{tenants.length}</p>
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22c55e' }}>
+            <CheckCircle2 size={20} />
+          </div>
+          <div>
+            <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active &amp; Operational</p>
+            <p style={{ margin: '0.15rem 0 0', fontSize: '1.35rem', fontWeight: 900, color: '#22c55e', lineHeight: 1 }}>{activeCount}</p>
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}>
+            <Database size={20} />
+          </div>
+          <div>
+            <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Isolated Schemas</p>
+            <p style={{ margin: '0.15rem 0 0', fontSize: '1.35rem', fontWeight: 900, color: 'var(--text)', lineHeight: 1 }}>{tenants.length}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── SEARCH & FILTER CONTROLS ─── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: '0.85rem'
+      }}>
+        {/* Status Pill Switcher */}
+        <div style={{
+          display: 'inline-flex', padding: '0.25rem', borderRadius: '10px',
+          background: 'var(--bg-input)', border: '1px solid var(--border)'
+        }}>
+          {[
+            { id: 'all', label: `All (${tenants.length})` },
+            { id: 'active', label: `Active (${activeCount})` },
+            { id: 'suspended', label: `Suspended (${suspendedCount})` }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id)}
+              style={{
+                padding: '0.35rem 0.85rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 750,
+                border: 'none', cursor: 'pointer', transition: 'all 0.15s ease',
+                background: statusFilter === tab.id ? 'var(--bg-card)' : 'transparent',
+                color: statusFilter === tab.id ? 'var(--text)' : 'var(--text-muted)',
+                boxShadow: statusFilter === tab.id ? 'var(--shadow)' : 'none'
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Minimal Search Bar */}
+        <div style={{ position: 'relative', minWidth: '280px', flex: '1', maxWidth: '420px' }}>
+          <Search size={14} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
             className="input"
-            style={{ paddingLeft: '2.25rem' }}
-            placeholder="Search by name, admin email, or schema..."
+            style={{ paddingLeft: '2.4rem', paddingRight: search ? '2.4rem' : '0.85rem', height: '38px', borderRadius: '10px' }}
+            placeholder="Search organizations, admins, schemas..."
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              style={{ position: 'absolute', right: '0.65rem', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
-      </FilterBar>
+      </div>
 
-      {/* Table */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Organization</th>
-              <th>Schema Identifier</th>
-              <th>Assigned Admin</th>
-              <th>Plan</th>
-              <th>Fleet Stats</th>
-              <th>Status</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredTenants.length === 0 ? (
+      {/* ─── DATA GRID / TABLE CARD ─── */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow-md)' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="tbl" style={{ width: '100%', minWidth: '940px' }}>
+            <thead>
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
-                  No organizations found matching your search.
-                </td>
+                <th style={{ width: '28%' }}>Organization &amp; ID</th>
+                <th style={{ width: '18%' }}>Schema Identifier</th>
+                <th style={{ width: '22%' }}>Assigned Administrator</th>
+                <th style={{ width: '12%' }}>Plan &amp; Fleet</th>
+                <th style={{ width: '8%' }}>Status</th>
+                <th style={{ width: '12%', textAlign: 'right' }}>Actions</th>
               </tr>
-            ) : (
-              filteredTenants.map((t) => (
-                <tr key={t.id}>
-                  <td>
-                    <p style={{ fontWeight: 750, color: 'var(--text)', margin: 0, fontSize: '0.875rem' }}>{t.name}</p>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace" }}>{t.org_id}</span>
-                  </td>
-                  <td>
-                    <code style={{ fontSize: '0.75rem', color: 'var(--accent-text)', background: 'var(--bg-input)', padding: '0.2rem 0.45rem', borderRadius: '6px' }}>
-                      {t.schema_name}
-                    </code>
-                  </td>
-                  <td>
-                    <span style={{ fontSize: '0.825rem', fontWeight: 650, color: 'var(--text)' }}>{t.admin_email}</span>
-                  </td>
-                  <td>
-                    <span className="badge badge-accent" style={{ textTransform: 'uppercase', fontSize: '0.65rem' }}>
-                      {t.plan}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      <span>🖥️ {t.device_count || 0} dev</span>
-                      <span>🎮 {t.session_count || 0} sess</span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={`badge ${t.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
-                      {t.status}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.35rem' }}>
-                      <button
-                        onClick={() => handleImpersonate(t)}
-                        className="btn-primary btn-sm"
-                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
-                        title="Open cafe console in this schema"
-                      >
-                        <ExternalLink size={12} /> Launch
-                      </button>
-                      <button
-                        onClick={() => openEditModal(t)}
-                        className="btn-secondary btn-sm"
-                        style={{ padding: '0.3rem 0.55rem' }}
-                        title="Edit / Reassign Admin"
-                      >
-                        <Edit3 size={13} />
-                      </button>
-                      <button
-                        onClick={() => handleToggleStatus(t)}
-                        className="btn-secondary btn-sm"
-                        style={{ padding: '0.3rem 0.55rem' }}
-                        title={t.status === 'active' ? 'Suspend Access' : 'Activate Access'}
-                      >
-                        <Power size={13} style={{ color: t.status === 'active' ? 'var(--warning)' : 'var(--success)' }} />
-                      </button>
-                      <button
-                        onClick={() => setResetTenant(t)}
-                        className="btn-secondary btn-sm"
-                        style={{ padding: '0.3rem 0.55rem' }}
-                        title="Reset transactional data"
-                      >
-                        <RotateCcw size={13} />
-                      </button>
-                      <button
-                        onClick={() => setDeleteTenant(t)}
-                        className="btn-secondary btn-sm"
-                        style={{ padding: '0.3rem 0.55rem', color: 'var(--danger)' }}
-                        title="Delete Organization"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+            </thead>
+            <tbody>
+              {filteredTenants.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '4rem 1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                        <Building2 size={24} />
+                      </div>
+                      <p style={{ margin: 0, fontWeight: 750, fontSize: '0.95rem', color: 'var(--text)' }}>
+                        No organizations found
+                      </p>
+                      <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '320px' }}>
+                        {search ? `No results matching "${search}". Try searching with a different term.` : 'Click "Create Organization" above to provision your first gaming cafe schema.'}
+                      </p>
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                filteredTenants.map((t) => {
+                  const initialism = t.slug ? t.slug.toUpperCase() : (t.name || 'OG').slice(0, 3).toUpperCase()
+                  
+                  return (
+                    <tr key={t.id} style={{ transition: 'background 0.15s ease' }}>
+                      {/* Organization & ID */}
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                          <div style={{
+                            width: '38px', height: '38px', borderRadius: '10px',
+                            background: 'linear-gradient(135deg, var(--accent-dim) 0%, var(--bg-card) 100%)',
+                            border: '1px solid var(--accent-border)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '0.75rem', fontWeight: 900, color: 'var(--accent-text)', flexShrink: 0,
+                            letterSpacing: '0.04em'
+                          }}>
+                            {initialism}
+                          </div>
+                          <div style={{ overflow: 'hidden' }}>
+                            <p style={{ margin: 0, fontWeight: 800, color: 'var(--text)', fontSize: '0.9rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                              {t.name}
+                            </p>
+                            <span style={{ fontSize: '0.675rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace" }}>
+                              {t.org_id}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Schema Identifier */}
+                      <td>
+                        <div style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                          padding: '0.3rem 0.6rem', borderRadius: '8px',
+                          background: 'var(--bg-input)', border: '1px solid var(--border)',
+                          fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem', color: 'var(--accent-text)', fontWeight: 700
+                        }}>
+                          <Database size={12} style={{ color: 'var(--accent)' }} />
+                          {t.schema_name}
+                        </div>
+                      </td>
+
+                      {/* Assigned Administrator */}
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <div style={{
+                            width: '26px', height: '26px', borderRadius: '50%',
+                            background: 'var(--bg-input)', border: '1px solid var(--border)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: 'var(--text-muted)', flexShrink: 0
+                          }}>
+                            <Mail size={12} />
+                          </div>
+                          <div>
+                            <p style={{ margin: 0, fontWeight: 700, fontSize: '0.825rem', color: 'var(--text)' }}>
+                              {t.admin_email}
+                            </p>
+                            <span style={{ fontSize: '0.675rem', color: 'var(--text-faint)' }}>
+                              Verified Admin
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Plan & Fleet */}
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          <span className="badge badge-accent" style={{
+                            textTransform: 'uppercase', fontSize: '0.625rem', fontWeight: 800, width: 'fit-content',
+                            background: t.plan === 'enterprise' ? 'rgba(139, 92, 246, 0.15)' : 'var(--accent-dim)',
+                            color: t.plan === 'enterprise' ? '#a78bfa' : 'var(--accent-text)',
+                            borderColor: t.plan === 'enterprise' ? 'rgba(139, 92, 246, 0.3)' : 'var(--accent-border)'
+                          }}>
+                            {t.plan || 'Pro'}
+                          </span>
+                          <div style={{ display: 'flex', gap: '0.45rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            <span>🖥️ {t.device_count || 0} dev</span>
+                            <span>🎮 {t.session_count || 0} sess</span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td>
+                        <span className={`badge ${t.status === 'active' ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '0.7rem', fontWeight: 750 }}>
+                          {t.status === 'active' ? 'Active' : 'Suspended'}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <button
+                            onClick={() => handleImpersonate(t)}
+                            className="btn-primary btn-sm"
+                            style={{
+                              padding: '0.35rem 0.7rem', fontSize: '0.725rem', fontWeight: 750,
+                              display: 'flex', alignItems: 'center', gap: '0.3rem',
+                              borderRadius: '8px'
+                            }}
+                            title="Launch cafe console workspace"
+                          >
+                            <ExternalLink size={12} /> Launch
+                          </button>
+
+                          <button
+                            onClick={() => openEditModal(t)}
+                            className="btn-secondary btn-sm"
+                            style={{ padding: '0.35rem 0.55rem', borderRadius: '8px' }}
+                            title="Edit / Reassign Admin"
+                          >
+                            <Edit3 size={13} />
+                          </button>
+
+                          <button
+                            onClick={() => handleToggleStatus(t)}
+                            className="btn-secondary btn-sm"
+                            style={{ padding: '0.35rem 0.55rem', borderRadius: '8px' }}
+                            title={t.status === 'active' ? 'Suspend Access' : 'Activate Access'}
+                          >
+                            <Power size={13} style={{ color: t.status === 'active' ? 'var(--warning)' : 'var(--success)' }} />
+                          </button>
+
+                          <button
+                            onClick={() => setResetTenant(t)}
+                            className="btn-secondary btn-sm"
+                            style={{ padding: '0.35rem 0.55rem', borderRadius: '8px' }}
+                            title="Reset transactional data"
+                          >
+                            <RotateCcw size={13} />
+                          </button>
+
+                          <button
+                            onClick={() => setDeleteTenant(t)}
+                            className="btn-secondary btn-sm"
+                            style={{ padding: '0.35rem 0.55rem', borderRadius: '8px', color: 'var(--danger)' }}
+                            title="Delete Organization"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
+
     </div>
   )
 }
