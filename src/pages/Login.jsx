@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme, ACCENTS } from '../context/ThemeContext'
 import { api } from '../lib/api'
-import { Sun, Moon, Keyboard, Eye, EyeOff } from 'lucide-react'
+import { Sun, Moon, Keyboard, Eye, EyeOff, Shield } from 'lucide-react'
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useUser } from '@clerk/clerk-react'
 
 export default function Login() {
   const [username, setUsername] = useState('')
@@ -16,7 +17,15 @@ export default function Login() {
   const hiddenInputRef = useRef(null)
   const { login } = useAuth()
   const { isDark, toggleDark, accentId, setAccentId } = useTheme()
+  const { user: clerkUser, isSignedIn } = useUser()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (isSignedIn && clerkUser) {
+      const email = clerkUser.primaryEmailAddress?.emailAddress
+      if (email) localStorage.setItem('nexus_user_email', email)
+    }
+  }, [isSignedIn, clerkUser])
 
   const handleKeyPress = (num) => {
     if (pin.length < 4) {
@@ -53,6 +62,19 @@ export default function Login() {
     }
   }
 
+  const handleClerkLaunch = () => {
+    if (!clerkUser) return
+    const isSA = clerkUser.publicMetadata?.role === 'super_admin' || clerkUser.primaryEmailAddress?.emailAddress === 'imanriyaj@gmail.com'
+    const userData = {
+      id: 1,
+      username: clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress?.split('@')[0] || 'owner',
+      full_name: clerkUser.fullName || 'Cloud Owner',
+      role: isSA ? 'super_admin' : 'admin'
+    }
+    login(userData)
+    navigate(isSA ? '/super-admin' : '/')
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
 
@@ -84,13 +106,13 @@ export default function Login() {
         </button>
       </div>
 
-      <div style={{ width: '100%', maxWidth: '380px' }}>
+      <div style={{ width: '100%', maxWidth: '400px' }}>
 
         {/* System branding */}
-        <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
+        <div style={{ marginBottom: '1.75rem', textAlign: 'center' }}>
           <p style={{
             fontSize: '1.75rem', fontWeight: 800, color: 'var(--text)',
-            letterSpacing: '-0.03em', textShadow: '1px 1px 0 var(--bevel-top)'
+            letterSpacing: '-0.03em', textShadow: '1px 1px 0 var(--bevel-top)', margin: 0
           }}>
             Nexus Manager
           </p>
@@ -99,21 +121,64 @@ export default function Login() {
           </p>
         </div>
 
+        {/* Clerk Signed In Quick Launch Card */}
+        <SignedIn>
+          <div className="card" style={{ padding: '1.25rem', marginBottom: '1.25rem', border: '1.5px solid var(--accent-border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
+                <UserButton afterSignOutUrl="/" />
+                <div style={{ overflow: 'hidden' }}>
+                  <p style={{ margin: 0, fontWeight: 750, fontSize: '0.85rem', color: 'var(--text)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    {clerkUser?.fullName || clerkUser?.primaryEmailAddress?.emailAddress}
+                  </p>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--accent-text)', fontWeight: 600 }}>
+                    Connected via Clerk Cloud
+                  </span>
+                </div>
+              </div>
+              <button onClick={handleClerkLaunch} className="btn-primary btn-sm" style={{ flexShrink: 0, padding: '0.45rem 0.85rem' }}>
+                Launch Console →
+              </button>
+            </div>
+          </div>
+        </SignedIn>
+
         {/* Login terminal card */}
         <div className="card" style={{ padding: '2rem', position: 'relative' }}>
-          {/* Engraved Header */}
+          {/* Clerk Cloud Sign-In Header for Signed-Out Visitors */}
+          <SignedOut>
+            <div style={{ marginBottom: '1.25rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '1rem' }}>
+              <p style={{ fontSize: '0.75rem', fontWeight: 750, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.65rem' }}>
+                🌐 Cloud Owner &amp; Organization Login
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                <SignInButton mode="modal">
+                  <button type="button" className="btn-primary btn-sm" style={{ padding: '0.45rem', fontSize: '0.75rem', fontWeight: 700 }}>
+                    Sign In
+                  </button>
+                </SignInButton>
+                <SignUpButton mode="modal">
+                  <button type="button" className="btn-secondary btn-sm" style={{ padding: '0.45rem', fontSize: '0.75rem', fontWeight: 700 }}>
+                    Create Account
+                  </button>
+                </SignUpButton>
+              </div>
+            </div>
+          </SignedOut>
+
+          {/* Operator PIN Pad Header */}
           <p style={{
-            fontSize: '0.9rem', fontWeight: 750, color: 'var(--text-muted)',
-            marginBottom: '1.5rem', textTransform: 'uppercase', letterSpacing: '0.06em',
-            borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem'
+            fontSize: '0.85rem', fontWeight: 750, color: 'var(--text-muted)',
+            marginBottom: '1.25rem', textTransform: 'uppercase', letterSpacing: '0.06em',
+            borderBottom: '1px dashed var(--border)', paddingBottom: '0.4rem'
           }}>
-            🔐 Secure Operator Login
+            🔐 Fast Desk Operator PIN Pad
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
             <div>
               <label className="label">Operator Username</label>
-              <input className="input" placeholder="e.g. trial"
+              <input className="input" placeholder="e.g. admin or trial"
                 value={username} onChange={e => setUsername(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && hiddenInputRef.current?.focus()}
                 autoFocus />
@@ -140,95 +205,61 @@ export default function Login() {
                 </button>
               </div>
 
-              {/* Real hidden numeric input */}
+              {/* Hidden text input capturing real keyboard typing */}
               <input
                 ref={hiddenInputRef}
-                type="text"
+                type={showPin ? 'text' : 'password'}
                 inputMode="numeric"
-                pattern="\d*"
+                pattern="[0-9]*"
                 maxLength={4}
                 value={pin}
-                onChange={e => {
-                  const val = e.target.value
-                  if (!/^\d*$/.test(val)) return
-                  if (val.length <= 4) {
-                    setPin(val)
-                    if (val.length === 4) {
-                      handleSubmit(val)
-                    }
-                  }
+                onChange={(e) => {
+                  const cleaned = e.target.value.replace(/\D/g, '').slice(0, 4)
+                  setPin(cleaned)
+                  if (cleaned.length === 4) handleSubmit(cleaned)
                 }}
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
-                style={{
-                  position: 'absolute',
-                  opacity: 0,
-                  width: '1px',
-                  height: '1px',
-                  zIndex: -1,
-                  overflow: 'hidden',
-                  border: 0,
-                  padding: 0,
-                  margin: 0,
-                  fontSize: '16px'
-                }}
+                style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: '1px', height: '1px' }}
+                aria-label="4-digit access PIN"
               />
 
-              {/* Styled Interactive Pin Boxes */}
+              {/* Tactile 4-Digit Display Screen */}
               <div
                 onClick={() => hiddenInputRef.current?.focus()}
+                className="input-focus-glow"
                 style={{
-                  display: 'flex',
-                  gap: '0.75rem',
-                  justifyContent: 'space-between',
-                  marginBottom: '1.25rem',
-                  position: 'relative',
-                  cursor: 'text'
+                  display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.65rem',
+                  padding: '0.75rem', borderRadius: '12px',
+                  background: 'var(--bg-input)',
+                  border: isFocused ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                  cursor: 'text', transition: 'all 0.15s ease',
+                  boxShadow: 'var(--shadow-inset)'
                 }}>
-                {[0, 1, 2, 3].map(i => {
-                  const digit = pin[i] || ''
-                  const isActiveBox = pin.length === i || (pin.length === 4 && i === 3)
-                  const displayChar = digit ? (showPin ? digit : '•') : ''
-
+                {[0, 1, 2, 3].map(index => {
+                  const isFilled = index < pin.length
+                  const isCurrent = index === pin.length && isFocused
                   return (
-                    <div
-                      key={i}
-                      style={{
-                        width: '3.5rem',
-                        height: '3.75rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '1.75rem',
-                        fontWeight: 800,
-                        background: 'var(--bg-input)',
-                        border: isActiveBox && isFocused
-                          ? '2px solid var(--accent)'
-                          : '1.5px solid var(--border)',
-                        borderRadius: '12px',
-                        color: 'var(--text)',
-                        boxShadow: isActiveBox && isFocused
-                          ? 'var(--shadow-inset), 0 0 0 3px var(--accent-dim)'
-                          : 'var(--shadow-inset)',
-                        transition: 'all 0.15s ease',
-                        position: 'relative',
-                        boxSizing: 'border-box'
-                      }}>
-                      {displayChar && (
-                        <span className="digit-entered">
-                          {displayChar}
-                        </span>
-                      )}
-
-                      {/* Blinking hardware cursor */}
-                      {isActiveBox && isFocused && !digit && (
-                        <div className="cursor-blink" style={{
-                          width: '2px',
-                          height: '1.25rem',
-                          background: 'var(--accent)'
-                        }} />
-                      )}
+                    <div key={index} style={{
+                      height: '2.75rem',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      borderRadius: '8px',
+                      background: isFilled ? 'var(--accent-dim)' : 'transparent',
+                      border: isCurrent ? '1.5px solid var(--accent)' : '1px solid var(--bevel-bottom)',
+                      boxShadow: isFilled ? 'inset 0 1px 2px rgba(0,0,0,0.2)' : 'none',
+                      position: 'relative', transition: 'all 0.15s ease'
+                    }}>
+                      {isFilled ? (
+                        showPin ? (
+                          <span className="digit-entered" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-text)', fontFamily: "'JetBrains Mono', monospace" }}>
+                            {pin[index]}
+                          </span>
+                        ) : (
+                          <span className="digit-entered" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--accent-text)' }} />
+                        )
+                      ) : isCurrent ? (
+                        <div className="cursor-blink" style={{ width: '2px', height: '1.25rem' }} />
+                      ) : null}
                     </div>
                   )
                 })}
@@ -236,17 +267,17 @@ export default function Login() {
             </div>
 
             {error && (
-              <div style={{
-                fontSize: '0.8125rem', color: 'var(--danger)', fontWeight: 650,
+              <p style={{
+                color: 'var(--danger)', fontSize: '0.8125rem', margin: 0,
+                padding: '0.625rem 0.875rem', borderRadius: '8px',
                 background: 'var(--danger-dim)', border: '1px solid var(--danger-border)',
-                borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem'
+                fontWeight: 600, animation: 'shake 0.3s ease-in-out'
               }}>
-                <span className="led-indicator led-red" style={{ width: '6px', height: '6px' }} />
                 {error}
-              </div>
+              </p>
             )}
 
-            {/* Clicky Hardware PIN Pad */}
+            {/* Virtual PIN Pad (0-9) */}
             <div style={{
               background: 'var(--bg-input)', padding: '0.75rem', borderRadius: '14px',
               border: '1px solid var(--border)', boxShadow: 'var(--shadow-inset)'
@@ -288,7 +319,8 @@ export default function Login() {
               {loading ? 'Initializing Operator…' : 'Authenticate Operator'}
             </button>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginTop: '0.65rem' }}>
+            {/* Quick-Fill Role Buttons */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginTop: '0.5rem' }}>
               <button
                 type="button"
                 onClick={() => {
@@ -322,7 +354,7 @@ export default function Login() {
               }}
               disabled={loading}
               className="btn-secondary"
-              style={{ width: '100%', marginTop: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontSize: '0.775rem', padding: '0.45rem' }}
+              style={{ width: '100%', marginTop: '0.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontSize: '0.775rem', padding: '0.45rem' }}
             >
               🎮 Try Live Demo (Sandbox)
             </button>

@@ -3,6 +3,7 @@ import { NavLink, useNavigate, Outlet, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { Shield, Building2, LayoutDashboard, History, ArrowLeft, Sun, Moon, LogOut, Terminal, CheckCircle, ExternalLink } from 'lucide-react'
+import { SignedIn, UserButton, OrganizationSwitcher } from '@clerk/clerk-react'
 
 export default function SuperAdminLayout({ children }) {
   const { user, logout } = useAuth()
@@ -72,6 +73,17 @@ export default function SuperAdminLayout({ children }) {
 
           {/* Right actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <SignedIn>
+              <OrganizationSwitcher
+                appearance={{
+                  elements: {
+                    rootBox: { display: 'flex', alignItems: 'center' }
+                  }
+                }}
+              />
+              <UserButton afterSignOutUrl="/" />
+            </SignedIn>
+
             <Link
               to="/"
               className="btn-secondary btn-sm"
