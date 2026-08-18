@@ -5,6 +5,7 @@ import { formatTime, formatDate } from '../../lib/helpers'
 import { PageLoader, ErrorMsg, Modal, Field, Spinner } from '../../components/UI'
 import { Shield, Building2, Monitor, Gamepad2, Plus, ArrowUpRight, History, CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react'
 import { toast } from 'react-toastify'
+import { generateInitialismSlug } from './TenantManagement'
 
 export default function SuperAdminDashboard() {
   const navigate = useNavigate()
@@ -18,9 +19,7 @@ export default function SuperAdminDashboard() {
     name: '',
     slug: '',
     admin_email: '',
-    admin_name: '',
-    plan: 'pro',
-    max_devices: 20
+    plan: 'pro'
   })
   const [creating, setCreating] = useState(false)
 
@@ -49,7 +48,7 @@ export default function SuperAdminDashboard() {
       const res = await api.post('/super-admin?action=tenants', createForm)
       toast.success(`Organization "${res.tenant.name}" and schema provisioned!`)
       setShowCreateModal(false)
-      setCreateForm({ name: '', slug: '', admin_email: '', admin_name: '', plan: 'pro', max_devices: 20 })
+      setCreateForm({ name: '', slug: '', admin_email: '', plan: 'pro' })
       loadOverview()
     } catch (e) {
       setError(e.message)
@@ -79,69 +78,54 @@ export default function SuperAdminDashboard() {
               value={createForm.name}
               onChange={e => {
                 const name = e.target.value
-                const autoSlug = name.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30)
-                setCreateForm(f => ({ ...f, name, slug: f.slug ? f.slug : autoSlug }))
+                const autoSlug = generateInitialismSlug(name)
+                setCreateForm(f => ({ ...f, name, slug: autoSlug }))
               }}
+              autoFocus
             />
           </Field>
 
-          <Field label="Schema Slug Identifier" required>
+          <Field label="Auto-Assigned Schema Slug (Read-Only)">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input
+                className="input"
+                value={createForm.slug ? `tenant_${createForm.slug}` : 'tenant_...'}
+                readOnly
+                style={{ opacity: 0.85, background: 'var(--bg-input)', cursor: 'not-allowed', fontFamily: "'JetBrains Mono', monospace", fontWeight: 750 }}
+              />
+              <span className="badge badge-accent" style={{ flexShrink: 0, fontSize: '0.7rem' }}>
+                Auto-Slug
+              </span>
+            </div>
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-faint)', marginTop: '0.25rem' }}>
+              Generated from the first letters of each word in the cafe name.
+            </p>
+          </Field>
+
+          <Field label="Assign Admin Email (Clerk / Google Account)" required>
             <input
+              type="email"
               className="input"
-              placeholder="e.g. velocity_gaming"
-              value={createForm.slug}
-              onChange={e => setCreateForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))}
+              placeholder="e.g. owner@cafe.com"
+              value={createForm.admin_email}
+              onChange={e => setCreateForm(f => ({ ...f, admin_email: e.target.value }))}
             />
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              The admin will sign in with this exact email to access and manage this lounge.
+            </p>
           </Field>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <Field label="Admin Email (Clerk Account)" required>
-              <input
-                type="email"
-                className="input"
-                placeholder="owner@cafe.com"
-                value={createForm.admin_email}
-                onChange={e => setCreateForm(f => ({ ...f, admin_email: e.target.value }))}
-              />
-            </Field>
-            <Field label="Admin Full Name">
-              <input
-                className="input"
-                placeholder="Alex Morgan"
-                value={createForm.admin_name}
-                onChange={e => setCreateForm(f => ({ ...f, admin_name: e.target.value }))}
-              />
-            </Field>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <Field label="Subscription Plan">
-              <select className="input" value={createForm.plan} onChange={e => setCreateForm(f => ({ ...f, plan: e.target.value }))}>
-                <option value="starter">Starter (10 Stations)</option>
-                <option value="pro">Pro (25 Stations)</option>
-                <option value="enterprise">Enterprise (Unlimited)</option>
-              </select>
-            </Field>
-            <Field label="Max Station Limit">
-              <input
-                type="number"
-                className="input"
-                value={createForm.max_devices}
-                onChange={e => setCreateForm(f => ({ ...f, max_devices: e.target.value }))}
-              />
-            </Field>
-          </div>
-
-          <div style={{
-            background: 'var(--bg-input)', padding: '0.85rem', borderRadius: '10px',
-            border: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)'
-          }}>
-            ⚡ Automatic Provisioning: Creating this organization will automatically execute a dedicated PostgreSQL schema (<code>tenant_{createForm.slug || 'slug'}</code>) with isolated tables, default devices, and pricing rules.
-          </div>
+          <Field label="Subscription Plan">
+            <select className="input" value={createForm.plan} onChange={e => setCreateForm(f => ({ ...f, plan: e.target.value }))}>
+              <option value="starter">Starter Plan</option>
+              <option value="pro">Pro Lounge Plan</option>
+              <option value="enterprise">Enterprise Franchise Plan</option>
+            </select>
+          </Field>
 
           <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
             <button onClick={handleCreateOrg} disabled={creating} className="btn-primary" style={{ flex: 1 }}>
-              {creating ? <><Spinner size="sm" /> Provisioning Schema...</> : 'Provision Organization'}
+              {creating ? <><Spinner size="sm" /> Provisioning...</> : 'Provision Organization'}
             </button>
             <button onClick={() => setShowCreateModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
           </div>
@@ -171,7 +155,7 @@ export default function SuperAdminDashboard() {
 
       <ErrorMsg error={error} />
 
-      {/* KPIs */}
+      {/* KPI Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
         {kpis.map((kpi, idx) => (
           <div key={idx} className="card" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
