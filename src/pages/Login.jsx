@@ -288,6 +288,31 @@ export default function Login() {
               {loading ? 'Initializing Operator…' : 'Authenticate Operator'}
             </button>
 
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginTop: '0.65rem' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername('superadmin')
+                  setPin('9999')
+                }}
+                className="btn-secondary btn-sm"
+                style={{ fontSize: '0.725rem', padding: '0.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', color: '#f59e0b' }}
+              >
+                👑 Super Admin
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername('admin')
+                  setPin('1234')
+                }}
+                className="btn-secondary btn-sm"
+                style={{ fontSize: '0.725rem', padding: '0.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}
+              >
+                🏢 Store Admin
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={() => {
@@ -297,7 +322,7 @@ export default function Login() {
               }}
               disabled={loading}
               className="btn-secondary"
-              style={{ width: '100%', marginTop: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.55rem' }}
+              style={{ width: '100%', marginTop: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontSize: '0.775rem', padding: '0.45rem' }}
             >
               🎮 Try Live Demo (Sandbox)
             </button>

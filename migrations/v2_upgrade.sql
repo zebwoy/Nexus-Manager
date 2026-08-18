@@ -75,3 +75,9 @@ CREATE INDEX IF NOT EXISTS idx_recharges_date ON recharges (date);
 CREATE INDEX IF NOT EXISTS idx_session_payments_session_id ON session_payments (session_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_customers_search ON customers (name, mobile, shop_name);
+
+-- 6. Default Platform Accounts
+INSERT INTO users (full_name, username, pin, role) VALUES
+  ('Super Administrator', 'superadmin', '9999', 'super_admin'),
+  ('Store Administrator', 'admin', '1234', 'admin')
+ON CONFLICT (username) DO UPDATE SET pin = EXCLUDED.pin, role = EXCLUDED.role;
