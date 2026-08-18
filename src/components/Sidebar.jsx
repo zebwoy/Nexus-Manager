@@ -32,17 +32,12 @@ export default function Sidebar() {
   const [showSignOutModal, setShowSignOutModal] = useState(false)
   const [isPurging, setIsPurging] = useState(false)
 
-  const isTrial = user?.username === 'trial' || user?.role === 'trial'
-
   const handleConfirmSignOut = async () => {
     setIsPurging(true)
     try {
       await api.post('/auth?action=logout')
-      if (isTrial) {
-        await api.post('/purge')
-      }
     } catch (e) {
-      console.error('Logout logging/purge error:', e)
+      console.error('Logout logging error:', e)
     } finally {
       setIsPurging(false)
       setShowSignOutModal(false)

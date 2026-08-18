@@ -287,6 +287,20 @@ export default function Login() {
               style={{ width: '100%', marginTop: '0.25rem', display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
               {loading ? 'Initializing Operator…' : 'Authenticate Operator'}
             </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setUsername('trial')
+                setPin('0000')
+                handleSubmit('0000')
+              }}
+              disabled={loading}
+              className="btn-secondary"
+              style={{ width: '100%', marginTop: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.55rem' }}
+            >
+              🎮 Try Live Demo (Sandbox)
+            </button>
           </div>
         </div>
 

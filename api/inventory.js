@@ -74,11 +74,6 @@ export default async function handler(req, res) {
         `
         const vals = []
         const clauses = []
-        if (currentOperator === 'trial') {
-          clauses.push(`u.username = 'trial'`)
-        } else {
-          clauses.push(`(u.username IS NULL OR u.username <> 'trial')`)
-        }
         if (date) {
           clauses.push(`s.date = $${vals.length + 1}`)
           vals.push(date)

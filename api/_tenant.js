@@ -1,5 +1,7 @@
 import { getPool } from './_db.js'
 
+export const DEMO_SANDBOX_SCHEMA = 'tenant_demo_sandbox'
+
 /**
  * SQL DDL template executed inside every new tenant schema
  */
@@ -327,18 +329,15 @@ export async function ensureGlobalRegistry(pool) {
 }
 
 /**
- * Automatically provisions a dedicated PostgreSQL schema for a new organization
+ * Provisions a dedicated PostgreSQL schema for an organization
  */
 export async function provisionTenantSchema(pool, schemaName) {
   const safeSchema = schemaName.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    // 1. Create isolated PostgreSQL schema
     await client.query(`CREATE SCHEMA IF NOT EXISTS "${safeSchema}"`)
-    // 2. Set search path into the new tenant schema
     await client.query(`SET search_path TO "${safeSchema}", public`)
-    // 3. Create all tables & insert seed data
     await client.query(TENANT_SCHEMA_TEMPLATE)
     await client.query('COMMIT')
     return { success: true, schemaName: safeSchema }
@@ -351,16 +350,106 @@ export async function provisionTenantSchema(pool, schemaName) {
 }
 
 /**
+ * Provisions and seeds a realistic isolated Demo Sandbox schema
+ */
+export async function provisionDemoSandbox(pool) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query(`CREATE SCHEMA IF NOT EXISTS "${DEMO_SANDBOX_SCHEMA}"`)
+    await client.query(`SET search_path TO "${DEMO_SANDBOX_SCHEMA}", public`)
+    await client.query(TENANT_SCHEMA_TEMPLATE)
+
+    // 1. Seed Demo Staff (PIN 0000)
+    await client.query(`
+      INSERT INTO users (full_name, username, pin, role) VALUES
+      ('Demo Operator', 'trial', '0000', 'admin'),
+      ('Store Owner', 'admin', '1234', 'admin'),
+      ('Shift Staff', 'operator', '5678', 'operator')
+      ON CONFLICT (username) DO NOTHING;
+    `)
+
+    // 2. Seed Realistic Cafeteria Snacks
+    await client.query(`
+      INSERT INTO inventory_items (name, category, buy_price, sell_price, stock_qty) VALUES
+      ('Red Bull Energy Drink (250ml)', 'Drinks', 95.00, 125.00, 18),
+      ('Monster Energy Ultra White', 'Drinks', 105.00, 140.00, 12),
+      ('Mountain Dew (300ml)', 'Drinks', 30.00, 40.00, 20),
+      ('Doritos Nacho Cheese (60g)', 'Snacks', 35.00, 50.00, 25),
+      ('Lays Classic Salted', 'Snacks', 15.00, 20.00, 30),
+      ('KitKat Chunky Bar', 'Snacks', 25.00, 40.00, 15)
+      ON CONFLICT DO NOTHING;
+    `)
+
+    // 3. Seed Customers
+    await client.query(`
+      INSERT INTO customers (name, mobile) VALUES
+      ('Aarav Sharma', '9876543210'),
+      ('Rohan Verma', '9123456780'),
+      ('Kabir Mehta', '9988776655')
+      ON CONFLICT DO NOTHING;
+    `)
+
+    // 4. Seed Active Live Gaming Sessions
+    const now = new Date()
+    const pc1In = new Date(now.getTime() - 30 * 60000).toISOString()
+    const pc1Out = new Date(now.getTime() + 30 * 60000).toISOString()
+    const psIn = new Date(now.getTime() - 15 * 60000).toISOString()
+    const psOut = new Date(now.getTime() + 75 * 60000).toISOString()
+
+    await client.query(`
+      INSERT INTO sessions (customer_id, device_id, duration_mins, time_in, time_out, date, charge, total, payment_received, credit, payment_method)
+      SELECT c.id, 1, 60, '${pc1In}', '${pc1Out}', CURRENT_DATE, 40.00, 40.00, 40.00, 0.00, 'cash'
+      FROM customers c WHERE c.mobile = '9876543210'
+      LIMIT 1;
+
+      INSERT INTO sessions (customer_id, device_id, duration_mins, time_in, time_out, date, charge, controller_total, total, payment_received, credit, payment_method)
+      SELECT c.id, 5, 90, '${psIn}', '${psOut}', CURRENT_DATE, 100.00, 25.00, 125.00, 125.00, 0.00, 'online'
+      FROM customers c WHERE c.mobile = '9123456780'
+      LIMIT 1;
+    `)
+
+    await client.query('COMMIT')
+    return { success: true, schemaName: DEMO_SANDBOX_SCHEMA }
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
+/**
  * Resolves the tenant schema from request headers or Clerk organization claims
  */
 export async function resolveTenantSchema(req, pool) {
-  // 1. Check for Super Admin explicit impersonation / schema selection header
+  // 1. Check for Demo / Trial sandbox mode (automatically routed to isolated sandbox schema)
+  const isTrial = req.headers['x-username'] === 'trial' ||
+                  req.headers['x-user-id'] === 'trial' ||
+                  req.headers['x-is-trial'] === 'true'
+
+  if (isTrial) {
+    try {
+      const checkR = await pool.query(
+        "SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1",
+        [DEMO_SANDBOX_SCHEMA]
+      )
+      if (checkR.rows.length === 0) {
+        await provisionDemoSandbox(pool)
+      }
+    } catch (e) {
+      console.error('Error auto-provisioning sandbox:', e)
+    }
+    return DEMO_SANDBOX_SCHEMA
+  }
+
+  // 2. Check for Super Admin explicit impersonation / schema selection header
   const explicitSchema = req.headers['x-tenant-schema']
   if (explicitSchema && /^[a-zA-Z0-9_]+$/.test(explicitSchema)) {
     return explicitSchema
   }
 
-  // 2. Check for Clerk Org ID or custom x-org-id header
+  // 3. Check for Clerk Org ID or custom x-org-id header
   const orgId = req.headers['x-org-id'] || req.query?.org_id
   if (orgId) {
     const res = await pool.query(
@@ -375,7 +464,7 @@ export async function resolveTenantSchema(req, pool) {
     }
   }
 
-  // 3. Check for Admin Email resolution
+  // 4. Check for Admin Email resolution
   const userEmail = req.headers['x-user-email']
   if (userEmail) {
     const res = await pool.query(

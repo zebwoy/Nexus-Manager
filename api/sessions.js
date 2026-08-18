@@ -348,12 +348,6 @@ export default async function handler(req, res) {
       `
       const vals = []
       const clauses = [`(s.is_deleted IS NULL OR s.is_deleted = FALSE)`]
-      
-      if (currentOperator === 'trial') {
-        clauses.push(`u.username = 'trial'`)
-      } else {
-        clauses.push(`(u.username IS NULL OR u.username <> 'trial')`)
-      }
 
       if (date) {
         clauses.push(`s.date = $${vals.length + 1}`)
