@@ -12,6 +12,7 @@ import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useUser } 
 
 export default function Login() {
   const [activeTab, setActiveTab] = useState('pin') // 'pin' | 'cloud'
+  const [showTintPopover, setShowTintPopover] = useState(false)
   const [username, setUsername] = useState('')
   const [pin, setPin] = useState('')
   const [showPin, setShowPin] = useState(false)
@@ -155,18 +156,82 @@ export default function Login() {
           background: transparent;
           color: var(--text-muted);
         }
-        .auth-tab-btn.inactive:hover {
-          color: var(--text);
+        @keyframes fadeInDown {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
 
-      {/* Top right theme actions */}
-      <div style={{ position: 'fixed', top: '1.25rem', right: '1.5rem', zIndex: 20, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <button onClick={toggleDark} className="btn-secondary btn-sm"
-          style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', backdropFilter: 'blur(8px)' }}>
+      {/* Top right theme actions with vertical color popover on hover */}
+      <div
+        onMouseEnter={() => setShowTintPopover(true)}
+        onMouseLeave={() => setShowTintPopover(false)}
+        style={{
+          position: 'fixed',
+          top: '1.25rem',
+          right: '1.5rem',
+          zIndex: 50,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '0.45rem'
+        }}
+      >
+        <button
+          onClick={toggleDark}
+          className="btn-secondary btn-sm"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.375rem',
+            backdropFilter: 'blur(10px)',
+            boxShadow: 'var(--shadow)',
+            padding: '0.45rem 0.75rem',
+            borderRadius: '10px'
+          }}
+          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
           {isDark ? <Sun size={15} /> : <Moon size={15} />}
           {isDark ? 'Light' : 'Dark'}
         </button>
+
+        {/* Minimalist vertical popover (color swatches only, no text) */}
+        {!isDark && showTintPopover && (
+          <div
+            style={{
+              background: 'linear-gradient(180deg, var(--bg-card) 0%, var(--bg-elevated) 100%)',
+              border: '1px solid var(--border)',
+              borderRadius: '20px',
+              padding: '0.45rem 0.35rem',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '0.45rem',
+              boxShadow: 'var(--shadow-md)',
+              backdropFilter: 'blur(12px)',
+              animation: 'fadeInDown 0.15s ease-out forwards'
+            }}
+          >
+            {Object.entries(ACCENTS).map(([id, a]) => (
+              <button
+                key={id}
+                onClick={() => setAccentId(id)}
+                title={a.label}
+                className={`accent-swatch ${accentId === id ? 'selected' : ''}`}
+                style={{
+                  background: a.value,
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '50%',
+                  border: accentId === id ? '2px solid var(--text)' : '1px solid rgba(0,0,0,0.15)',
+                  cursor: 'pointer',
+                  transform: accentId === id ? 'scale(1.15)' : 'scale(1)',
+                  transition: 'transform 0.15s ease, border-color 0.15s ease'
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Main Split Grid Showcase Container */}
@@ -295,22 +360,6 @@ export default function Login() {
               Launch Demo <ArrowRight size={13} />
             </button>
           </div>
-
-          {/* Console Tint Picker (Light Mode Only) */}
-          {!isDark && (
-            <div className="card" style={{ padding: '0.65rem 1.15rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px' }}>
-              <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Console Tint
-              </span>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                {Object.entries(ACCENTS).map(([id, a]) => (
-                  <button key={id} onClick={() => setAccentId(id)} title={a.label}
-                    className={`accent-swatch ${accentId === id ? 'selected' : ''}`}
-                    style={{ background: a.value, width: '18px', height: '18px' }} />
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* ─── RIGHT PANEL: Authentication Terminal Card ─── */}
