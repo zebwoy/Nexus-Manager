@@ -3,12 +3,21 @@ import { NavLink, useNavigate, Outlet, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { Shield, Building2, LayoutDashboard, History, ArrowLeft, Sun, Moon, LogOut, Terminal, CheckCircle, ExternalLink } from 'lucide-react'
-import { SignedIn, UserButton } from '@clerk/clerk-react'
+import { SignedIn, UserButton, useClerk } from '@clerk/clerk-react'
 
 export default function SuperAdminLayout({ children }) {
   const { user, logout } = useAuth()
   const { isDark, toggleDark } = useTheme()
+  const { signOut } = useClerk()
   const navigate = useNavigate()
+
+  const handleSignOut = async () => {
+    try {
+      await signOut()
+    } catch (e) {}
+    logout()
+    navigate('/login')
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
@@ -93,7 +102,7 @@ export default function SuperAdminLayout({ children }) {
             </div>
 
             <button
-              onClick={() => { logout(); navigate('/login') }}
+              onClick={handleSignOut}
               className="btn-secondary btn-sm"
               style={{ padding: '0.35rem 0.65rem', color: 'var(--danger)' }}
               title="Sign Out"

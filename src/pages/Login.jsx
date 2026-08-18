@@ -29,20 +29,9 @@ export default function Login() {
   useEffect(() => {
     if (isSignedIn && clerkUser) {
       const email = clerkUser.primaryEmailAddress?.emailAddress
-      if (email) {
-        localStorage.setItem('nexus_user_email', email)
-        const isSA = clerkUser.publicMetadata?.role === 'super_admin'
-        const userData = {
-          id: 1,
-          username: clerkUser.username || email.split('@')[0] || 'owner',
-          full_name: clerkUser.fullName || 'Cafe Administrator',
-          role: isSA ? 'super_admin' : 'admin'
-        }
-        login(userData)
-        navigate(isSA ? '/super-admin' : '/')
-      }
+      if (email) localStorage.setItem('nexus_user_email', email)
     }
-  }, [isSignedIn, clerkUser, login, navigate])
+  }, [isSignedIn, clerkUser])
 
   const handleKeyPress = (num) => {
     if (pin.length < 4) {

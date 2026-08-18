@@ -9,7 +9,7 @@ import {
   Zap, TrendingDown, Users, BarChart2, Settings,
   Sun, Moon, LogOut, Menu, X, FileCheck, Trash2, Shield
 } from 'lucide-react'
-import { SignedIn, SignedOut, UserButton } from '@clerk/clerk-react'
+import { SignedIn, SignedOut, UserButton, useClerk } from '@clerk/clerk-react'
 
 
 const NAV = [
@@ -28,6 +28,7 @@ const NAV = [
 export default function Sidebar() {
   const { user, logout, isAdmin, isSuperAdmin, activeTenant, setActiveTenant } = useAuth()
   const { isDark, toggleDark, accentId, setAccentId } = useTheme()
+  const { signOut } = useClerk()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [showSignOutModal, setShowSignOutModal] = useState(false)
@@ -39,12 +40,16 @@ export default function Sidebar() {
       await api.post('/auth?action=logout')
     } catch (e) {
       console.error('Logout logging error:', e)
-    } finally {
-      setIsPurging(false)
-      setShowSignOutModal(false)
-      logout()
-      navigate('/login')
     }
+    try {
+      await signOut()
+    } catch (e) {
+      console.error('Clerk signOut error:', e)
+    }
+    setIsPurging(false)
+    setShowSignOutModal(false)
+    logout()
+    navigate('/login')
   }
 
   const visibleNav = NAV.filter(item => {
