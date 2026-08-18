@@ -9,7 +9,7 @@ import {
   Zap, TrendingDown, Users, BarChart2, Settings,
   Sun, Moon, LogOut, Menu, X, FileCheck, Trash2, Shield
 } from 'lucide-react'
-import { SignedIn, UserButton } from '@clerk/clerk-react'
+import { SignedIn, SignedOut, UserButton } from '@clerk/clerk-react'
 
 
 const NAV = [
@@ -174,43 +174,46 @@ export default function Sidebar() {
 
         {/* System Operator & Log Out */}
         <div style={{
-          padding: '1rem',
+          padding: '0.85rem 1rem',
           borderTop: '1.5px solid var(--bevel-top)',
-          background: 'rgba(0,0,0,0.05)'
+          background: 'rgba(0,0,0,0.05)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.75rem'
         }}>
-          <SignedIn>
-            <div style={{ marginBottom: '0.75rem', paddingBottom: '0.65rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <UserButton afterSignOutUrl="/" />
-                <span style={{ fontSize: '0.7rem', color: 'var(--accent-text)', fontWeight: 700 }}>
-                  Clerk Cloud
-                </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+            <SignedIn>
+              <UserButton afterSignOutUrl="/" appearance={{ elements: { userButtonAvatarBox: { width: '34px', height: '34px' } } }} />
+            </SignedIn>
+            <SignedOut>
+              <div style={{
+                width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
+                background: 'var(--accent-dim)', border: '1.5px solid var(--accent-border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.85rem', fontWeight: 800, color: 'var(--accent-text)',
+                boxShadow: '1px 1px 3px rgba(0,0,0,0.1)'
+              }}>
+                {user?.full_name?.[0]?.toUpperCase() || '?'}
               </div>
-            </div>
-          </SignedIn>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-            <div style={{
-              width: '2.25rem', height: '2.25rem', borderRadius: '50%', flexShrink: 0,
-              background: 'var(--accent-dim)', border: '1.5px solid var(--accent-border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '0.9rem', fontWeight: 750, color: 'var(--accent-text)',
-              boxShadow: '1px 1px 3px rgba(0,0,0,0.1), inset 1px 1px 0px rgba(255,255,255,0.15)'
-            }}>
-              {user?.full_name?.[0]?.toUpperCase() || '?'}
-            </div>
+            </SignedOut>
             <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {user?.full_name}
+              <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user?.full_name || 'Operator'}
               </p>
-              <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 @{user?.username}
               </p>
             </div>
           </div>
-          <button onClick={() => setShowSignOutModal(true)} className="btn-secondary btn-sm"
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-            <LogOut size={13} /> Operator Sign Out
+
+          <button
+            onClick={() => setShowSignOutModal(true)}
+            className="btn-secondary btn-sm"
+            style={{ padding: '0.45rem 0.55rem', borderRadius: '8px', color: 'var(--danger)', flexShrink: 0 }}
+            title="Operator Sign Out"
+          >
+            <LogOut size={14} />
           </button>
         </div>
       </aside>
