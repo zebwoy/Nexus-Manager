@@ -40,8 +40,10 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || user?.username === 'trial' || user?.username === 'admin'
-  const isSuperAdmin = user?.role === 'super_admin' || user?.username === 'superadmin' || user?.username === 'admin' || user?.is_super_admin === true
+  const isTrial = user?.username === 'trial'
+  const isSuperAdmin = !isTrial && (user?.role === 'super_admin' || user?.username === 'superadmin' || user?.is_super_admin === true)
+  const isAdmin = !isTrial && (user?.role === 'admin' || user?.role === 'super_admin')
+  const isOperator = user?.role === 'operator' || isTrial
 
   return (
     <AuthContext.Provider value={{

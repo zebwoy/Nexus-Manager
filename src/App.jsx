@@ -34,7 +34,7 @@ function AdminRoute({ children }) {
 function SuperAdminRoute({ children }) {
   const { user, isSuperAdmin } = useAuth()
   if (!user) return <Navigate to="/login" replace />
-  // If user is logged in, allow access to Super Admin portal
+  if (!isSuperAdmin) return <Navigate to="/" replace />
   return <SuperAdminLayout>{children}</SuperAdminLayout>
 }
 
