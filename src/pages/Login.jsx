@@ -31,7 +31,7 @@ export default function Login() {
       const email = clerkUser.primaryEmailAddress?.emailAddress
       if (email) {
         localStorage.setItem('nexus_user_email', email)
-        const isSA = clerkUser.publicMetadata?.role === 'super_admin' || email === 'imanriyaj@gmail.com'
+        const isSA = clerkUser.publicMetadata?.role === 'super_admin'
         const userData = {
           id: 1,
           username: clerkUser.username || email.split('@')[0] || 'owner',
@@ -92,11 +92,11 @@ export default function Login() {
 
   const handleClerkLaunch = () => {
     if (!clerkUser) return
-    const isSA = clerkUser.publicMetadata?.role === 'super_admin' || clerkUser.primaryEmailAddress?.emailAddress === 'imanriyaj@gmail.com'
+    const isSA = clerkUser.publicMetadata?.role === 'super_admin'
     const userData = {
       id: 1,
       username: clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress?.split('@')[0] || 'owner',
-      full_name: clerkUser.fullName || 'Cloud Owner',
+      full_name: clerkUser.fullName || 'Cafe Administrator',
       role: isSA ? 'super_admin' : 'admin'
     }
     login(userData)
