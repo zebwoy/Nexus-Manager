@@ -1,5 +1,8 @@
 {
   "rewrites": [
+    { "source": "/api/super-admin/(.*)",      "destination": "/api/super-admin?action=$1" },
+    { "source": "/api/super-admin",           "destination": "/api/super-admin" },
+
     { "source": "/api/auth-login",           "destination": "/api/auth?action=login" },
     { "source": "/api/auth-audit",            "destination": "/api/auth?action=audit" },
     { "source": "/api/users",                 "destination": "/api/auth?action=users" },

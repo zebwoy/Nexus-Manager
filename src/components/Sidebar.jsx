@@ -25,7 +25,7 @@ const NAV = [
 ]
 
 export default function Sidebar() {
-  const { user, logout, isAdmin } = useAuth()
+  const { user, logout, isAdmin, isSuperAdmin, activeTenant, setActiveTenant } = useAuth()
   const { isDark, toggleDark, accentId, setAccentId } = useTheme()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -62,7 +62,6 @@ export default function Sidebar() {
   const activeMobileNav = visibleNav.slice(0, 4)
   const moreMobileNav = visibleNav.slice(4)
 
-
   return (
     <>
       {/* ─── DESKTOP SIDEBAR ────────────────────────────────────────── */}
@@ -77,25 +76,50 @@ export default function Sidebar() {
       }}>
         {/* Logo Panel */}
         <div style={{
-          padding: '1.5rem 1.25rem 1.15rem',
+          padding: '1.25rem 1.25rem 1rem',
           borderBottom: '1.5px solid var(--bevel-bottom)',
           background: 'rgba(0,0,0,0.05)',
           boxShadow: 'inset 0 -1px 0 var(--bevel-top)'
         }}>
           <p style={{
             fontSize: '1.25rem', fontWeight: 800, color: 'var(--text)',
-            letterSpacing: '-0.02em', textShadow: '1px 1px 0 var(--bevel-top)'
+            letterSpacing: '-0.02em', textShadow: '1px 1px 0 var(--bevel-top)', margin: 0
           }}>
             Nexus Manager
           </p>
-          <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 650, marginTop: '0.15rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 650, marginTop: '0.15rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
             Gaming Cafe Console
           </p>
         </div>
 
+        {/* Active Tenant Impersonation / Context Pill */}
+        {activeTenant && (
+          <div style={{
+            padding: '0.55rem 0.85rem', background: 'var(--accent-dim)',
+            borderBottom: '1px solid var(--border)', display: 'flex',
+            alignItems: 'center', justifyContent: 'space-between'
+          }}>
+            <div style={{ overflow: 'hidden' }}>
+              <p style={{ fontSize: '0.625rem', fontWeight: 800, color: 'var(--accent-text)', textTransform: 'uppercase', margin: 0 }}>
+                Active Org Schema
+              </p>
+              <p style={{ fontSize: '0.75rem', fontWeight: 750, color: 'var(--text)', margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                {activeTenant.name}
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveTenant(null)}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.75rem', padding: '0.2rem' }}
+              title="Reset to default schema"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Navigation Links */}
         <nav style={{
-          flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column',
+          flex: 1, padding: '0.85rem 0.75rem', display: 'flex', flexDirection: 'column',
           gap: '0.25rem', overflowY: 'auto', borderTop: '1.5px solid var(--bevel-top)'
         }}>
           {visibleNav.map(({ to, Icon, label }) => (
@@ -105,6 +129,14 @@ export default function Sidebar() {
               {label}
             </NavLink>
           ))}
+
+          {(isAdmin || isSuperAdmin) && (
+            <NavLink to="/super-admin" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+              style={{ marginTop: 'auto', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.25)' }}>
+              <Shield size={16} strokeWidth={2.2} style={{ flexShrink: 0, color: '#f59e0b' }} />
+              ★ Super Admin
+            </NavLink>
+          )}
         </nav>
 
         {/* Theme Settings Panel */}

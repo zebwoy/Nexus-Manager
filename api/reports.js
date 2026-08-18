@@ -1,81 +1,69 @@
 import { getPool, ok, err } from './_db.js'
+import { withTenantClient } from './_tenant.js'
 
 export default async function handler(req, res) {
+  if (req.method !== 'GET') return err(res, 'Method not allowed', 405)
   const pool = getPool()
 
-  try {
-    const currentOperator = req.headers['x-username']
+  return withTenantClient(pool, req, res, async (client) => {
     const month = req.query.month || new Date().toISOString().slice(0, 7)
-    const [year, mon] = month.split('-')
-    const start = `${year}-${mon}-01`
-    const end = new Date(year, mon, 0).toISOString().slice(0, 10)
+    const startDate = `${month}-01`
+    const nextMonth = new Date(new Date(startDate).setMonth(new Date(startDate).getMonth() + 1)).toISOString().slice(0, 7)
+    const endDate = `${nextMonth}-01`
 
-    // Build trial ownership clause: trial user only sees their own data
-    let trialUserId = null
-    const isTrial = currentOperator === 'trial'
-    if (isTrial) {
-      const trialUserRes = await pool.query("SELECT id FROM users WHERE username = 'trial'")
-      trialUserId = trialUserRes.rows[0]?.id || 0
-    }
-    // For each query, sessionFilter applies to session/sale-based tables, directFilter to tables with direct created_by
-    const creatorFilter = isTrial
-      ? `AND created_by = ${trialUserId}`
-      : `AND (created_by IS NULL OR created_by <> ${trialUserId || 0})`
-    const sessionCreatorFilter = isTrial
-      ? `AND s.created_by = ${trialUserId}`
-      : `AND (s.created_by IS NULL OR s.created_by <> ${trialUserId || 0})`
+    const revenueRes = await client.query(`
+      SELECT
+        (SELECT COALESCE(SUM(total), 0) FROM sessions WHERE date >= $1 AND date < $2 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS gaming_revenue,
+        (SELECT COALESCE(SUM(total), 0) FROM sales WHERE sale_type = 'walkin' AND date >= $1 AND date < $2) AS walkin_revenue,
+        (SELECT COALESCE(SUM(total), 0) FROM sales WHERE sale_type = 'session' AND date >= $1 AND date < $2) AS session_sales_revenue,
+        (SELECT COALESCE(SUM(amount_received), 0) FROM pancafe_sessions WHERE date >= $1 AND date < $2) AS pancafe_revenue,
+        (SELECT COALESCE(SUM(charge_price), 0) FROM recharges WHERE date >= $1 AND date < $2) AS rc_revenue,
+        (SELECT COALESCE(SUM(credit), 0) FROM sessions WHERE date >= $1 AND date < $2 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS outstanding_credit,
+        (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE date >= $1 AND date < $2) AS operating_expenses,
+        (SELECT COALESCE(SUM(si.qty * ii.buy_price), 0)
+         FROM sales s JOIN sale_items si ON si.sale_id = s.id
+         JOIN inventory_items ii ON ii.id = si.item_id
+         WHERE s.date >= $1 AND s.date < $2) AS inventory_cogs,
+        (SELECT COALESCE(SUM(cost_price), 0) FROM recharges WHERE date >= $1 AND date < $2) AS recharges_cogs,
+        (SELECT COALESCE(SUM(amount_spent), 0) FROM pancafe_sessions WHERE date >= $1 AND date < $2) AS pancafe_cogs
+    `, [startDate, endDate])
 
-    const [
-      gaming, walkin, sessionSales, rc, pancafe, expenses, deviceStats, credits,
-      inventoryCogs, rechargesCogs, pancafeCogs
-    ] = await Promise.all([
-      pool.query(`SELECT COALESCE(SUM(total),0) AS v FROM sessions WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(total),0) AS v FROM sales WHERE sale_type='walkin' AND date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(total),0) AS v FROM sales WHERE sale_type='session' AND date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(charge_price),0) AS v FROM recharges WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(amount_received),0) AS v FROM pancafe_sessions WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(amount),0) AS v FROM expenses WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
-      pool.query(`SELECT d.label AS device_label, COUNT(s.id)::int AS session_count, COALESCE(SUM(s.total),0) AS total_revenue
-                  FROM sessions s JOIN devices d ON d.id = s.device_id
-                  WHERE s.date BETWEEN $1 AND $2 ${sessionCreatorFilter} GROUP BY d.id, d.label ORDER BY session_count DESC`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(credit),0) AS v FROM sessions WHERE credit > 0 ${creatorFilter}`),
-      pool.query(`SELECT COALESCE(SUM(si.qty * ii.buy_price),0) AS v 
-                  FROM sale_items si 
-                  JOIN sales s ON s.id = si.sale_id 
-                  JOIN inventory_items ii ON ii.id = si.item_id 
-                  WHERE s.date BETWEEN $1 AND $2 ${sessionCreatorFilter}`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(cost_price),0) AS v FROM recharges WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
-      pool.query(`SELECT COALESCE(SUM(amount_spent),0) AS v FROM pancafe_sessions WHERE date BETWEEN $1 AND $2 ${creatorFilter}`, [start, end]),
-    ])
+    const r = revenueRes.rows[0]
+    const grossRevenue = Number(r.gaming_revenue) + Number(r.walkin_revenue) + Number(r.session_sales_revenue) + Number(r.pancafe_revenue) + Number(r.rc_revenue)
+    const totalCOGS = Number(r.inventory_cogs) + Number(r.recharges_cogs) + Number(r.pancafe_cogs)
+    const totalExpenses = Number(r.operating_expenses) + totalCOGS
+    const netProfit = grossRevenue - totalExpenses
 
-    const gross = [gaming, walkin, sessionSales, rc, pancafe].reduce((sum, r) => sum + Number(r.rows[0].v), 0)
-    const opExp = Number(expenses.rows[0].v)
-    const invCogsVal = Number(inventoryCogs.rows[0].v)
-    const rcCogsVal = Number(rechargesCogs.rows[0].v)
-    const pcCogsVal = Number(pancafeCogs.rows[0].v)
+    const deviceRes = await client.query(`
+      SELECT d.label AS device_label, d.type,
+             COUNT(s.id) AS session_count,
+             COALESCE(SUM(s.total), 0) AS total_revenue
+      FROM devices d
+      LEFT JOIN sessions s ON s.device_id = d.id AND s.date >= $1 AND s.date < $2 AND (s.is_deleted IS NULL OR s.is_deleted = FALSE)
+      WHERE d.is_active = TRUE
+      GROUP BY d.id, d.label, d.type
+      ORDER BY total_revenue DESC
+    `, [startDate, endDate])
 
-    const totalExp = opExp + invCogsVal + rcCogsVal + pcCogsVal
-    const maxSessions = Math.max(...(deviceStats.rows.map(d => d.session_count)), 1)
+    const maxSessions = Math.max(...deviceRes.rows.map(d => Number(d.session_count)), 1)
 
     return ok(res, {
-      gross_revenue: gross,
-      gaming_revenue: Number(gaming.rows[0].v),
-      walkin_revenue: Number(walkin.rows[0].v),
-      session_sales_revenue: Number(sessionSales.rows[0].v),
-      rc_revenue: Number(rc.rows[0].v),
-      pancafe_revenue: Number(pancafe.rows[0].v),
-      operating_expenses: opExp,
-      inventory_cogs: invCogsVal,
-      recharges_cogs: rcCogsVal,
-      pancafe_cogs: pcCogsVal,
-      total_expenses: totalExp,
-      net_profit: gross - totalExp,
-      outstanding_credit: Number(credits.rows[0].v),
-      device_stats: deviceStats.rows,
+      month,
+      gross_revenue: grossRevenue,
+      gaming_revenue: Number(r.gaming_revenue),
+      walkin_revenue: Number(r.walkin_revenue),
+      session_sales_revenue: Number(r.session_sales_revenue),
+      pancafe_revenue: Number(r.pancafe_revenue),
+      rc_revenue: Number(r.rc_revenue),
+      operating_expenses: Number(r.operating_expenses),
+      inventory_cogs: Number(r.inventory_cogs),
+      recharges_cogs: Number(r.recharges_cogs),
+      pancafe_cogs: Number(r.pancafe_cogs),
+      total_expenses: totalExpenses,
+      net_profit: netProfit,
+      outstanding_credit: Number(r.outstanding_credit),
+      device_stats: deviceRes.rows,
       max_sessions: maxSessions,
     })
-  } catch (e) {
-    console.error(e)
-    return err(res, 'Server error', 500)
-  }
+  })
 }

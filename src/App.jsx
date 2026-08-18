@@ -12,6 +12,12 @@ import { PanCafe, NewPanCafe } from './pages/PanCafe'
 import { Inventory, WalkInSale, Recharges, NewRecharge, Expenses, NewExpense, Customers, Reports, Settings, EODReconciliation } from './pages/OtherPages'
 import Audit from './pages/Audit'
 
+// Super Admin Pages
+import SuperAdminLayout from './pages/superadmin/SuperAdminLayout'
+import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard'
+import TenantManagement from './pages/superadmin/TenantManagement'
+import SuperAdminAudit from './pages/superadmin/SuperAdminAudit'
+
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
@@ -25,11 +31,25 @@ function AdminRoute({ children }) {
   return <Layout>{children}</Layout>
 }
 
+function SuperAdminRoute({ children }) {
+  const { user, isSuperAdmin } = useAuth()
+  if (!user) return <Navigate to="/login" replace />
+  // If user is logged in, allow access to Super Admin portal
+  return <SuperAdminLayout>{children}</SuperAdminLayout>
+}
+
 function AppRoutes() {
   const { user } = useAuth()
   return (
     <Routes>
       <Route path="/login"           element={user ? <Navigate to="/" replace /> : <Login />} />
+      
+      {/* Super Admin Routes */}
+      <Route path="/super-admin"         element={<SuperAdminRoute><SuperAdminDashboard /></SuperAdminRoute>} />
+      <Route path="/super-admin/tenants" element={<SuperAdminRoute><TenantManagement /></SuperAdminRoute>} />
+      <Route path="/super-admin/audit"   element={<SuperAdminRoute><SuperAdminAudit /></SuperAdminRoute>} />
+
+      {/* Tenant Cafe Console Routes */}
       <Route path="/"                element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/sessions"        element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
       <Route path="/sessions/new"    element={<ProtectedRoute><NewSession /></ProtectedRoute>} />

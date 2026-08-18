@@ -1,25 +1,24 @@
 import { getPool, ok, err } from './_db.js'
+import { withTenantClient } from './_tenant.js'
 
 export default async function handler(req, res) {
-  try {
-    const pool = getPool()
-    const action = req.query.action
-    const userId = req.headers['x-user-id']
-    const currentOperator = req.headers['x-username']
+  const pool = getPool()
+  const action = req.query.action
+  const userId = req.headers['x-user-id']
+  const currentOperator = req.headers['x-username']
 
-    // Handlers
-
+  return withTenantClient(pool, req, res, async (client) => {
     // ─── LOGOUT: POST /api/auth-logout ─────────────────────────────
     if (action === 'logout' || req.url.includes('auth-logout')) {
       if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
       if (userId) {
-        await pool.query(
+        await client.query(
           `UPDATE operator_sessions
            SET logout_at = CURRENT_TIMESTAMP
            WHERE user_id = $1 AND logout_at IS NULL`,
           [Number(userId)]
         )
-        await pool.query(
+        await client.query(
           `INSERT INTO audit_logs (user_id, username, action, details)
            VALUES ($1, $2, $3, $4)`,
           [Number(userId), currentOperator || 'system', 'LOGOUT', `Operator logged out: @${currentOperator}`]
@@ -33,14 +32,14 @@ export default async function handler(req, res) {
       if (req.method !== 'GET') return err(res, 'Method not allowed', 405)
       if (!userId) return err(res, 'Authorization required', 401)
 
-      const userRes = await pool.query('SELECT role, username FROM users WHERE id = $1', [Number(userId)])
+      const userRes = await client.query('SELECT role, username FROM users WHERE id = $1', [Number(userId)])
       const requestingUser = userRes.rows[0]
       const isAdmin = requestingUser?.role === 'admin' || requestingUser?.username === 'trial'
       if (!isAdmin) return err(res, 'Access denied: Admin only', 403)
 
       const [logs, sessions] = await Promise.all([
-        pool.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 150'),
-        pool.query('SELECT * FROM operator_sessions ORDER BY login_at DESC LIMIT 150')
+        client.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 150'),
+        client.query('SELECT * FROM operator_sessions ORDER BY login_at DESC LIMIT 150')
       ])
       return ok(res, { logs: logs.rows, sessions: sessions.rows })
     }
@@ -53,12 +52,12 @@ export default async function handler(req, res) {
 
       let result
       try {
-        result = await pool.query(
+        result = await client.query(
           'SELECT id, full_name, username, COALESCE(role, \'operator\') AS role FROM users WHERE username = $1 AND pin = $2',
           [String(username).toLowerCase().trim(), String(pin)]
         )
       } catch {
-        result = await pool.query(
+        result = await client.query(
           'SELECT id, full_name, username FROM users WHERE username = $1 AND pin = $2',
           [String(username).toLowerCase().trim(), String(pin)]
         )
@@ -68,128 +67,86 @@ export default async function handler(req, res) {
       }
       
       if (result.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
-      
-      const loggedUser = result.rows[0]
-      // Record login session
-      await pool.query(
-        'INSERT INTO operator_sessions (user_id, username) VALUES ($1, $2)',
-        [loggedUser.id, loggedUser.username]
+
+      const user = result.rows[0]
+
+      // Record in operator_sessions and audit_logs
+      await client.query(
+        `INSERT INTO operator_sessions (user_id, username) VALUES ($1, $2)`,
+        [user.id, user.username]
       )
-      // Record audit log
-      await pool.query(
-        'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
-        [loggedUser.id, loggedUser.username, 'LOGIN', `Operator logged in: @${loggedUser.username}`]
-      )
-
-      return ok(res, { user: loggedUser })
-    }
-
-    // ─── USERS: GET, POST, DELETE /api/users ─────────────────────
-    if (req.method === 'GET') {
-      let result
-      try {
-        result = await pool.query('SELECT id, full_name, username, COALESCE(role, \'operator\') AS role, created_at FROM users ORDER BY created_at')
-      } catch {
-        result = await pool.query('SELECT id, full_name, username, created_at FROM users ORDER BY created_at')
-        result.rows = result.rows.map(u => ({ ...u, role: u.username === 'trial' ? 'admin' : 'operator' }))
-      }
-      return ok(res, { users: result.rows })
-    }
-
-    if (req.method === 'POST') {
-      const { full_name, username, pin, role } = req.body || {}
-      if (!full_name || !username || !pin) return err(res, 'All fields required')
-      if (String(pin).length !== 4 || !/^\d{4}$/.test(String(pin))) return err(res, 'PIN must be exactly 4 digits')
-
-      const existing = await pool.query('SELECT id FROM users WHERE username = $1', [String(username).toLowerCase()])
-      if (existing.rows.length > 0) return err(res, 'Username already taken')
-
-      if (currentOperator === 'trial') {
-        await pool.query(
-          'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
-          [userId || null, 'trial', 'CREATE_USER', `[SIMULATED] Created staff account: @${username}`]
-        )
-        return ok(res, { user: { id: 999, full_name, username, role: role || 'operator' } }, 201)
-      }
-
-      let result
-      try {
-        result = await pool.query(
-          'INSERT INTO users (full_name, username, pin, role) VALUES ($1, $2, $3, $4) RETURNING id, full_name, username, role',
-          [String(full_name).trim(), String(username).toLowerCase().trim(), String(pin), role || 'operator']
-        )
-      } catch {
-        result = await pool.query(
-          'INSERT INTO users (full_name, username, pin) VALUES ($1, $2, $3) RETURNING id, full_name, username',
-          [String(full_name).trim(), String(username).toLowerCase().trim(), String(pin)]
-        )
-        if (result.rows[0]) result.rows[0].role = role || 'operator'
-      }
-
-      await pool.query(
-        'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
-        [userId || null, currentOperator || 'system', 'CREATE_USER', `Created staff account: @${username}`]
+      await client.query(
+        `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, 'LOGIN', $3)`,
+        [user.id, user.username, `Operator signed in: @${user.username} (${user.full_name})`]
       )
 
-      return ok(res, { user: result.rows[0] }, 201)
+      return ok(res, { user })
     }
 
-    if (req.method === 'PUT') {
-      const id = req.query.id
-      const { pin } = req.body || {}
-      if (!id || !pin) return err(res, 'User ID and PIN are required')
-      if (String(pin).length !== 4 || !/^\d{4}$/.test(String(pin))) return err(res, 'PIN must be exactly 4 digits')
-      
-      const userToReset = await pool.query('SELECT username FROM users WHERE id = $1', [Number(id)])
-      
-      if (currentOperator === 'trial') {
-        await pool.query(
-          'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
-          [userId || null, 'trial', 'RESET_PIN', `[SIMULATED] Reset PIN for staff: @${userToReset.rows[0]?.username || id}`]
-        )
-        return ok(res, { success: true, message: 'Security PIN reset successfully.' })
+    // ─── USER MANAGEMENT: /api/users ──────────────────────────────
+    if (action === 'users' || req.url.includes('/api/users')) {
+      if (req.method === 'GET') {
+        const r = await client.query('SELECT id, full_name, username, role, created_at FROM users ORDER BY id')
+        return ok(res, { users: r.rows })
       }
 
-      await pool.query('UPDATE users SET pin = $1 WHERE id = $2', [String(pin), Number(id)])
+      if (req.method === 'POST') {
+        const { full_name, username, pin, role } = req.body || {}
+        if (!full_name || !username || !pin) return err(res, 'Full name, username and 4-digit PIN required')
+        if (String(pin).length !== 4) return err(res, 'PIN must be exactly 4 digits')
+        
+        const cleanUser = String(username).toLowerCase().trim()
+        const existing = await client.query('SELECT id FROM users WHERE username = $1', [cleanUser])
+        if (existing.rows.length > 0) return err(res, 'Username already exists', 409)
 
-      await pool.query(
-        'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
-        [userId || null, currentOperator || 'system', 'RESET_PIN', `Reset PIN for staff: @${userToReset.rows[0]?.username || id}`]
-      )
+        const r = await client.query(
+          `INSERT INTO users (full_name, username, pin, role) VALUES ($1, $2, $3, $4) RETURNING id, full_name, username, role, created_at`,
+          [full_name.trim(), cleanUser, String(pin), role || 'operator']
+        )
+        
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, 'CREATE_USER', $3)`,
+          [userId ? Number(userId) : null, currentOperator || 'system', `Created staff account: @${cleanUser} (${role || 'operator'})`]
+        )
 
-      return ok(res, { success: true, message: 'Security PIN reset successfully.' })
-    }
+        return ok(res, { user: r.rows[0] }, 201)
+      }
 
-    if (req.method === 'DELETE') {
-      const id = req.query.id
-      if (!id) return err(res, 'User ID required')
-      
-      const userToDelete = await pool.query('SELECT username FROM users WHERE id = $1', [Number(id)])
+      if (req.method === 'PUT') {
+        const id = req.query.id
+        if (!id) return err(res, 'User ID is required', 400)
+        const { pin } = req.body || {}
+        if (!pin || String(pin).length !== 4) return err(res, 'PIN must be exactly 4 digits', 400)
 
-      if (currentOperator === 'trial') {
-        await pool.query(
-          'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
-          [userId || null, 'trial', 'DELETE_USER', `[SIMULATED] Deleted staff account: @${userToDelete.rows[0]?.username || id}`]
+        const targetUserR = await client.query('SELECT username FROM users WHERE id = $1', [Number(id)])
+        if (targetUserR.rows.length === 0) return err(res, 'User not found', 404)
+        const targetUsername = targetUserR.rows[0].username
+
+        await client.query('UPDATE users SET pin = $1 WHERE id = $2', [String(pin), Number(id)])
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, 'RESET_PIN', $3)`,
+          [userId ? Number(userId) : null, currentOperator || 'system', `Reset security PIN for user @${targetUsername}`]
+        )
+
+        return ok(res, { success: true, message: 'PIN updated successfully' })
+      }
+
+      if (req.method === 'DELETE') {
+        const id = req.query.id
+        if (!id) return err(res, 'User ID required', 400)
+        
+        const targetUserR = await client.query('SELECT username FROM users WHERE id = $1', [Number(id)])
+        const targetUsername = targetUserR.rows[0]?.username || `#${id}`
+
+        await client.query('DELETE FROM users WHERE id = $1', [Number(id)])
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, 'DELETE_USER', $3)`,
+          [userId ? Number(userId) : null, currentOperator || 'system', `Deleted user account @${targetUsername}`]
         )
         return ok(res, { success: true })
       }
-
-      await pool.query('DELETE FROM users WHERE id = $1', [Number(id)])
-
-      await pool.query(
-        'INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)',
-        [userId || null, currentOperator || 'system', 'DELETE_USER', `Deleted staff account: @${userToDelete.rows[0]?.username || id}`]
-      )
-
-      return ok(res, { success: true })
     }
 
-    return err(res, 'Method not allowed', 405)
-  } catch (e) {
-    console.error(e)
-    return err(res, e, 500)
-  }
+    return err(res, 'Invalid auth endpoint or method', 400)
+  })
 }
-
-
-

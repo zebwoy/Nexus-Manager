@@ -10,9 +10,18 @@ function getUser() {
 
 async function request(path, options = {}) {
   const user = getUser()
+  const tenantSchema = localStorage.getItem('nexus_tenant_schema')
+  const orgId = localStorage.getItem('nexus_org_id')
+  const userEmail = localStorage.getItem('nexus_user_email')
+  const clerkToken = localStorage.getItem('nexus_clerk_token')
+
   const headers = {
     'Content-Type': 'application/json',
     ...(user ? { 'x-user-id': String(user.id), 'x-username': user.username } : {}),
+    ...(tenantSchema ? { 'x-tenant-schema': tenantSchema } : {}),
+    ...(orgId ? { 'x-org-id': orgId } : {}),
+    ...(userEmail ? { 'x-user-email': userEmail } : {}),
+    ...(clerkToken ? { 'Authorization': `Bearer ${clerkToken}` } : {}),
     ...(options.headers || {}),
   }
 
