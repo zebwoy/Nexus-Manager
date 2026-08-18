@@ -55,11 +55,26 @@ export default async function handler(req, res) {
 
       // Auto-provision standard accounts if not yet in database
       if (cleanUser === 'superadmin' && (cleanPin === '9999' || cleanPin === '1234')) {
-        await client.query(`
-          INSERT INTO users (full_name, username, pin, role)
-          VALUES ('Super Administrator', 'superadmin', $1, 'super_admin')
-          ON CONFLICT (username) DO UPDATE SET pin = EXCLUDED.pin, role = 'super_admin'
-        `, [cleanPin])
+        try {
+          await client.query(`
+            ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+            ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'operator', 'super_admin', 'trial'));
+          `)
+        } catch {}
+
+        try {
+          await client.query(`
+            INSERT INTO users (full_name, username, pin, role)
+            VALUES ('Super Administrator', 'superadmin', $1, 'super_admin')
+            ON CONFLICT (username) DO UPDATE SET pin = EXCLUDED.pin, role = 'super_admin'
+          `, [cleanPin])
+        } catch {
+          await client.query(`
+            INSERT INTO users (full_name, username, pin, role)
+            VALUES ('Super Administrator', 'superadmin', $1, 'admin')
+            ON CONFLICT (username) DO UPDATE SET pin = EXCLUDED.pin, role = 'admin'
+          `, [cleanPin])
+        }
       } else if (cleanUser === 'admin' && (cleanPin === '1234' || cleanPin === '9999')) {
         await client.query(`
           INSERT INTO users (full_name, username, pin, role)
@@ -87,6 +102,9 @@ export default async function handler(req, res) {
       if (result.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
 
       const user = result.rows[0]
+      if (cleanUser === 'superadmin') {
+        user.role = 'super_admin'
+      }
 
       // Record in operator_sessions and audit_logs
       await client.query(

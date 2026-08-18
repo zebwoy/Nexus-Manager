@@ -29,6 +29,13 @@ ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS created_by INT REFERENCES u
 -- 3. Update Category & Payment Method Constraints (Safe Drop & Re-add)
 DO $$
 BEGIN
+    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+    ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'operator', 'super_admin', 'trial'));
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
     ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_category_check;
     ALTER TABLE expenses ADD CONSTRAINT expenses_category_check CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Cafeteria', 'Other'));
 EXCEPTION WHEN OTHERS THEN NULL;
