@@ -4,32 +4,9 @@ import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { formatRupees, formatDate, formatTime, todayISO } from '../lib/helpers'
 import { PageLoader, ErrorMsg, SectionHeader, Modal, Field, Spinner, TrialWarningModal } from '../components/UI'
-import { Plus } from 'lucide-react'
+import { Plus, LayoutGrid, List } from 'lucide-react'
 import LogSessionModal from '../components/LogSessionModal'
-
-
-// Live countdown for active sessions
-function ActiveCountdown({ timeOut }) {
-  const [label, setLabel] = useState('')
-  const [over, setOver] = useState(false)
-  useEffect(() => {
-    const tick = () => {
-      const diff = new Date(timeOut) - new Date()
-      if (diff <= 0) { setLabel('Overdue'); setOver(true); return }
-      const h = Math.floor(diff / 3600000)
-      const m = Math.floor((diff % 3600000) / 60000)
-      setLabel(h > 0 ? `${h}h ${m}m left` : `${m}m left`)
-      setOver(false)
-    }
-    tick(); const id = setInterval(tick, 30000); return () => clearInterval(id)
-  }, [timeOut])
-  return (
-    <span style={{
-      fontSize: '0.725rem', fontFamily: "'JetBrains Mono', monospace", fontWeight: 700,
-      color: over ? 'var(--danger)' : 'var(--success)'
-    }}>{label}</span>
-  )
-}
+import StationGrid from '../components/StationGrid'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -49,7 +26,6 @@ export default function Dashboard() {
   const [showLogModal, setShowLogModal] = useState(false)
   const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
 
-
   const load = useCallback(async () => {
     try {
       setLoading(true)
@@ -65,7 +41,6 @@ export default function Dashboard() {
       const allSessions = sess.sessions || []
       setRecentSessions(allSessions.slice(0, 6))
       setActiveSessions(allSessions.filter(s => s.is_active))
-      // Show opening modal if not yet set for today
       if (!openR.opening) setShowOpeningModal(true)
     } catch (err) { setError(err.message) }
     finally { setLoading(false) }
@@ -103,6 +78,7 @@ export default function Dashboard() {
   return (
     <div>
       <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => setTrialModal({ isOpen: false, action: '' })} />
+      
       {/* Day-start modal */}
       <Modal open={showOpeningModal} onClose={() => setShowOpeningModal(false)} title="☀️ Good morning — Start of Day">
         <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.6 }}>
@@ -130,7 +106,6 @@ export default function Dashboard() {
 
       <LogSessionModal open={showLogModal} onClose={() => setShowLogModal(false)} />
 
-
       {/* Page header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '2rem', gap: '1.25rem', flexWrap: 'wrap' }}>
         <div>
@@ -153,12 +128,12 @@ export default function Dashboard() {
 
       <ErrorMsg error={error} />
 
-      {/* Stats */}
+      {/* KPI Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
         {[
           { label: "Today's Revenue", value: formatRupees(totalRevenue), sub: 'ALL COMBINED SOURCES', state: 'success' },
-          { label: 'Gaming Sessions', value: formatRupees(snapshot?.gaming_revenue), sub: `${activeSessions.length} ACTIVE NOW`, state: activeSessions.length > 0 ? 'success' : '' },
-          { label: 'Shop Inventory', value: formatRupees(Number(snapshot?.walkin_revenue || 0) + Number(snapshot?.session_sales_revenue || 0)), sub: 'WALK-IN + TABLE SALES', state: '' },
+          { label: 'Gaming Stations', value: formatRupees(snapshot?.gaming_revenue), sub: `${activeSessions.length} ACTIVE NOW`, state: activeSessions.length > 0 ? 'success' : '' },
+          { label: 'Cafeteria Sales', value: formatRupees(Number(snapshot?.walkin_revenue || 0) + Number(snapshot?.session_sales_revenue || 0)), sub: 'WALK-IN + TABLE SALES', state: '' },
           { label: 'RC + PanCafe', value: formatRupees(Number(snapshot?.rc_revenue || 0) + Number(snapshot?.pancafe_revenue || 0)), sub: 'PLATFORM RECHARGES', state: 'warning' },
         ].map((s, i) => (
           <div key={i} className={`lcd-screen ${s.state}`} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '110px' }}>
@@ -171,36 +146,31 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Active sessions panel */}
-      {activeSessions.length > 0 && (
-        <div className="card" style={{ marginBottom: '1.75rem' }}>
-          <SectionHeader
-            title="Active Sessions"
-            action={<span className="badge-active-session animate-pulse">{activeSessions.length} LIVE</span>}
-          />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.75rem' }}>
-            {activeSessions.map(s => (
-              <button key={s.id} onClick={() => navigate(`/sessions/${s.id}`)}
-                className="card"
-                style={{ padding: '0.85rem', textAlign: 'left', cursor: 'pointer', border: '1.5px solid var(--accent-border)', background: 'var(--accent-dim)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.35rem' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text)' }}>{s.name || 'Anonymous'}</span>
-                  <ActiveCountdown timeOut={s.time_out} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="badge badge-accent" style={{ fontSize: '0.65rem' }}>{s.device_label}</span>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                    until {new Date(s.time_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              </button>
-            ))}
+      {/* ── LIVE FLOOR MATRIX (STATION GRID) ── */}
+      <div className="card" style={{ marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.65rem' }}>
+          <div>
+            <p style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LayoutGrid size={16} style={{ color: 'var(--accent-text)' }} /> Live Station Floor Matrix
+            </p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+              Real-time terminal status, countdowns, and quick actions
+            </p>
           </div>
+          <button onClick={() => setShowLogModal(true)} className="btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <Plus size={13} /> + New Session
+          </button>
         </div>
-      )}
 
-      {/* Two columns */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginBottom: '2.25rem' }}>
+        <StationGrid
+          activeSessions={activeSessions}
+          onRefresh={load}
+          onLaunchNewSession={() => setShowLogModal(true)}
+        />
+      </div>
+
+      {/* Two columns: Credits Outstanding & Today's Sessions */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
 
         {/* Credits outstanding panel */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -240,7 +210,7 @@ export default function Dashboard() {
         {/* Recent sessions panel */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
           <SectionHeader
-            title="Today's Sessions"
+            title="Recent Sessions Log"
             action={<Link to="/sessions" className="btn-secondary btn-sm" style={{ padding: '0.25rem 0.65rem' }}>View all</Link>}
           />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: recentSessions.length === 0 ? 'center' : 'flex-start' }}>
@@ -277,7 +247,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Quick actions */}
+      {/* Quick actions strip */}
       <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
         <p style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.95rem' }}>Quick Actions</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -288,10 +258,6 @@ export default function Dashboard() {
           <Link to="/eod"             className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}>EOD Reconciliation</Link>
         </div>
       </div>
-
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
     </div>
   )
 }
-
-

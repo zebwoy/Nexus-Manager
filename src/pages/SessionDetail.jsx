@@ -4,11 +4,9 @@ import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { formatRupees, formatTime, formatDate, formatDuration, todayISO, validateName, validateMobile, toISO, addMinutes } from '../lib/helpers'
 import { PageLoader, ErrorMsg, Field, Modal, Spinner, SlidePanel, PanelSection, ConfirmModal, FilterBar } from '../components/UI'
-import { ArrowLeft, Plus, Minus, CreditCard, Banknote, Clock, ShoppingCart, History, Edit3, Trash2, SlidersHorizontal } from 'lucide-react'
+import { ArrowLeft, Plus, Minus, CreditCard, Banknote, Clock, ShoppingCart, History, Edit3, Trash2, SlidersHorizontal, Share2, Printer, ArrowRightLeft, PowerOff, CheckCircle } from 'lucide-react'
 import { toast } from 'react-toastify'
 
-
-// ─── Payment method toggle ────────────────────────────────────
 function PayMethodToggle({ value, onChange }) {
   return (
     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -30,7 +28,6 @@ function PayMethodToggle({ value, onChange }) {
   )
 }
 
-// ─── Live countdown ───────────────────────────────────────────
 function Countdown({ timeOut }) {
   const [remaining, setRemaining] = useState('')
   const [isOverdue, setIsOverdue] = useState(false)
@@ -65,6 +62,7 @@ export default function SessionDetail() {
   const { isAdmin } = useAuth()
 
   const [data, setData] = useState(null)
+  const [devices, setDevices] = useState([])
   const [inventory, setInventory] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -87,32 +85,46 @@ export default function SessionDetail() {
   // Right slide panel
   const [panelOpen, setPanelOpen] = useState(false)
 
-  // Delete
+  // Modals
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editForm, setEditForm] = useState({ name: '', mobile: '', time_in: '', remark: '' })
+  const [editSaving, setEditSaving] = useState(false)
+
+  // End Early modal
+  const [showEndEarlyModal, setShowEndEarlyModal] = useState(false)
+  const [recalcBill, setRecalcBill] = useState(true)
+  const [endEarlySaving, setEndEarlySaving] = useState(false)
+
+  // Switch station modal
+  const [showSwitchModal, setShowSwitchModal] = useState(false)
+  const [targetDevice, setTargetDevice] = useState('')
+  const [switchSaving, setSwitchSaving] = useState(false)
+
+  // Thermal Receipt modal
+  const [showReceiptModal, setShowReceiptModal] = useState(false)
 
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const [detail, inv] = await Promise.all([
+      const [detail, inv, devR] = await Promise.all([
         api.get(`/sessions/${id}`),
         api.get('/inventory'),
+        api.get('/devices'),
       ])
       setData(detail)
       setInventory(inv.items || [])
+      setDevices(devR.devices || [])
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }, [id])
 
   useEffect(() => { load() }, [load])
 
-  // Edit details modal
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', mobile: '', time_in: '', remark: '' })
-  const [editSaving, setEditSaving] = useState(false)
-
   const openEditModal = () => {
-    if (!s) return
+    if (!data?.session) return
+    const s = data.session
     const timeInStr = s.time_in ? new Date(s.time_in).toTimeString().slice(0, 5) : '12:00'
     setEditForm({
       name: s.name || '',
@@ -124,6 +136,7 @@ export default function SessionDetail() {
   }
 
   const handleSaveEdit = async () => {
+    const s = data?.session
     const mobileErr = validateMobile(editForm.mobile, false)
     if (mobileErr) { setError(mobileErr); return }
 
@@ -145,6 +158,39 @@ export default function SessionDetail() {
       load()
     } catch (e) { setError(e.message) }
     finally { setEditSaving(false) }
+  }
+
+  const handleEndEarly = async () => {
+    setEndEarlySaving(true)
+    try {
+      await api.patch(`/sessions/${id}/end-early`, {
+        recalculate: recalcBill
+      })
+      setShowEndEarlyModal(false)
+      toast.success('Session checkout complete! Station released.')
+      load()
+    } catch (e) {
+      toast.error('Failed to end session: ' + e.message)
+    } finally {
+      setEndEarlySaving(false)
+    }
+  }
+
+  const handleSwitchStation = async () => {
+    if (!targetDevice) return
+    setSwitchSaving(true)
+    try {
+      await api.patch(`/sessions/${id}/switch-station`, {
+        new_device_id: Number(targetDevice)
+      })
+      setShowSwitchModal(false)
+      toast.success('Gamer transferred to new station')
+      load()
+    } catch (e) {
+      toast.error('Failed to switch station: ' + e.message)
+    } finally {
+      setSwitchSaving(false)
+    }
   }
 
   const handleDelete = async () => {
@@ -243,30 +289,15 @@ export default function SessionDetail() {
     if (totalCollecting <= 0) { setError('Enter a valid amount to collect'); return }
     setCollectSaving(true)
     try {
-      // Determine method string
-      let method = 'cash'
-      if (cashAmt > 0 && onlineAmt > 0) method = 'split'
-      else if (onlineAmt > 0) method = 'online'
-
-      // Record cash portion
       if (cashAmt > 0) {
-        await api.post(`/sessions/${id}/payments`, {
-          amount: cashAmt,
-          payment_method: 'cash',
-          note: onlineAmt > 0 ? `Split payment — cash portion` : null,
-        })
+        await api.post(`/sessions/${id}/payments`, { amount: cashAmt, payment_method: 'cash' })
       }
-      // Record online portion
       if (onlineAmt > 0) {
-        await api.post(`/sessions/${id}/payments`, {
-          amount: onlineAmt,
-          payment_method: 'online',
-          note: cashAmt > 0 ? `Split payment — online portion` : null,
-        })
+        await api.post(`/sessions/${id}/payments`, { amount: onlineAmt, payment_method: 'online' })
       }
       setCollectAmount('')
       setCollectOnline('')
-      toast.success('Payment recorded')
+      toast.success(`Collected ${formatRupees(totalCollecting)} successfully`)
       load()
     } catch (e) { setError(e.message) }
     finally { setCollectSaving(false) }
@@ -277,250 +308,322 @@ export default function SessionDetail() {
     try {
       await api.patch(`/sessions/${id}/extend`, {
         packets: extMins / 30,
-        collect_now: 0,
+        payment_method: 'cash'
       })
-      toast.success(`Session extended by ${extMins} mins`)
+      toast.success(`Extended by ${extMins} mins`)
+      setPanelOpen(false)
       load()
     } catch (e) { setError(e.message) }
     finally { setExtSaving(false) }
   }
 
+  const handleWhatsAppReceipt = () => {
+    const phone = s.mobile ? `91${s.mobile.replace(/\D/g, '')}` : ''
+    const snackLines = (data.sales || []).flatMap(sa => (sa.items || []).map(it => `• ${it.name} x${it.qty} = ₹${it.unit_price * it.qty}`)).join('%0A')
+    const text = `*Nexus Gaming Cafe - Session Invoice*%0A--------------------------%0A*Session:* %23${s.id}%0A*Station:* ${s.device_label}%0A*Client:* ${s.name || 'Gamer'}%0A*Duration:* ${formatDuration(s.duration_mins)} (${formatTime(s.time_in)} - ${formatTime(s.time_out)})%0A*Gaming Charge:* ₹${s.charge}%0A${Number(s.controller_total) > 0 ? `*Controllers:* ₹${s.controller_total}%0A` : ''}${snackLines ? `*Cafeteria Items:*%0A${snackLines}%0A` : ''}--------------------------%0A*TOTAL BILL:* ₹${grandTotal}%0A*Total Paid:* ₹${totalPaid}%0A${creditRemaining > 0 ? `*Due Balance:* ₹${creditRemaining}%0A` : '*Status:* Fully Paid ✓%0A'}Thank you for playing at Nexus!`
+    
+    window.open(`https://wa.me/${phone}?text=${text}`, '_blank')
+  }
+
+  const availableDevicesForSwitch = devices.filter(d => d.is_active && d.id !== s.device_id)
+
   const sectionCard = (title, icon, children) => (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      <p style={{
-        fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)',
-        textTransform: 'uppercase', letterSpacing: '0.08em',
-        borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem',
-        display: 'flex', alignItems: 'center', gap: '0.5rem'
-      }}>{icon} {title}</p>
+    <div className="card" style={{ padding: '1.25rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
+        <span style={{ fontSize: '1rem' }}>{icon}</span>
+        <h3 style={{ fontSize: '0.85rem', fontWeight: 750, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+          {title}
+        </h3>
+      </div>
       {children}
     </div>
   )
 
   return (
     <div>
-      {/* Delete Confirm Modal */}
-      <ConfirmModal
-        open={showDelete}
-        onClose={() => setShowDelete(false)}
-        onConfirm={handleDelete}
-        loading={deleting}
-        title="Delete Session"
-        message={`Permanently delete session #${s.id} for ${s.name || 'Anonymous'}? This will also remove all associated cafe sales and payments. This action is audited and cannot be undone.`}
-        danger
-      />
-
-      {/* Edit Details Modal */}
+      {/* Edit modal */}
       <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Session Details">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-          <Field label="Customer Name">
-            <input className="input" value={editForm.name}
-              onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="Name" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <Field label="Customer Full Name">
+            <input className="input" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
           </Field>
-
-          <Field label="Mobile Number (optional)">
-            <input className="input" value={editForm.mobile}
-              onChange={e => setEditForm(f => ({ ...f, mobile: e.target.value.replace(/\D/g, '') }))} placeholder="9876543210" maxLength={10} />
+          <Field label="Mobile Number (10 digits)">
+            <input className="input" maxLength={10} value={editForm.mobile} onChange={e => setEditForm(f => ({ ...f, mobile: e.target.value.replace(/\D/g, '') }))} />
           </Field>
-
           <Field label="Time In">
-            <input type="time" className="input" value={editForm.time_in}
-              onChange={e => setEditForm(f => ({ ...f, time_in: e.target.value }))} />
+            <input type="time" className="input" value={editForm.time_in} onChange={e => setEditForm(f => ({ ...f, time_in: e.target.value }))} />
           </Field>
-
-          <Field label="Remark">
-            <input className="input" value={editForm.remark}
-              onChange={e => setEditForm(f => ({ ...f, remark: e.target.value }))} placeholder="Notes..." />
+          <Field label="Remarks / Notes">
+            <input className="input" value={editForm.remark} onChange={e => setEditForm(f => ({ ...f, remark: e.target.value }))} />
           </Field>
-
-          <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
             <button onClick={handleSaveEdit} disabled={editSaving} className="btn-primary" style={{ flex: 1 }}>
               {editSaving ? <><Spinner size="sm" /> Saving...</> : 'Save Changes'}
             </button>
-            <button onClick={() => setShowEditModal(false)} className="btn-secondary" style={{ flex: 1 }}>
-              Cancel
+            <button onClick={() => setShowEditModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* End Early Modal */}
+      <Modal open={showEndEarlyModal} onClose={() => setShowEndEarlyModal(false)} title="End Session &amp; Release Station">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            Checkout <strong>{s.name || 'Client'}</strong> and release <strong>{s.device_label}</strong> immediately.
+          </p>
+          <div style={{
+            background: 'var(--bg-input)', padding: '0.85rem', borderRadius: '10px',
+            border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '0.75rem'
+          }}>
+            <input type="checkbox" id="recalcCheckDetail" checked={recalcBill} onChange={e => setRecalcBill(e.target.checked)} style={{ cursor: 'pointer' }} />
+            <label htmlFor="recalcCheckDetail" style={{ fontSize: '0.825rem', color: 'var(--text)', cursor: 'pointer', fontWeight: 650, marginBottom: 0 }}>
+              Prorate tariff based on actual time elapsed
+            </label>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
+            <button onClick={handleEndEarly} disabled={endEarlySaving} className="btn-danger" style={{ flex: 1 }}>
+              {endEarlySaving ? <><Spinner size="sm" /> Checking out...</> : 'End Session & Free Station'}
+            </button>
+            <button onClick={() => setShowEndEarlyModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Switch Station Modal */}
+      <Modal open={showSwitchModal} onClose={() => setShowSwitchModal(false)} title="Transfer Gamer to Another Station">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            Moving <strong>{s.name || 'Client'}</strong> from <strong>{s.device_label}</strong>
+          </p>
+          <Field label="Select Free Target Station" required>
+            <select className="input" value={targetDevice} onChange={e => setTargetDevice(e.target.value)}>
+              <option value="">-- Choose Target Station --</option>
+              {availableDevicesForSwitch.map(d => (
+                <option key={d.id} value={d.id}>{d.label} ({d.type})</option>
+              ))}
+            </select>
+          </Field>
+          <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
+            <button onClick={handleSwitchStation} disabled={switchSaving || !targetDevice} className="btn-primary" style={{ flex: 1 }}>
+              {switchSaving ? <><Spinner size="sm" /> Switching...</> : 'Confirm Transfer'}
+            </button>
+            <button onClick={() => setShowSwitchModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Printable Thermal Receipt Modal */}
+      <Modal open={showReceiptModal} onClose={() => setShowReceiptModal(false)} title="Thermal POS Receipt Slip">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div id="printable-receipt" style={{
+            background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: '12px',
+            padding: '1.25rem', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem'
+          }}>
+            <div style={{ textAlign: 'center', borderBottom: '1px dashed var(--border)', paddingBottom: '0.75rem', marginBottom: '0.75rem' }}>
+              <p style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text)' }}>NEXUS GAMING LOUNGE</p>
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Gaming Console &amp; Cyber Cafe</p>
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Date: {formatDate(s.date)}</p>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+              <span>Invoice #</span>
+              <span style={{ fontWeight: 700 }}>#{s.id}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+              <span>Client:</span>
+              <span>{s.name || 'Walk-in Gamer'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+              <span>Station:</span>
+              <span>{s.device_label}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+              <span>Timing:</span>
+              <span>{formatTime(s.time_in)} - {formatTime(s.time_out)}</span>
+            </div>
+
+            <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.5rem', marginBottom: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <span>Seat ({formatDuration(s.duration_mins)}):</span>
+                <span>{formatRupees(s.charge)}</span>
+              </div>
+              {Number(s.controller_total) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                  <span>Extra Controllers:</span>
+                  <span>{formatRupees(s.controller_total)}</span>
+                </div>
+              )}
+              {(data.sales || []).flatMap(sa => (sa.items || [])).map((item, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                  <span>{item.name} x{item.qty}:</span>
+                  <span>{formatRupees(item.unit_price * item.qty)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ borderTop: '1.5px dashed var(--border)', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-text)' }}>
+              <span>TOTAL BILL:</span>
+              <span>{formatRupees(grandTotal)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.25rem' }}>
+              <span>Paid:</span>
+              <span>{formatRupees(totalPaid)}</span>
+            </div>
+            {creditRemaining > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--danger)', marginTop: '0.25rem' }}>
+                <span>Balance Due:</span>
+                <span>{formatRupees(creditRemaining)}</span>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button onClick={() => window.print()} className="btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+              <Printer size={14} /> Print Slip
+            </button>
+            <button onClick={handleWhatsAppReceipt} className="btn-secondary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', color: '#16a34a' }}>
+              <Share2 size={14} /> WhatsApp
             </button>
           </div>
         </div>
       </Modal>
 
-      {/* ── Slide Panel ─────────────────────────────────────────── */}
-      <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Session Actions">
-        {/* Add Cafe Items */}
-        <PanelSection title="Add Cafe Items" icon={<ShoppingCart size={13} />}>
-          {/* Product grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '0.5rem' }}>
-            {inventory.filter(i => i.stock_qty > 0).map(item => {
-              const inCart = cart.find(c => c.id === item.id)
-              return (
-                <button key={item.id} onClick={() => addToCart(item)}
-                  className="card"
-                  style={{
-                    padding: '0.65rem', cursor: 'pointer', textAlign: 'left',
-                    border: inCart ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-                    background: inCart ? 'var(--accent-dim)' : 'var(--bg-card)'
-                  }}>
-                  <p style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--text)', marginBottom: '0.2rem' }}>{item.name}</p>
-                  <p style={{ fontSize: '0.78rem', fontWeight: 750, fontFamily: "'JetBrains Mono', monospace", color: 'var(--accent-text)' }}>
-                    {formatRupees(item.sell_price)}
-                  </p>
-                  {inCart && (
-                    <span className="badge badge-accent" style={{ fontSize: '0.6rem', marginTop: '0.2rem' }}>×{inCart.qty}</span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
+      {/* Delete confirmation */}
+      <ConfirmModal
+        open={showDelete}
+        onClose={() => setShowDelete(false)}
+        onConfirm={handleDelete}
+        loading={deleting}
+        title="Delete Session Record"
+        message={`Are you sure you want to permanently delete session #${id} for ${s.name || 'Anonymous'} on ${s.device_label}? Any attached cafeteria sales will be removed and stock will be restored.`}
+        danger
+      />
 
-          {/* Cart summary */}
-          {cart.length > 0 && (
-            <div style={{ background: 'var(--bg-input)', borderRadius: '10px', padding: '0.85rem', border: '1px solid var(--border)' }}>
-              {cart.map(item => (
-                <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 650, color: 'var(--text)' }}>{item.name}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <button onClick={() => updateCartQty(item.id, item.qty - 1)} className="btn-secondary btn-icon"
-                      style={{ width: '1.35rem', height: '1.35rem', borderRadius: '4px', padding: 0 }}><Minus size={10} /></button>
-                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: '0.8rem', minWidth: '1rem', textAlign: 'center' }}>{item.qty}</span>
-                    <button onClick={() => updateCartQty(item.id, item.qty + 1)} className="btn-secondary btn-icon"
-                      style={{ width: '1.35rem', height: '1.35rem', borderRadius: '4px', padding: 0 }}><Plus size={10} /></button>
-                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', color: 'var(--text-muted)', minWidth: '3rem', textAlign: 'right' }}>
-                      {formatRupees(item.sell_price * item.qty)}
-                    </span>
-                  </div>
-                </div>
+      {/* Slide Panel for add items & extend */}
+      <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Session Actions & Add-ons">
+        <PanelSection title="Add Cafeteria Refreshments" icon="🥤">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
+              {inventory.filter(i => i.stock_qty > 0).map(item => (
+                <button key={item.id} onClick={() => addToCart(item)} className="btn-secondary btn-sm"
+                  style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0.65rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 650 }}>{item.name}</span>
+                  <span style={{ fontSize: '0.75rem', fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(item.sell_price)}</span>
+                </button>
               ))}
-              <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.6rem', display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text)' }}>Cart Total</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--accent-text)' }}>{formatRupees(cartTotal)}</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="label" style={{ marginBottom: 0 }}>Payment Status</span>
-                  <select className="input" style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}
-                    value={cartPayNow ? 'pay_now' : 'add_bill'} onChange={e => setCartPayNow(e.target.value === 'pay_now')}>
-                    <option value="add_bill">Add to Session Bill</option>
-                    <option value="pay_now">Collect Payment Now</option>
-                  </select>
-                </div>
-                {cartPayNow && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="label" style={{ marginBottom: 0 }}>Pay Method</span>
-                    <PayMethodToggle value={cartPayMethod} onChange={setCartPayMethod} />
-                  </div>
-                )}
-              </div>
-              <button onClick={handleAddItems} disabled={cartSaving} className="btn-primary" style={{ width: '100%', marginTop: '0.75rem' }}>
-                {cartSaving ? <><Spinner size="sm" /> Adding...</> : `Add to Session — ${formatRupees(cartTotal)}`}
-              </button>
             </div>
-          )}
+
+            {cart.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--bg-input)', padding: '0.75rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                {cart.map(item => (
+                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
+                    <span>{item.name} (x{item.qty})</span>
+                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                      <button onClick={() => updateCartQty(item.id, item.qty - 1)} className="btn-secondary btn-icon" style={{ width: '1.25rem', height: '1.25rem', padding: 0 }}>-</button>
+                      <span>{item.qty}</span>
+                      <button onClick={() => updateCartQty(item.id, item.qty + 1)} className="btn-secondary btn-icon" style={{ width: '1.25rem', height: '1.25rem', padding: 0 }}>+</button>
+                    </div>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, borderTop: '1px dashed var(--border)', paddingTop: '0.4rem', marginTop: '0.25rem' }}>
+                  <span>Total</span>
+                  <span>{formatRupees(cartTotal)}</span>
+                </div>
+                <button onClick={handleAddItems} disabled={cartSaving} className="btn-primary btn-sm" style={{ width: '100%', marginTop: '0.25rem' }}>
+                  {cartSaving ? 'Adding...' : 'Attach to Session Bill'}
+                </button>
+              </div>
+            )}
+          </div>
         </PanelSection>
 
-        {/* Extend Session */}
         {isActive && (
-          <PanelSection title="Extend Session" icon={<Clock size={13} />}>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={() => setExtMins(30)}
-                className={extMins === 30 ? 'btn-primary' : 'btn-secondary'}
-                style={{ flex: 1, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}>
-                + 30 Mins
-              </button>
-              <button onClick={() => setExtMins(60)}
-                className={extMins === 60 ? 'btn-primary' : 'btn-secondary'}
-                style={{ flex: 1, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}>
-                + 1 Hour
+          <PanelSection title="Extend Station Time" icon="⏱️">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem' }}>
+                {[30, 60, 90].map(mins => (
+                  <button key={mins} onClick={() => setExtMins(mins)}
+                    className={extMins === mins ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'} style={{ padding: '0.4rem' }}>
+                    +{mins}m
+                  </button>
+                ))}
+              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                New Time Out: <strong>{newEndTimeStr}</strong> (+{formatRupees(extCharge)})
+              </p>
+              <button onClick={handleExtend} disabled={extSaving} className="btn-primary" style={{ width: '100%' }}>
+                {extSaving ? 'Extending...' : `Confirm +${extMins}m Extension`}
               </button>
             </div>
-
-            <div style={{
-              padding: '0.75rem 1rem', borderRadius: '12px',
-              background: 'var(--bg-input)', border: '1px solid var(--border)',
-              display: 'flex', flexDirection: 'column', gap: '0.5rem',
-              fontSize: '0.8125rem'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Extend Until</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--text)' }}>{newEndTimeStr}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Extension Cost</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--accent-text)' }}>{formatRupees(extCharge)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: 650 }}>New Balance Due</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--danger)' }}>{formatRupees(newOutstanding)}</span>
-              </div>
-            </div>
-
-            <button onClick={handleExtend} disabled={extSaving} className="btn-primary" style={{ padding: '0.65rem 1.25rem' }}>
-              {extSaving ? <><Spinner size="sm" /> Extending...</> : `Confirm Extension`}
-            </button>
           </PanelSection>
         )}
       </SlidePanel>
 
-      {/* ── Header ───────────────────────────────────────────────── */}
-      <div>
-        {/* Top bar row with 3rem bottom margin: Back | SESSION # | Status Indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <button onClick={() => navigate('/sessions')} className="btn-secondary btn-sm"
-              style={{ padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <ArrowLeft size={13} /> Back
-            </button>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>
-              SESSION #{s.id}
-            </span>
+      {/* Header */}
+      <div style={{ marginBottom: '1.75rem' }}>
+        <button onClick={() => navigate('/sessions')} className="btn-secondary btn-sm"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '1rem', padding: '0.35rem 0.75rem' }}>
+          <ArrowLeft size={14} /> Back to Sessions
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <h1 className="page-title" style={{ margin: 0 }}>
+                {s.name || 'Anonymous Client'}
+              </h1>
+              <span className="badge badge-accent">{s.device_label}</span>
+              {isActive
+                ? <span className="badge-active-session animate-pulse">ACTIVE</span>
+                : <span className="badge badge-neutral">COMPLETED</span>}
+            </div>
+            <p className="page-sub" style={{ marginTop: '0.35rem' }}>
+              {formatDate(s.date)} · {formatTime(s.time_in)} to {formatTime(s.time_out)} ({formatDuration(s.duration_mins)})
+            </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {isActive
-              ? <><span className="badge-active-session animate-pulse">ACTIVE</span><Countdown timeOut={s.time_out} /></>
-              : <span className="badge badge-success">COMPLETED</span>}
-          </div>
+          {isActive && (
+            <div className="card" style={{ padding: '0.65rem 1.15rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <Clock size={16} style={{ color: 'var(--accent-text)' }} />
+              <Countdown timeOut={s.time_out} />
+            </div>
+          )}
         </div>
 
-        {/* Customer Info row with Edit button beside customer name */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
-            <h1 className="page-title" style={{ marginBottom: 0 }}>
-              {s.name || 'Anonymous Client'}
-            </h1>
-            <button onClick={openEditModal} className="btn-secondary btn-sm"
-              style={{ padding: '0.25rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem' }}>
-              <Edit3 size={13} /> Edit
-            </button>
-          </div>
-          <p className="page-sub">
-            {s.device_label} · {formatDate(s.date)} · {formatTime(s.time_in)} → {formatTime(s.time_out)}
-            {s.mobile && <span style={{ marginLeft: '0.5rem', fontFamily: "'JetBrains Mono', monospace" }}>· {s.mobile}</span>}
-          </p>
-        </div>
-
-        {/* Reusable Action / Filter Bar */}
-        <FilterBar style={{ marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <button onClick={() => setPanelOpen(true)} className="btn-primary btn-sm"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', padding: '0.45rem 0.85rem' }}>
-              <ShoppingCart size={14} /> Add Drinks / Snacks
+        {/* Action / Toolbar */}
+        <FilterBar style={{ marginBottom: '1.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+            <button onClick={() => setPanelOpen(true)} className="btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <ShoppingCart size={13} /> + Add Drinks / Snacks
             </button>
             {isActive && (
-              <button onClick={() => setPanelOpen(true)} className="btn-secondary btn-sm"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', padding: '0.45rem 0.85rem' }}>
-                <Clock size={14} /> Extend Time
-              </button>
+              <>
+                <button onClick={() => setPanelOpen(true)} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Clock size={13} /> + Extend Time
+                </button>
+                <button onClick={() => setShowSwitchModal(true)} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <ArrowRightLeft size={13} /> Switch Station
+                </button>
+                <button onClick={() => setShowEndEarlyModal(true)} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--warning)' }}>
+                  <PowerOff size={13} /> End Early
+                </button>
+              </>
             )}
+            <button onClick={() => setShowReceiptModal(true)} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Printer size={13} /> Thermal Slip
+            </button>
+            <button onClick={handleWhatsAppReceipt} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#16a34a' }}>
+              <Share2 size={13} /> WhatsApp
+            </button>
+            <button onClick={openEditModal} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Edit3 size={13} /> Edit Info
+            </button>
           </div>
 
           {isAdmin && (
             <button onClick={() => setShowDelete(true)} className="btn-secondary btn-sm"
-              style={{
-                padding: '0.45rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem',
-                fontSize: '0.78rem', color: 'var(--danger)', borderColor: 'var(--danger-border)',
-                marginLeft: 'auto'
-              }}>
-              <Trash2 size={14} /> Delete Session
+              style={{ padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--danger)', borderColor: 'var(--danger-border)', marginLeft: 'auto' }}>
+              <Trash2 size={13} /> Delete
             </button>
           )}
         </FilterBar>
@@ -528,31 +631,25 @@ export default function SessionDetail() {
 
       <ErrorMsg error={error} />
 
-      {/* ── Two-column grid ─────────────────────────────────────── */}
+      {/* Grid view */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem' }}>
-
-        {/* ─── LEFT COLUMN ─── */}
+        
+        {/* Left column: Bill Summary */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-          {/* Bill summary */}
-          {sectionCard('Session Invoice', '📊', (
+          {sectionCard('Session Invoice Breakdown', '📊', (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>
               <BillRow label={`Seat Charge (${formatDuration(s.duration_mins)} · ${s.device_label})`} value={s.charge} />
               {Number(s.controller_total) > 0 && <BillRow label="Controller Rentals" value={s.controller_total} />}
               {Number(s.extra_person_total) > 0 && <BillRow label="Extra Seat Fees" value={s.extra_person_total} />}
 
-              {/* Attached item sales */}
               {data.sales?.map((sale, i) => (
                 sale.items?.map((item, j) => (
-                  <BillRow key={`${i}-${j}`}
-                    label={`${item.name} ×${item.qty}`}
-                    value={item.unit_price * item.qty}
-                    muted />
+                  <BillRow key={`${i}-${j}`} label={`${item.name} ×${item.qty}`} value={item.unit_price * item.qty} muted />
                 ))
               ))}
 
               <div style={{ borderTop: '1.5px dashed var(--border)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
-                <BillRow label="TOTAL BILL" value={Number(s.total) + (data.sales?.reduce((sum, sa) => sum + Number(sa.total), 0) || 0)} bold accent />
+                <BillRow label="TOTAL BILL" value={grandTotal} bold accent />
               </div>
               <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.5rem' }}>
                 <BillRow label="Total Collected" value={totalPaid} />
@@ -571,7 +668,6 @@ export default function SessionDetail() {
             </div>
           ))}
 
-          {/* Players section (if console) */}
           {players.length > 0 && sectionCard('Player Allocations', '👥', (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               {players.map((p, i) => (
@@ -592,16 +688,14 @@ export default function SessionDetail() {
           ))}
         </div>
 
-        {/* ─── RIGHT COLUMN ─── */}
+        {/* Right column: Payments & Collection */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-          {/* Collect payment — only shown when there is an outstanding balance */}
           {creditRemaining > 0 && sectionCard('Collect Payment', <Banknote size={14} />, (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{
                 padding: '0.65rem 1rem', borderRadius: '10px',
-                background: 'rgba(var(--danger-rgb, 220,38,38), 0.08)',
-                border: '1px solid rgba(var(--danger-rgb, 220,38,38), 0.2)',
+                background: 'rgba(220,38,38, 0.08)',
+                border: '1px solid rgba(220,38,38, 0.2)',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center'
               }}>
                 <span style={{ fontSize: '0.8125rem', color: 'var(--danger)', fontWeight: 650 }}>Balance due</span>
@@ -610,7 +704,6 @@ export default function SessionDetail() {
                 </span>
               </div>
 
-              {/* Cash / Online split — same pattern as session authorization */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <label className="label" style={{ marginBottom: 0 }}>Payment Breakdown</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -626,7 +719,7 @@ export default function SessionDetail() {
                 {(Number(collectAmount) > 0 || Number(collectOnline) > 0) && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem',
                     color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>
-                    <span>Total being collected</span>
+                    <span>Total collecting</span>
                     <span style={{ fontWeight: 700, color: 'var(--accent-text)' }}>
                       {formatRupees(Number(collectAmount || 0) + Number(collectOnline || 0))}
                     </span>
@@ -634,15 +727,13 @@ export default function SessionDetail() {
                 )}
               </div>
 
-              <button onClick={handleCollect} disabled={collectSaving} className="btn-primary"
-                style={{ padding: '0.65rem 1.25rem' }}>
+              <button onClick={handleCollect} disabled={collectSaving} className="btn-primary" style={{ padding: '0.65rem 1.25rem' }}>
                 {collectSaving ? <><Spinner size="sm" /> Recording...</> : 'Record Payment'}
               </button>
             </div>
           ))}
 
-          {/* Payment history — right column */}
-          {payments.length > 0 && sectionCard('Payment History', <History size={14} />, (
+          {payments.length > 0 && sectionCard('Payment History Ledger', <History size={14} />, (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
               {payments.map((p, i) => (
                 <div key={p.id} style={{
@@ -667,24 +758,20 @@ export default function SessionDetail() {
             </div>
           ))}
         </div>
-      </div>
 
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-      `}</style>
+      </div>
     </div>
   )
 }
 
 function BillRow({ label, value, bold, accent, muted }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       fontWeight: bold ? 800 : muted ? 500 : 600,
       fontSize: bold ? '0.95rem' : '0.8125rem',
-      color: muted ? 'var(--text-faint)' : 'var(--text-muted)' }}>
+      color: muted ? 'var(--text-faint)' : 'var(--text-muted)'
+    }}>
       <span>{label}</span>
       <span style={{ color: accent ? 'var(--accent-text)' : muted ? 'var(--text-faint)' : 'var(--text)', fontWeight: bold ? 800 : 650 }}>
         {formatRupees(value)}

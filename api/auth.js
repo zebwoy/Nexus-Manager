@@ -7,59 +7,7 @@ export default async function handler(req, res) {
     const userId = req.headers['x-user-id']
     const currentOperator = req.headers['x-username']
 
-    // ─── INITIALIZATION / MIGRATIONS ─────────────────────────────
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS audit_logs (
-          id SERIAL PRIMARY KEY,
-          user_id INT,
-          username VARCHAR(100),
-          action VARCHAR(100) NOT NULL,
-          details TEXT,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS operator_sessions (
-          id SERIAL PRIMARY KEY,
-          user_id INT,
-          username VARCHAR(100) NOT NULL,
-          login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          logout_at TIMESTAMP WITH TIME ZONE
-      );
-      CREATE TABLE IF NOT EXISTS recharge_platforms (
-          id SERIAL PRIMARY KEY,
-          name VARCHAR(100) NOT NULL UNIQUE,
-          description TEXT,
-          is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `)
-    // Seed default platforms if empty
-    await pool.query(`
-      INSERT INTO recharge_platforms (name, description) VALUES
-        ('PSN', 'PlayStation Network'),
-        ('Xbox Live', 'Xbox/Microsoft Gaming'),
-        ('Steam', 'Valve Steam Platform'),
-        ('EA Play', 'EA Games Subscription'),
-        ('GamePass', 'Xbox Game Pass')
-      ON CONFLICT (name) DO NOTHING;
-    `)
-
-    try {
-      await pool.query(`
-        ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_category_check;
-        ALTER TABLE expenses ADD CONSTRAINT expenses_category_check CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Other', 'Cafeteria'));
-        ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id);
-
-        ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
-
-        ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_payment_method_check;
-        ALTER TABLE sessions ADD CONSTRAINT sessions_payment_method_check CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed'));
-
-        ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_payment_method_check;
-        ALTER TABLE sales ADD CONSTRAINT sales_payment_method_check CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed'));
-      `)
-    } catch (e) {
-      console.error('Failed to update constraints:', e)
-    }
+    // Handlers
 
     // ─── LOGOUT: POST /api/auth-logout ─────────────────────────────
     if (action === 'logout' || req.url.includes('auth-logout')) {

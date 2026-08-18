@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { DURATION_OPTIONS, formatRupees, todayISO, nowTimeInput, toISO, addMinutes, formatDuration, validateName, validateMobile } from '../lib/helpers'
 import { Field, ErrorMsg, Spinner } from '../components/UI'
@@ -9,6 +9,7 @@ const DEVICE_TYPES = { PC: 'PC', XBOX: 'XBOX', PS: 'PS' }
 
 export default function NewSession() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [devices, setDevices] = useState([])
   const [pricing, setPricing] = useState({})
   const [settings, setSettings] = useState({ controller_fee: 25, extra_person_fee: 15, extra_person_from: 3 })
@@ -52,7 +53,8 @@ export default function NewSession() {
         api.get('/pricing'),
         api.get('/settings'),
       ])
-      setDevices(devData.devices || [])
+      const devList = devData.devices || []
+      setDevices(devList)
       const map = {}
       for (const row of (priceData.pricing || [])) {
         if (!map[row.device_type]) map[row.device_type] = {}
@@ -63,6 +65,15 @@ export default function NewSession() {
         const s = {}
         for (const row of settData.settings) s[row.key] = Number(row.value)
         setSettings(prev => ({ ...prev, ...s }))
+      }
+
+      // Check for preselected device_id in query params
+      const preDevId = searchParams.get('device_id')
+      if (preDevId) {
+        const dev = devList.find(d => d.id === Number(preDevId))
+        if (dev) {
+          setForm(f => ({ ...f, device_id: String(dev.id), device_type: dev.type }))
+        }
       }
     } catch (err) { setError(err.message) }
   }

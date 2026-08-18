@@ -20,22 +20,6 @@ export default async function handler(req, res) {
 
     // ─── PLATFORMS ────────────────────────────────────────────
     if (resource === 'platforms') {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS recharge_platforms (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(100) NOT NULL UNIQUE,
-            description TEXT,
-            is_active BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-        INSERT INTO recharge_platforms (name, description) VALUES
-          ('PSN', 'PlayStation Network'),
-          ('Xbox Live', 'Xbox/Microsoft Gaming'),
-          ('Steam', 'Valve Steam Platform'),
-          ('EA Play', 'EA Games Subscription'),
-          ('GamePass', 'Xbox Game Pass')
-        ON CONFLICT (name) DO NOTHING;
-      `).catch(() => {})
 
       if (req.method === 'GET') {
         const r = await pool.query('SELECT * FROM recharge_platforms WHERE is_active = TRUE ORDER BY name')

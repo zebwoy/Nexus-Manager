@@ -121,9 +121,108 @@ export default async function handler(req, res) {
     } finally { client.release() }
   }
 
+  // ─── Route: /api/sessions/:id/end-early ───────────────────────
+  const endEarlyMatch = subPath.match(/(\d+)\/end-early/) || rawUrl.match(/\/sessions\/(\d+)\/end-early/)
+  if (endEarlyMatch && req.method === 'PATCH') {
+    const sessionId = Number(endEarlyMatch[1])
+    const client = await pool.connect()
+    try {
+      const b = req.body || {}
+      const recalculate = b.recalculate === true
+      await client.query('BEGIN')
+      const sessR = await client.query(
+        `SELECT s.*, d.type AS device_type, d.label AS device_label FROM sessions s
+         JOIN devices d ON d.id = s.device_id WHERE s.id = $1`,
+        [sessionId]
+      )
+      if (sessR.rowCount === 0) {
+        await client.query('ROLLBACK')
+        return err(res, 'Session not found', 404)
+      }
+      const sess = sessR.rows[0]
+      const now = new Date()
+      const timeIn = new Date(sess.time_in)
+      const elapsedMins = Math.max(1, Math.round((now - timeIn) / 60000))
+      const roundedMins = Math.ceil(elapsedMins / 30) * 30
+
+      let newDuration = Number(sess.duration_mins)
+      let newCharge = Number(sess.charge)
+      let newTotal = Number(sess.total)
+      let newCredit = Number(sess.credit)
+
+      if (recalculate && roundedMins < Number(sess.duration_mins)) {
+        newDuration = roundedMins
+        const priceR = await client.query(
+          `SELECT price FROM pricing WHERE device_type = $1 AND duration_mins = $2`,
+          [sess.device_type, newDuration]
+        )
+        if (priceR.rowCount > 0) {
+          newCharge = Number(priceR.rows[0].price)
+        }
+        newTotal = newCharge + Number(sess.controller_total || 0) + Number(sess.extra_person_total || 0)
+        newCredit = Math.max(0, newTotal - Number(sess.payment_received || 0))
+      }
+
+      const updated = await client.query(
+        `UPDATE sessions SET
+           time_out = $1, duration_mins = $2, charge = $3, total = $4, credit = $5
+         WHERE id = $6
+         RETURNING id, time_out, duration_mins, charge, total, payment_received, credit`,
+        [now.toISOString(), newDuration, newCharge, newTotal, newCredit, sessionId]
+      )
+
+      await client.query(
+        `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SESSION_END_EARLY',$3)`,
+        [Number(userId || 0), req.headers['x-username'] || 'system', `Ended session #${sessionId} early on ${sess.device_label} (Played: ${elapsedMins}m)`]
+      )
+
+      await client.query('COMMIT')
+      return ok(res, { success: true, ...updated.rows[0], elapsed_mins: elapsedMins })
+    } catch (e) {
+      await client.query('ROLLBACK')
+      console.error(e)
+      return err(res, e, 500)
+    } finally { client.release() }
+  }
+
+  // ─── Route: /api/sessions/:id/switch-station ───────────────────
+  const switchMatch = subPath.match(/(\d+)\/switch-station/) || rawUrl.match(/\/sessions\/(\d+)\/switch-station/)
+  if (switchMatch && req.method === 'PATCH') {
+    const sessionId = Number(switchMatch[1])
+    const newDeviceId = Number(req.body?.new_device_id)
+    if (!newDeviceId) return err(res, 'New device ID required', 400)
+
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const [sessR, devR] = await Promise.all([
+        client.query(`SELECT s.*, d.label AS old_label FROM sessions s JOIN devices d ON d.id = s.device_id WHERE s.id = $1`, [sessionId]),
+        client.query(`SELECT * FROM devices WHERE id = $1 AND is_active = TRUE`, [newDeviceId])
+      ])
+      if (sessR.rowCount === 0) { await client.query('ROLLBACK'); return err(res, 'Session not found', 404) }
+      if (devR.rowCount === 0) { await client.query('ROLLBACK'); return err(res, 'Target device not available', 400) }
+
+      const sess = sessR.rows[0]
+      const newDev = devR.rows[0]
+
+      await client.query(`UPDATE sessions SET device_id = $1 WHERE id = $2`, [newDeviceId, sessionId])
+      await client.query(
+        `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SESSION_SWITCH_STATION',$3)`,
+        [Number(userId || 0), req.headers['x-username'] || 'system', `Moved session #${sessionId} from ${sess.old_label} to ${newDev.label}`]
+      )
+
+      await client.query('COMMIT')
+      return ok(res, { success: true, new_device_id: newDeviceId, device_label: newDev.label })
+    } catch (e) {
+      await client.query('ROLLBACK')
+      console.error(e)
+      return err(res, e, 500)
+    } finally { client.release() }
+  }
+
   // ─── Route: /api/sessions/:id ────────────────────────────────
   const idMatch = subPath.match(/^(\d+)(\?|$)/) || rawUrl.match(/\/sessions\/(\d+)(\?|$)/)
-  if (idMatch && !subPath.includes('payments') && !subPath.includes('extend') && !rawUrl.includes('/payments') && !rawUrl.includes('/extend')) {
+  if (idMatch && !subPath.includes('payments') && !subPath.includes('extend') && !subPath.includes('end-early') && !subPath.includes('switch-station') && !rawUrl.includes('/payments') && !rawUrl.includes('/extend') && !rawUrl.includes('/end-early') && !rawUrl.includes('/switch-station')) {
     const sessionId = Number(idMatch[1])
 
     if (req.method === 'GET') {
@@ -139,36 +238,27 @@ export default async function handler(req, res) {
              WHERE s.id = $1`,
             [sessionId]
           ),
+          pool.query(`SELECT * FROM session_players WHERE session_id = $1 ORDER BY player_number`, [sessionId]),
           pool.query(
-            `SELECT * FROM session_players WHERE session_id = $1 ORDER BY player_number`,
+            `SELECT s.*, json_agg(json_build_object('id', ii.id, 'name', ii.name, 'qty', si.qty, 'unit_price', si.unit_price)) AS items
+             FROM sales s
+             LEFT JOIN sale_items si ON si.sale_id = s.id
+             LEFT JOIN inventory_items ii ON ii.id = si.item_id
+             WHERE s.session_id = $1
+             GROUP BY s.id`,
             [sessionId]
           ),
           pool.query(
-            `SELECT sa.id, sa.total, sa.payment_received, sa.payment_method, sa.created_at,
-                    json_agg(json_build_object(
-                      'name', ii.name, 'qty', si.qty, 'unit_price', si.unit_price
-                    )) AS items
-             FROM sales sa
-             JOIN sale_items si ON si.sale_id = sa.id
-             JOIN inventory_items ii ON ii.id = si.item_id
-             WHERE sa.session_id = $1
-             GROUP BY sa.id ORDER BY sa.created_at`,
-            [sessionId]
-          ),
-          pool.query(
-            `SELECT sp.*, u.username AS by_username FROM session_payments sp
+            `SELECT sp.*, u.username AS created_by_username
+             FROM session_payments sp
              LEFT JOIN users u ON u.id = sp.created_by
-             WHERE sp.session_id = $1 ORDER BY sp.created_at`,
+             WHERE sp.session_id = $1
+             ORDER BY sp.created_at ASC`,
             [sessionId]
           ),
         ])
-        if (sessR.rowCount === 0) return err(res, 'Session not found', 404)
-        
-        const currentOperator = req.headers['x-username']
-        if (currentOperator === 'trial' && sessR.rows[0]?.created_by_username !== 'trial') {
-          return err(res, 'Access denied: Production data is hidden in trial mode', 403)
-        }
 
+        if (sessR.rowCount === 0) return err(res, 'Session not found', 404)
         return ok(res, {
           session: sessR.rows[0],
           players: playersR.rows,
@@ -182,79 +272,82 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PATCH') {
+      const b = req.body || {}
+      const client = await pool.connect()
       try {
-        const b = req.body || {}
-        const client = await pool.connect()
-        try {
-          await client.query('BEGIN')
-
-          // 1. Check if name/mobile needs updating on customer or session
-          let cid = null
-          if (b.name !== undefined || b.mobile !== undefined) {
-            const currentSess = await client.query('SELECT customer_id FROM sessions WHERE id = $1', [sessionId])
-            cid = currentSess.rows[0]?.customer_id
-
-            if (cid) {
-              const custCols = []
-              const custVals = []
-              let cIdx = 1
-              if (b.name !== undefined) { custCols.push(`name = $${cIdx++}`); custVals.push(b.name.trim()) }
-              if (b.mobile !== undefined) { custCols.push(`mobile = $${cIdx++}`); custVals.push(b.mobile || null) }
-              if (custCols.length > 0) {
-                custVals.push(cid)
-                await client.query(`UPDATE customers SET ${custCols.join(', ')} WHERE id = $${cIdx}`, custVals)
-              }
-            } else if (b.name) {
-              const newC = await client.query(
-                'INSERT INTO customers (name, mobile) VALUES ($1,$2) RETURNING id',
-                [b.name.trim(), b.mobile || null]
-              )
-              cid = newC.rows[0].id
-            }
-          }
-
-          // 2. Build session update
-          const updates = []
-          const vals = []
-          let idx = 1
-
-          if (cid) { updates.push(`customer_id = $${idx++}`); vals.push(cid) }
-          if (b.remark !== undefined) { updates.push(`remark = $${idx++}`); vals.push(b.remark) }
-          if (b.payment_method !== undefined) { updates.push(`payment_method = $${idx++}`); vals.push(b.payment_method) }
-          if (b.time_in !== undefined) { updates.push(`time_in = $${idx++}`); vals.push(b.time_in) }
-
-          if (b.duration_mins !== undefined && b.time_out !== undefined) {
-            updates.push(`duration_mins = $${idx++}`); vals.push(Number(b.duration_mins))
-            updates.push(`time_out = $${idx++}`); vals.push(b.time_out)
-            if (b.charge !== undefined) { updates.push(`charge = $${idx++}`); vals.push(Number(b.charge)) }
-            if (b.total !== undefined) { updates.push(`total = $${idx++}`); vals.push(Number(b.total)) }
-            if (b.credit !== undefined) { updates.push(`credit = $${idx++}`); vals.push(Number(b.credit)) }
-          }
-
-          if (updates.length > 0) {
-            vals.push(sessionId)
-            await client.query(`UPDATE sessions SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
-          }
-
-          await client.query('COMMIT')
-          return ok(res, { success: true })
-        } catch (e) {
+        await client.query('BEGIN')
+        const currentR = await client.query(`SELECT * FROM sessions WHERE id = $1`, [sessionId])
+        if (currentR.rowCount === 0) {
           await client.query('ROLLBACK')
-          throw e
-        } finally { client.release() }
+          return err(res, 'Session not found', 404)
+        }
+        const cur = currentR.rows[0]
+
+        const duration_mins = b.duration_mins !== undefined ? Number(b.duration_mins) : cur.duration_mins
+        const time_out      = b.time_out      !== undefined ? b.time_out                : cur.time_out
+        const charge        = b.charge        !== undefined ? Number(b.charge)          : cur.charge
+        const total         = b.total         !== undefined ? Number(b.total)           : cur.total
+        const payment_rcvd  = b.payment_received !== undefined ? Number(b.payment_received) : cur.payment_received
+        const credit        = b.credit        !== undefined ? Number(b.credit)          : cur.credit
+        const remark        = b.remark        !== undefined ? b.remark                  : cur.remark
+
+        const updated = await client.query(
+          `UPDATE sessions SET
+             duration_mins = $1, time_out = $2, charge = $3, total = $4,
+             payment_received = $5, credit = $6, remark = $7
+           WHERE id = $8
+           RETURNING *`,
+          [duration_mins, time_out, charge, total, payment_rcvd, credit, remark, sessionId]
+        )
+
+        await client.query('COMMIT')
+        return ok(res, { session: updated.rows[0] })
       } catch (e) {
+        await client.query('ROLLBACK')
         console.error(e)
         return err(res, e, 500)
-      }
+      } finally { client.release() }
     }
 
+    if (req.method === 'DELETE') {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const sessR = await client.query(
+          `SELECT s.*, d.label AS device_label FROM sessions s JOIN devices d ON d.id = s.device_id WHERE s.id = $1`,
+          [sessionId]
+        )
+        if (sessR.rowCount === 0) { await client.query('ROLLBACK'); return err(res, 'Session not found', 404) }
+        const sess = sessR.rows[0]
+
+        const salesR = await client.query(`SELECT id FROM sales WHERE session_id = $1`, [sessionId])
+        for (const sale of salesR.rows) {
+          const itemsR = await client.query(`SELECT item_id, qty FROM sale_items WHERE sale_id = $1`, [sale.id])
+          for (const item of itemsR.rows) {
+            await client.query(`UPDATE inventory_items SET stock_qty = stock_qty + $1 WHERE id = $2`, [item.qty, item.item_id])
+          }
+          await client.query(`DELETE FROM sales WHERE id = $1`, [sale.id])
+        }
+
+        await client.query(`UPDATE sessions SET is_deleted = TRUE WHERE id = $1`, [sessionId])
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SESSION_DELETE',$3)`,
+          [Number(userId || 0), req.headers['x-username'] || 'system',
+           `Deleted session #${sessionId} | Device: ${sess.device_label} | Total: ₹${sess.total}`]
+        )
+
+        await client.query('COMMIT')
+        return ok(res, { success: true })
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally { client.release() }
+    }
   }
 
   // ─── Base /api/sessions Collection Routes ───────────────────
   try {
     if (req.method === 'GET') {
-      await pool.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE').catch(() => {})
-
       const currentOperator = req.headers['x-username']
       const date = req.query.date
       const limit = req.query.limit ? Number(req.query.limit) : null
@@ -303,11 +396,9 @@ export default async function handler(req, res) {
         time_in, time_out, date, charge, controller_total,
         extra_person_total, total, credit, remark,
         players, payment_method,
-        // Split payment support: cash_amount + online_amount (new)
         cash_amount, online_amount, payment_received,
       } = body
 
-      // Resolve split vs single payment
       const cashAmt   = Number(cash_amount   || 0)
       const onlineAmt = Number(online_amount  || 0)
       const hasSplit  = (cash_amount !== undefined || online_amount !== undefined)
@@ -319,7 +410,6 @@ export default async function handler(req, res) {
       const finalCredit = (credit !== null && credit !== undefined && credit !== '')
         ? Number(credit) : Math.max(0, total - finalPayment)
 
-      // Determine primary payment method
       let finalMethod
       if (hasSplit) {
         if (cashAmt > 0 && onlineAmt > 0) finalMethod = 'split'
@@ -332,11 +422,6 @@ export default async function handler(req, res) {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
-        // Ensure constraint allows 'split' payment method
-        await client.query(`
-          ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_payment_method_check;
-          ALTER TABLE sessions ADD CONSTRAINT sessions_payment_method_check CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed'));
-        `).catch(() => {})
 
         let cid = customer_id
         if (!cid && name) {
@@ -374,7 +459,6 @@ export default async function handler(req, res) {
         )
         const sessionId = result.rows[0].id
 
-        // Insert split payment rows
         if (hasSplit) {
           if (cashAmt > 0) {
             await client.query(
@@ -425,42 +509,6 @@ export default async function handler(req, res) {
           `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SESSION_RESTORE',$3)`,
           [Number(userId || 0), req.headers['x-username'] || 'system', `Restored session #${restoreId}`]
         )
-        await client.query('COMMIT')
-        return ok(res, { success: true })
-      } catch (e) {
-        await client.query('ROLLBACK')
-        console.error(e)
-        return err(res, e, 500)
-      } finally { client.release() }
-    }
-
-    // ─── DELETE /api/sessions/:id (admin-audited soft delete) ──────
-    if (req.method === 'DELETE') {
-      const delId = Number(req.query.id)
-      if (!delId) return err(res, 'Session ID required', 400)
-      if (!userId) return err(res, 'Authentication required', 401)
-
-      const client = await pool.connect()
-      try {
-        await client.query('BEGIN')
-        await client.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {})
-
-        const sessR = await client.query(
-          `SELECT s.*, d.label AS device_label FROM sessions s JOIN devices d ON d.id = s.device_id WHERE s.id = $1`,
-          [delId]
-        )
-        if (sessR.rowCount === 0) { await client.query('ROLLBACK'); return err(res, 'Session not found', 404) }
-        const sess = sessR.rows[0]
-
-        await client.query(`UPDATE sessions SET is_deleted = TRUE WHERE id = $1`, [delId])
-
-        // Write audit
-        await client.query(
-          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SESSION_DELETE',$3)`,
-          [Number(userId), req.headers['x-username'] || 'system',
-           `Deleted session #${delId} | Device: ${sess.device_label} | Date: ${sess.date} | Total: ₹${sess.total}`]
-        )
-
         await client.query('COMMIT')
         return ok(res, { success: true })
       } catch (e) {

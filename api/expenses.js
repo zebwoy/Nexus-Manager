@@ -6,14 +6,6 @@ export default async function handler(req, res) {
   const userId = rawUserId && !isNaN(Number(rawUserId)) ? Number(rawUserId) : null
 
   try {
-    await pool.query(`
-      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'cash';
-      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS vendor_name VARCHAR(200);
-      ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_category_check;
-      ALTER TABLE expenses ADD CONSTRAINT expenses_category_check CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Cafeteria'));
-      ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_payment_method_check;
-      ALTER TABLE expenses ADD CONSTRAINT expenses_payment_method_check CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed'));
-    `).catch(() => {})
 
     if (req.method === 'GET') {
       const date = req.query.date
