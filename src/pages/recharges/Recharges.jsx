@@ -8,8 +8,7 @@ import { useAuth } from '../../context/AuthContext'
 import { toast } from 'react-toastify'
 
 export default function Recharges() {
-  const { isAdmin, user } = useAuth()
-  const isTrial = user?.username === 'trial'
+  const { isAdmin } = useAuth()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -176,7 +175,7 @@ export default function Recharges() {
           <table className="tbl">
             <thead>
               <tr>
-                {['Client Profile', 'Game Platform', 'System Cost', 'Amount Charged', 'Net Profit', 'Cash Received', 'System Note', 'Operator', ...(isAdmin && !isTrial ? ['Actions'] : [])].map(h => (
+                {['Client Profile', 'Game Platform', 'System Cost', 'Amount Charged', 'Net Profit', 'Cash Received', 'System Note', 'Operator', ...(isAdmin ? ['Actions'] : [])].map(h => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -196,7 +195,7 @@ export default function Recharges() {
                   <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{r.payment_received != null ? formatRupees(r.payment_received) : '—'}</td>
                   <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{r.note || '—'}</td>
                   <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontWeight: 600 }}>@{r.created_by_username || 'system'}</td>
-                  {isAdmin && !isTrial && (
+                  {isAdmin && (
                     <td className="table-cell">
                       <div style={{ display: 'flex', gap: '0.35rem' }}>
                         <button onClick={() => setEditItem({ ...r })} className="btn-secondary btn-sm"

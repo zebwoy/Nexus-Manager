@@ -47,10 +47,7 @@ export default function Sidebar() {
   }
 
   const visibleNav = NAV.filter(item => {
-    if (item.adminOnly) {
-      if (!isAdmin) return false
-    }
-    if (item.noTrial && isTrial) return false
+    if (item.adminOnly && !isAdmin) return false
     return true
   })
 
@@ -339,29 +336,15 @@ export default function Sidebar() {
       )}
 
       {/* ─── SIGN OUT CONFIRMATION MODAL ────────────────────────────── */}
-      <Modal open={showSignOutModal} onClose={() => setShowSignOutModal(false)} title={isTrial ? "End Trial Session & Clear Data" : "Confirm Operator Sign Out"}>
+      <Modal open={showSignOutModal} onClose={() => setShowSignOutModal(false)} title="Confirm Operator Sign Out">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {isTrial ? (
-            <div style={{
-              background: 'var(--danger-dim)', border: '1px solid var(--danger-border)',
-              borderRadius: '12px', padding: '1rem 1.15rem', color: 'var(--danger)'
-            }}>
-              <p style={{ fontWeight: 800, fontSize: '0.95rem', marginBottom: '0.35rem' }}>
-                Purge Trial Simulation Data
-              </p>
-              <p style={{ fontSize: '0.825rem', lineHeight: 1.45, opacity: 0.9 }}>
-                You are currently signed in under the <strong>Trial Account</strong> (@trial). All test sessions, sales, expenses, and simulation logs collected during this trial session will be deleted to keep your database clean.
-              </p>
-            </div>
-          ) : (
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Are you sure you want to log out of <strong>Nexus Manager</strong> console?
-            </p>
-          )}
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            Are you sure you want to log out of <strong>Nexus Manager</strong> console?
+          </p>
 
           <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
-            <button onClick={handleConfirmSignOut} disabled={isPurging} className={isTrial ? "btn-danger" : "btn-primary"} style={{ flex: 1, padding: '0.65rem' }}>
-              {isPurging ? <><Spinner size="sm" /> {isTrial ? "Purging & Signing Out..." : "Signing Out..."}</> : (isTrial ? "Purge Data & Sign Out" : "Sign Out")}
+            <button onClick={handleConfirmSignOut} disabled={isPurging} className="btn-primary" style={{ flex: 1, padding: '0.65rem' }}>
+              {isPurging ? <><Spinner size="sm" /> Signing Out...</> : "Sign Out"}
             </button>
             <button onClick={() => setShowSignOutModal(false)} className="btn-secondary" style={{ flex: 1, padding: '0.65rem' }}>
               Cancel

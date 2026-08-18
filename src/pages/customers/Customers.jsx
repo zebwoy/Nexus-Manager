@@ -6,9 +6,6 @@ import { useAuth } from '../../context/AuthContext'
 import { Users, Search, UserCheck } from 'lucide-react'
 
 export default function Customers() {
-  const { user } = useAuth()
-  const isTrial = user?.username === 'trial'
-
   const [customers, setCustomers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -16,7 +13,7 @@ export default function Customers() {
   const [view, setView] = useState('session') // 'session' | 'cafeteria'
 
   useEffect(() => {
-    if (!isTrial) load()
+    load()
   }, [view])
 
   const load = async () => {
@@ -36,25 +33,6 @@ export default function Customers() {
     c.mobile?.includes(search) ||
     c.shop_name?.toLowerCase().includes(search.toLowerCase())
   )
-
-  if (isTrial) {
-    return (
-      <div>
-        <div style={{ marginBottom: '2rem' }}>
-          <h1 className="page-title">Client Registry</h1>
-          <p className="page-sub">Auto-accumulated from logged session entries</p>
-        </div>
-        <div className="card" style={{ textAlign: 'center', padding: '3rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-          <span style={{ fontSize: '2.5rem' }}>🔒</span>
-          <p style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>Client Registry Unavailable in Trial Mode</p>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', maxWidth: '380px', lineHeight: 1.6 }}>
-            The client registry shows real customer data from production sessions.
-            Trial accounts cannot access production data — please create sessions with customer names to see them appear here.
-          </p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div>
