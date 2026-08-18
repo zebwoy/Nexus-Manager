@@ -9,7 +9,7 @@ import {
   Zap, TrendingDown, Users, BarChart2, Settings,
   Sun, Moon, LogOut, Menu, X, FileCheck, Trash2, Shield
 } from 'lucide-react'
-import { SignedIn, UserButton, OrganizationSwitcher } from '@clerk/clerk-react'
+import { SignedIn, UserButton } from '@clerk/clerk-react'
 
 
 const NAV = [
@@ -186,13 +186,6 @@ export default function Sidebar() {
                   Clerk Cloud
                 </span>
               </div>
-              <OrganizationSwitcher
-                appearance={{
-                  elements: {
-                    rootBox: { display: 'flex', alignItems: 'center' }
-                  }
-                }}
-              />
             </div>
           </SignedIn>
 
