@@ -26,8 +26,8 @@ export default async function handler(req, res) {
         vals.push(saleId)
         await client.query(`UPDATE sales SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
         await client.query(
-          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SALE_EDIT',$3)`,
-          [userId || null, username || 'system', `Edited walk-in sale #${saleId}`]
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'SALE_EDIT','cafeteria',$3,$4)`,
+          [userId || null, username || 'system', `Edited walk-in sale #${saleId}`, JSON.stringify(b)]
         )
         return ok(res, { success: true })
       }
@@ -45,9 +45,10 @@ export default async function handler(req, res) {
           await client.query(`DELETE FROM sale_items WHERE sale_id = $1`, [saleId])
           await client.query(`DELETE FROM sales WHERE id = $1`, [saleId])
           await client.query(
-            `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SALE_DELETE',$3)`,
+            `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'SALE_DELETE','cafeteria',$3,$4)`,
             [Number(userId), username || 'system',
-             `Deleted walk-in sale #${saleId} | Date: ${saleR.rows[0]?.date} | Total: ₹${saleR.rows[0]?.total}`]
+             `Deleted walk-in sale #${saleId} | Date: ${saleR.rows[0]?.date} | Total: ₹${saleR.rows[0]?.total}`,
+             JSON.stringify({ deleted_sale: saleR.rows[0], restored_items: itemsR.rows })]
           )
           await client.query('COMMIT')
           return ok(res, { success: true })

@@ -29,8 +29,8 @@ export default async function handler(req, res) {
 
         await client.query(`UPDATE recharges SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
         await client.query(
-          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'RECHARGE_EDIT',$3)`,
-          [userId, username || 'system', `Edited recharge #${rcId}`]
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'RECHARGE_EDIT','recharges',$3,$4)`,
+          [userId, username || 'system', `Edited recharge #${rcId}`, JSON.stringify(b)]
         )
         return ok(res, { success: true })
       }
@@ -44,8 +44,8 @@ export default async function handler(req, res) {
 
           await client.query('DELETE FROM recharges WHERE id = $1', [rcId])
           await client.query(
-            `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'RECHARGE_DELETE',$3)`,
-            [userId, username || 'system', `Deleted recharge #${rcId} | Platform: ${rc.game_platform} | Charge: ₹${rc.charge_price}`]
+            `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'RECHARGE_DELETE','recharges',$3,$4)`,
+            [userId, username || 'system', `Deleted recharge #${rcId} | Platform: ${rc.game_platform} | Charge: ₹${rc.charge_price}`, JSON.stringify(rc)]
           )
           await client.query('COMMIT')
           return ok(res, { success: true })

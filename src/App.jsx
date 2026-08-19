@@ -18,6 +18,8 @@ import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard'
 import TenantManagement from './pages/superadmin/TenantManagement'
 import SuperAdminAudit from './pages/superadmin/SuperAdminAudit'
 
+import JoinOrganization from './pages/JoinOrganization'
+
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
@@ -42,7 +44,8 @@ function AppRoutes() {
   const { user } = useAuth()
   return (
     <Routes>
-      <Route path="/login"           element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/login"               element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/join-organization"   element={<JoinOrganization />} />
       
       {/* Super Admin Routes */}
       <Route path="/super-admin"         element={<SuperAdminRoute><SuperAdminDashboard /></SuperAdminRoute>} />

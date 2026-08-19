@@ -81,6 +81,17 @@ export default async function handler(req, res) {
           ]
         )
 
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata)
+           VALUES ($1, $2, 'EXPENSE_CREATE', 'expenses', $3, $4)`,
+          [
+            userId,
+            req.headers['x-username'] || 'staff',
+            `Recorded expense of ₹${amount} (${category || 'Other'}) — ${vendor_name ? `Vendor: ${vendor_name}. ` : ''}${finalNote ? `Note: ${finalNote}` : ''}`.trim(),
+            JSON.stringify({ expense: r.rows[0], category, amount, payment_method: payment_method || 'cash' })
+          ]
+        )
+
         await client.query('COMMIT')
         return ok(res, { expense: r.rows[0] }, 201)
       } catch (e) {

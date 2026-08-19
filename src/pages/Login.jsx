@@ -31,14 +31,47 @@ export default function Login() {
       if (email) {
         localStorage.setItem('nexus_user_email', email)
         const isSA = clerkUser.publicMetadata?.role === 'super_admin'
-        const userData = {
-          id: 1,
-          username: clerkUser.username || email.split('@')[0] || 'owner',
-          full_name: clerkUser.fullName || 'Cafe Administrator',
-          role: isSA ? 'super_admin' : 'admin'
+        if (isSA) {
+          const userData = {
+            id: 1,
+            username: clerkUser.username || email.split('@')[0] || 'superadmin',
+            full_name: clerkUser.fullName || 'Platform Super Admin',
+            role: 'super_admin'
+          }
+          login(userData)
+          navigate('/super-admin')
+          return
         }
-        login(userData)
-        navigate(isSA ? '/super-admin' : '/')
+
+        // Check Admin vs Staff membership
+        api.get('/staff?action=my-invites')
+          .then(res => {
+            if (res.admin_organizations?.length > 0) {
+              const userData = {
+                id: 1,
+                username: clerkUser.username || email.split('@')[0] || 'owner',
+                full_name: clerkUser.fullName || 'Cafe Administrator',
+                role: 'admin'
+              }
+              login(userData)
+              navigate('/')
+            } else if (res.staff_invites?.some(s => s.membership_status === 'active')) {
+              const activeS = res.staff_invites.find(s => s.membership_status === 'active')
+              const userData = {
+                id: activeS.invite_id || 1,
+                username: clerkUser.username || email.split('@')[0] || 'staff',
+                full_name: clerkUser.fullName || activeS.staff_name || 'Counter Staff',
+                role: 'staff'
+              }
+              login(userData)
+              navigate('/')
+            } else {
+              navigate('/join-organization')
+            }
+          })
+          .catch(() => {
+            navigate('/join-organization')
+          })
       }
     }
   }, [isLoaded, isSignedIn, clerkUser, user, login, navigate])

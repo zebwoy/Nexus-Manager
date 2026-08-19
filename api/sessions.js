@@ -169,8 +169,13 @@ export default async function handler(req, res) {
         )
 
         await client.query(
-          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SESSION_END_EARLY',$3)`,
-          [Number(userId || 0), req.headers['x-username'] || 'system', `Ended session #${sessionId} early on ${sess.device_label} (Played: ${elapsedMins}m)`]
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'SESSION_END_EARLY','sessions',$3,$4)`,
+          [
+            Number(userId || 0),
+            req.headers['x-username'] || 'system',
+            `Ended session #${sessionId} early on ${sess.device_label} (Played: ${elapsedMins}m)`,
+            JSON.stringify({ sessionId, previous: sess, updated: updated.rows[0], elapsedMins })
+          ]
         )
 
         await client.query('COMMIT')
@@ -202,8 +207,13 @@ export default async function handler(req, res) {
 
         await client.query(`UPDATE sessions SET device_id = $1 WHERE id = $2`, [newDeviceId, sessionId])
         await client.query(
-          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SESSION_SWITCH_STATION',$3)`,
-          [Number(userId || 0), req.headers['x-username'] || 'system', `Moved session #${sessionId} from ${sess.old_label} to ${newDev.label}`]
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'SESSION_SWITCH_STATION','sessions',$3,$4)`,
+          [
+            Number(userId || 0),
+            req.headers['x-username'] || 'system',
+            `Moved session #${sessionId} from ${sess.old_label} to ${newDev.label}`,
+            JSON.stringify({ sessionId, fromDevice: sess.old_label, toDevice: newDev.label, newDeviceId })
+          ]
         )
 
         await client.query('COMMIT')
@@ -317,9 +327,13 @@ export default async function handler(req, res) {
 
           await client.query(`UPDATE sessions SET is_deleted = TRUE WHERE id = $1`, [sessionId])
           await client.query(
-            `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SESSION_DELETE',$3)`,
-            [Number(userId || 0), req.headers['x-username'] || 'system',
-             `Deleted session #${sessionId} | Device: ${sess.device_label} | Total: ₹${sess.total}`]
+            `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'SESSION_DELETE','sessions',$3,$4)`,
+            [
+              Number(userId || 0),
+              req.headers['x-username'] || 'system',
+              `Deleted session #${sessionId} | Device: ${sess.device_label} | Total: ₹${sess.total}`,
+              JSON.stringify({ sessionId, session: sess, returned_sales: salesR.rows })
+            ]
           )
 
           await client.query('COMMIT')
@@ -345,22 +359,16 @@ export default async function handler(req, res) {
         LEFT JOIN customers c ON c.id = s.customer_id
         JOIN devices d ON d.id = s.device_id
         LEFT JOIN users u ON u.id = s.created_by
+        WHERE s.is_deleted = FALSE
       `
-      const vals = []
-      const clauses = [`(s.is_deleted IS NULL OR s.is_deleted = FALSE)`]
-
+      const params = []
       if (date) {
-        clauses.push(`s.date = $${vals.length + 1}`)
-        vals.push(date)
-      }
-
-      if (clauses.length > 0) {
-        query += ` WHERE ` + clauses.join(' AND ')
+        params.push(date)
+        query += ` AND s.date = $${params.length}`
       }
 
       query += ` ORDER BY s.time_in DESC`
       if (limit) {
-        query += ` LIMIT $${vals.length + 1}`
         vals.push(limit)
       }
 
@@ -482,8 +490,13 @@ export default async function handler(req, res) {
       try {
         await client.query(`UPDATE sessions SET is_deleted = FALSE WHERE id = $1`, [restoreId])
         await client.query(
-          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1,$2,'SESSION_RESTORE',$3)`,
-          [Number(userId || 0), req.headers['x-username'] || 'system', `Restored session #${restoreId}`]
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'SESSION_RESTORE','sessions',$3,$4)`,
+          [
+            Number(userId || 0),
+            req.headers['x-username'] || 'system',
+            `Restored session #${restoreId}`,
+            JSON.stringify({ restoreId })
+          ]
         )
         await client.query('COMMIT')
         return ok(res, { success: true })

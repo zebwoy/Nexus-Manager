@@ -84,6 +84,17 @@ export default async function handler(req, res) {
           RETURNING *
         `, [date, opening_cash, note, userId ? Number(userId) : null])
 
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata)
+           VALUES ($1, $2, 'BOD_SET_OPENING', 'bod', $3, $4)`,
+          [
+            userId ? Number(userId) : null,
+            req.headers['x-username'] || 'staff',
+            `Set Start of Day (BOD) opening cash: ₹${opening_cash} for ${date}${note ? ` (Note: ${note})` : ''}`,
+            JSON.stringify({ date, opening_cash, note })
+          ]
+        )
+
         return ok(res, { opening: r.rows[0] })
       }
     }

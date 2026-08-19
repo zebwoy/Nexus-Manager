@@ -6,13 +6,15 @@ export const DEMO_SANDBOX_SCHEMA = 'tenant_demo_sandbox'
  * SQL DDL template executed inside every new tenant schema
  */
 export const TENANT_SCHEMA_TEMPLATE = `
--- 1. Users / Staff Accounts (4-Digit PINs scoped to this cafe)
+-- 1. Users / Staff Accounts
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     full_name VARCHAR(100) NOT NULL,
     username VARCHAR(50) UNIQUE NOT NULL,
     pin CHAR(4) NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'operator' CHECK (role IN ('admin', 'operator', 'super_admin', 'trial')),
+    role VARCHAR(20) NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff', 'operator', 'super_admin', 'trial')),
+    email VARCHAR(255),
+    status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'invited')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -25,13 +27,15 @@ CREATE TABLE IF NOT EXISTS operator_sessions (
     logout_at TIMESTAMP WITH TIME ZONE
 );
 
--- 3. Audit Logs
+-- 3. Granular Module Audit Logs
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(id),
     username VARCHAR(100),
     action VARCHAR(100) NOT NULL,
+    module VARCHAR(50),
     details TEXT,
+    metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -316,6 +320,20 @@ export async function ensureGlobalRegistry(pool) {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS public.organization_staff (
+        id SERIAL PRIMARY KEY,
+        org_id VARCHAR(100),
+        schema_name VARCHAR(100) NOT NULL,
+        staff_email VARCHAR(255) NOT NULL,
+        staff_name VARCHAR(100),
+        pin CHAR(4) DEFAULT '1234',
+        status VARCHAR(20) DEFAULT 'invited' CHECK (status IN ('invited', 'active', 'suspended')),
+        invited_by VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (schema_name, staff_email)
+    );
+
     CREATE TABLE IF NOT EXISTS public.super_admin_audit_logs (
         id SERIAL PRIMARY KEY,
         super_admin_id VARCHAR(255),
@@ -464,18 +482,38 @@ export async function resolveTenantSchema(req, pool) {
     }
   }
 
-  // 4. Check for Admin Email resolution
+  // 4. Check for Admin or Authorized Staff Email resolution
   const userEmail = req.headers['x-user-email']
   if (userEmail) {
-    const res = await pool.query(
+    // A. Check if user is Cafe Admin
+    const adminRes = await pool.query(
       'SELECT schema_name, status FROM public.tenants WHERE admin_email ILIKE $1 ORDER BY id DESC LIMIT 1',
       [userEmail.trim()]
     )
-    if (res.rows.length > 0) {
-      if (res.rows[0].status === 'suspended') {
+    if (adminRes.rows.length > 0) {
+      if (adminRes.rows[0].status === 'suspended') {
         throw new Error('TENANT_SUSPENDED: This organization access is temporarily suspended by platform admin.')
       }
-      return res.rows[0].schema_name
+      return adminRes.rows[0].schema_name
+    }
+
+    // B. Check if user is Authorized Staff
+    const staffRes = await pool.query(
+      `SELECT os.schema_name, os.status as staff_status, t.status as tenant_status
+       FROM public.organization_staff os
+       JOIN public.tenants t ON os.schema_name = t.schema_name
+       WHERE os.staff_email ILIKE $1 AND os.status = 'active'
+       ORDER BY os.id DESC LIMIT 1`,
+      [userEmail.trim()]
+    )
+    if (staffRes.rows.length > 0) {
+      if (staffRes.rows[0].tenant_status === 'suspended') {
+        throw new Error('TENANT_SUSPENDED: This organization access is temporarily suspended.')
+      }
+      if (staffRes.rows[0].staff_status === 'suspended') {
+        throw new Error('STAFF_SUSPENDED: Your staff account has been suspended by the cafe admin.')
+      }
+      return staffRes.rows[0].schema_name
     }
   }
 

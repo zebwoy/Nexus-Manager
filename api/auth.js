@@ -37,8 +37,19 @@ export default async function handler(req, res) {
       const isAdmin = requestingUser?.role === 'admin' || requestingUser?.username === 'trial'
       if (!isAdmin) return err(res, 'Access denied: Admin only', 403)
 
+      try {
+        await client.query(`
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';
+          ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS module VARCHAR(50);
+          ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS metadata JSONB;
+          ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+          ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'staff', 'operator', 'super_admin', 'trial'));
+        `)
+      } catch {}
+
       const [logs, sessions] = await Promise.all([
-        client.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 150'),
+        client.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 200'),
         client.query('SELECT * FROM operator_sessions ORDER BY login_at DESC LIMIT 150')
       ])
       return ok(res, { logs: logs.rows, sessions: sessions.rows })
