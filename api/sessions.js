@@ -369,10 +369,11 @@ export default async function handler(req, res) {
 
       query += ` ORDER BY s.time_in DESC`
       if (limit) {
-        vals.push(limit)
+        params.push(limit)
+        query += ` LIMIT $${params.length}`
       }
 
-      const result = await client.query(query, vals)
+      const result = await client.query(query, params)
       return ok(res, { sessions: result.rows })
     }
 
