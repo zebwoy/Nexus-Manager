@@ -36,19 +36,19 @@ export default function SuperAdminLayout({ children }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <Link to="/super-admin" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', textDecoration: 'none' }}>
               <div style={{
-                width: '34px', height: '34px', borderRadius: '10px',
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                width: '36px', height: '36px', borderRadius: '10px',
+                background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-text) 100%)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 2px 8px rgba(245, 158, 11, 0.4)', color: '#000'
+                boxShadow: '0 2px 10px rgba(0, 0, 0, 0.15)', color: 'var(--btn-primary-text, #fff)'
               }}>
                 <Shield size={20} strokeWidth={2.5} />
               </div>
               <div>
-                <p style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em', margin: 0, lineHeight: 1.2 }}>
+                <p style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--text)', letterSpacing: '-0.025em', margin: 0, lineHeight: 1.2 }}>
                   Nexus Platform
                 </p>
-                <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  ★ Super Admin Console
+                <span style={{ fontSize: '0.675rem', fontWeight: 800, color: 'var(--accent-text)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Super Admin Console
                 </span>
               </div>
             </Link>

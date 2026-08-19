@@ -130,9 +130,9 @@ export default function Sidebar() {
 
           {isSuperAdmin && (
             <NavLink to="/super-admin" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
-              style={{ marginTop: 'auto', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.25)' }}>
-              <Shield size={16} strokeWidth={2.2} style={{ flexShrink: 0, color: '#f59e0b' }} />
-              ★ Super Admin
+              style={{ marginTop: 'auto', color: 'var(--accent-text)', borderColor: 'var(--accent-border)' }}>
+              <Shield size={16} strokeWidth={2.2} style={{ flexShrink: 0, color: 'var(--accent)' }} />
+              Super Admin Console
             </NavLink>
           )}
         </nav>
