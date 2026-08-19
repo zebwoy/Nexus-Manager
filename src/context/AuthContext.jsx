@@ -25,6 +25,9 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem('nexus_user')
+    localStorage.removeItem('nexus_user_email')
+    localStorage.removeItem('nexus_tenant_schema')
+    localStorage.removeItem('nexus_tenant_name')
     setUser(null)
   }
 
