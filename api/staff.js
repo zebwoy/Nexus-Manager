@@ -1,15 +1,16 @@
-import { pool } from './_db.js'
-import { withTenantClient, resolveTenantSchema } from './_tenant.js'
-
-function ok(res, data, status = 200) {
-  return res.status(status).json(data)
-}
-function err(res, message, status = 400) {
-  return res.status(status).json({ error: typeof message === 'string' ? message : message?.message || 'Error' })
-}
+import { getPool, ok, err } from './_db.js'
+import { withTenantClient, resolveTenantSchema, ensureGlobalRegistry } from './_tenant.js'
 
 export default async function handler(req, res) {
+  const pool = getPool()
   const action = req.query?.action
+
+  // Ensure global tables exist
+  try {
+    await ensureGlobalRegistry(pool)
+  } catch (e) {
+    console.error('Error ensuring global registry:', e)
+  }
 
   // ─── 1. Staff Member checking pending invites for their Clerk email ───
   if (action === 'my-invites' && req.method === 'GET') {

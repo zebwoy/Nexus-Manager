@@ -128,13 +128,6 @@ export default function Sidebar() {
             </NavLink>
           ))}
 
-          {isSuperAdmin && (
-            <NavLink to="/super-admin" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
-              style={{ marginTop: 'auto', color: 'var(--accent-text)', borderColor: 'var(--accent-border)' }}>
-              <Shield size={16} strokeWidth={2.2} style={{ flexShrink: 0, color: 'var(--accent)' }} />
-              Super Admin Console
-            </NavLink>
-          )}
         </nav>
 
         {/* Theme Settings Panel */}

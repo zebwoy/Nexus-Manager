@@ -21,14 +21,16 @@ import SuperAdminAudit from './pages/superadmin/SuperAdminAudit'
 import JoinOrganization from './pages/JoinOrganization'
 
 function ProtectedRoute({ children }) {
-  const { user } = useAuth()
+  const { user, isSuperAdmin } = useAuth()
   if (!user) return <Navigate to="/login" replace />
+  if (isSuperAdmin) return <Navigate to="/super-admin" replace />
   return <Layout>{children}</Layout>
 }
 
 function AdminRoute({ children }) {
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, isSuperAdmin } = useAuth()
   if (!user) return <Navigate to="/login" replace />
+  if (isSuperAdmin) return <Navigate to="/super-admin" replace />
   if (!isAdmin) return <Navigate to="/" replace />
   return <Layout>{children}</Layout>
 }
