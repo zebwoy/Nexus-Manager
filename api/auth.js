@@ -64,32 +64,15 @@ export default async function handler(req, res) {
       const cleanUser = String(username).toLowerCase().trim()
       const cleanPin = String(pin).trim()
 
-      // Auto-provision standard accounts if not yet in database
-      if (cleanUser === 'superadmin' && (cleanPin === '9999' || cleanPin === '1234')) {
-        try {
-          await client.query(`
-            ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
-            ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'operator', 'super_admin', 'trial'));
-          `)
-        } catch {}
+      // Auto-cleanup any accidental platform superadmin in tenant users table
+      try {
+        await client.query("DELETE FROM users WHERE role = 'super_admin' OR username = 'superadmin'")
+      } catch {}
 
-        try {
-          await client.query(`
-            INSERT INTO users (full_name, username, pin, role)
-            VALUES ('Super Administrator', 'superadmin', $1, 'super_admin')
-            ON CONFLICT (username) DO UPDATE SET pin = EXCLUDED.pin, role = 'super_admin'
-          `, [cleanPin])
-        } catch {
-          await client.query(`
-            INSERT INTO users (full_name, username, pin, role)
-            VALUES ('Super Administrator', 'superadmin', $1, 'admin')
-            ON CONFLICT (username) DO UPDATE SET pin = EXCLUDED.pin, role = 'admin'
-          `, [cleanPin])
-        }
-      } else if (cleanUser === 'admin' && (cleanPin === '1234' || cleanPin === '9999')) {
+      if (cleanUser === 'admin' && (cleanPin === '1234' || cleanPin === '9999')) {
         await client.query(`
           INSERT INTO users (full_name, username, pin, role)
-          VALUES ('Store Administrator', 'admin', $1, 'admin')
+          VALUES ('Cafe Administrator', 'admin', $1, 'admin')
           ON CONFLICT (username) DO UPDATE SET pin = EXCLUDED.pin, role = 'admin'
         `, [cleanPin])
       }

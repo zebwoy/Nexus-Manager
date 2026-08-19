@@ -535,9 +535,13 @@ export default function TenantManagement() {
                           }}>
                             {t.plan || 'Pro'}
                           </span>
-                          <div style={{ display: 'flex', gap: '0.45rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                            <span>🖥️ {t.device_count || 0} dev</span>
-                            <span>🎮 {t.session_count || 0} sess</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <Monitor size={11} style={{ color: 'var(--accent)' }} /> {t.device_count || 0} dev
+                            </span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <Gamepad2 size={11} style={{ color: 'var(--accent)' }} /> {t.session_count || 0} sess
+                            </span>
                           </div>
                         </div>
                       </td>
@@ -552,19 +556,6 @@ export default function TenantManagement() {
                       {/* Actions */}
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <button
-                            onClick={() => handleImpersonate(t)}
-                            className="btn-primary btn-sm"
-                            style={{
-                              padding: '0.35rem 0.7rem', fontSize: '0.725rem', fontWeight: 750,
-                              display: 'flex', alignItems: 'center', gap: '0.3rem',
-                              borderRadius: '8px'
-                            }}
-                            title="Launch cafe console workspace"
-                          >
-                            <ExternalLink size={12} /> Launch
-                          </button>
-
                           <button
                             onClick={() => openEditModal(t)}
                             className="btn-secondary btn-sm"

@@ -139,13 +139,19 @@ export default async function handler(req, res) {
         // 2. Provision PostgreSQL schema & template tables
         await provisionTenantSchema(pool, schemaName)
 
-        // 3. Pre-seed admin user in the newly provisioned tenant schema
+        // 3. Pre-seed admin user and cafe organization title in the newly provisioned tenant schema
         const adminUsername = admin_email.trim().toLowerCase().split('@')[0]
         await client.query(`
-          INSERT INTO "${schemaName}".users (full_name, username, pin, role)
-          VALUES ('Cafe Administrator', $1, '1234', 'admin')
-          ON CONFLICT (username) DO NOTHING
-        `, [adminUsername])
+          INSERT INTO "${schemaName}".users (full_name, username, pin, role, email, status)
+          VALUES ($1, $2, '1234', 'admin', $3, 'active')
+          ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, status = 'active'
+        `, [admin_name || name || 'Cafe Administrator', adminUsername, admin_email.trim().toLowerCase()])
+
+        await client.query(`
+          INSERT INTO "${schemaName}".settings (key, value)
+          VALUES ('cafe_name', $1), ('admin_email', $2)
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        `, [name.trim(), admin_email.trim().toLowerCase()])
 
         // 4. Log Super Admin Audit Trail
         await client.query(
@@ -194,6 +200,15 @@ export default async function handler(req, res) {
          RETURNING *`,
         [name, admin_email, admin_name, status, plan, max_devices, id]
       )
+
+      // Sync settings in private tenant schema
+      try {
+        await pool.query(`
+          INSERT INTO "${cur.schema_name}".settings (key, value)
+          VALUES ('cafe_name', $1), ('admin_email', $2)
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        `, [name.trim(), admin_email.trim().toLowerCase()])
+      } catch {}
 
       await pool.query(
         `INSERT INTO public.super_admin_audit_logs (super_admin_id, super_admin_email, action, target_org_id, details)

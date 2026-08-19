@@ -89,10 +89,29 @@ export default async function handler(req, res) {
   return withTenantClient(pool, req, res, async (client, schemaName) => {
     const callerUser = req.headers['x-username'] || 'admin'
 
-    // GET /api/staff - List all staff accounts and sync with public registry
+    // GET /api/staff - List all staff accounts (strictly excluding platform superadmin)
     if (req.method === 'GET') {
+      // Purge any accidental superadmin from tenant users
+      try {
+        await client.query("DELETE FROM users WHERE role = 'super_admin' OR username = 'superadmin'")
+      } catch {}
+
+      // Auto-sync real admin name from public.tenants if needed
+      try {
+        const tenantR = await pool.query('SELECT name, admin_name, admin_email FROM public.tenants WHERE schema_name = $1', [schemaName])
+        if (tenantR.rows.length > 0 && tenantR.rows[0].admin_email) {
+          const t = tenantR.rows[0]
+          await client.query(`
+            UPDATE users
+            SET full_name = COALESCE(NULLIF($1, ''), full_name),
+                email = $2
+            WHERE role = 'admin' AND (email IS NULL OR full_name = 'Cafe Administrator')
+          `, [t.admin_name || t.admin_email.split('@')[0], t.admin_email])
+        }
+      } catch {}
+
       const usersR = await client.query(
-        'SELECT id, full_name, username, pin, role, email, status, created_at FROM users ORDER BY id ASC'
+        "SELECT id, full_name, username, pin, role, email, status, created_at FROM users WHERE role != 'super_admin' AND username != 'superadmin' ORDER BY id ASC"
       )
       const staffRegistryR = await pool.query(
         'SELECT * FROM public.organization_staff WHERE schema_name = $1',
@@ -159,6 +178,9 @@ export default async function handler(req, res) {
       const curR = await client.query('SELECT * FROM users WHERE id = $1', [id])
       if (curR.rows.length === 0) return err(res, 'User not found', 404)
       const current = curR.rows[0]
+      if (current.role === 'super_admin' || current.username === 'superadmin') {
+        return err(res, 'Access denied: Cannot modify platform super administrator accounts', 403)
+      }
 
       const nextName = full_name || current.full_name
       const nextPin = pin && /^\d{4}$/.test(pin) ? pin : current.pin
@@ -206,6 +228,9 @@ export default async function handler(req, res) {
       if (curR.rows.length === 0) return err(res, 'User not found', 404)
       const current = curR.rows[0]
 
+      if (current.role === 'super_admin' || current.username === 'superadmin') {
+        return err(res, 'Access denied: Cannot delete platform super administrator accounts', 403)
+      }
       if (current.role === 'admin' && current.username === 'admin') {
         return err(res, 'Cannot delete the primary cafe admin account', 400)
       }

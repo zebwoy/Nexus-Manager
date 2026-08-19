@@ -5,9 +5,9 @@ import { PageLoader, ErrorMsg, Tabs, EmptyState } from '../components/UI'
 import { Shield, Activity, Trash2, RefreshCw } from 'lucide-react'
 
 const TABS = [
-  { key: 'audit',    label: '📋 Audit Log' },
-  { key: 'sessions', label: '🔐 Operator Sessions' },
-  { key: 'deletes',  label: '🗑️ Deletions' },
+  { key: 'audit',    label: 'Audit Log' },
+  { key: 'sessions', label: 'Operator Sessions' },
+  { key: 'deletes',  label: 'Deletions' },
 ]
 
 // Action type → badge colour

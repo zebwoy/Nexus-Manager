@@ -8,15 +8,16 @@ import {
   Trash2, Shield, Settings as SettingsIcon, Users, PlusCircle,
   KeyRound, UserPlus, UserCheck, UserX, Clock, Database,
   Activity, CheckCircle2, AlertCircle, RefreshCw, X, Eye, EyeOff,
-  Gamepad2, Coffee, Zap, TrendingDown, DollarSign, FileCheck, Layers
+  Gamepad2, Coffee, Zap, TrendingDown, DollarSign, FileCheck, Layers,
+  AlertTriangle
 } from 'lucide-react'
 
 const TABS = [
-  { key: 'staff',     label: '⚡ Staff Authorizations & PINs', icon: Users },
-  { key: 'audit',     label: '🛡️ Granular Staff Audit Trail',   icon: Shield },
-  { key: 'tariffs',   label: '🎮 Lounges & Tariffs',           icon: Gamepad2 },
-  { key: 'platforms', label: '💳 Recharge Platforms',          icon: Zap },
-  { key: 'system',    label: '⚙️ System & Danger Zone',        icon: SettingsIcon },
+  { key: 'staff',     label: 'Staff Authorizations & PINs', icon: Users },
+  { key: 'audit',     label: 'Staff Operations Audit',      icon: Shield },
+  { key: 'tariffs',   label: 'Lounges & Tariffs',           icon: Gamepad2 },
+  { key: 'platforms', label: 'Recharge Platforms',          icon: Zap },
+  { key: 'system',    label: 'System & Danger Zone',        icon: SettingsIcon },
 ]
 
 export default function Settings() {
@@ -269,8 +270,8 @@ export default function Settings() {
 
       {/* ─── TAB NAVIGATION BAR ─── */}
       <div style={{
-        display: 'flex', gap: '0.4rem', borderBottom: '1.5px solid var(--border)',
-        paddingBottom: '0.4rem', overflowX: 'auto'
+        display: 'flex', gap: '0.5rem', borderBottom: '1.5px solid var(--border)',
+        padding: '0.35rem 0.15rem', margin: 0, overflowX: 'auto'
       }}>
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
@@ -278,7 +279,7 @@ export default function Settings() {
             onClick={() => { setActiveTab(key); setError('') }}
             style={{
               padding: '0.55rem 1rem', borderRadius: '10px', fontSize: '0.825rem', fontWeight: 750,
-              border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.45rem',
+              border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem',
               background: activeTab === key ? 'var(--accent)' : 'transparent',
               color: activeTab === key ? 'var(--btn-primary-text, #fff)' : 'var(--text-muted)',
               transition: 'all 0.15s ease', whiteSpace: 'nowrap'
@@ -428,26 +429,27 @@ export default function Settings() {
               borderRadius: '10px', background: 'var(--bg-input)', border: '1px solid var(--border)'
             }}>
               {[
-                { id: 'ALL',       label: 'All Modules' },
-                { id: 'sessions',  label: '🎮 Sessions' },
-                { id: 'recharges', label: '⚡ Recharges' },
-                { id: 'cafeteria', label: '☕ Cafeteria' },
-                { id: 'expenses',  label: '💸 Expenses' },
-                { id: 'bod',       label: '☀️ BOD Cash' },
-                { id: 'eod',       label: '🌙 EOD Shift' },
-                { id: 'staff',     label: '👥 Staff Security' },
+                { id: 'ALL',       label: 'All Modules', icon: Layers },
+                { id: 'sessions',  label: 'Sessions', icon: Gamepad2 },
+                { id: 'recharges', label: 'Recharges', icon: Zap },
+                { id: 'cafeteria', label: 'Cafeteria', icon: Coffee },
+                { id: 'expenses',  label: 'Expenses', icon: TrendingDown },
+                { id: 'bod',       label: 'BOD Opening Cash', icon: Clock },
+                { id: 'eod',       label: 'EOD Shift Closing', icon: FileCheck },
+                { id: 'staff',     label: 'Staff Security', icon: Users },
               ].map(m => (
                 <button
                   key={m.id}
                   onClick={() => setAuditModuleFilter(m.id)}
                   style={{
                     padding: '0.35rem 0.75rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 750,
-                    border: 'none', cursor: 'pointer',
+                    border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem',
                     background: auditModuleFilter === m.id ? 'var(--bg-card)' : 'transparent',
                     color: auditModuleFilter === m.id ? 'var(--text)' : 'var(--text-muted)',
                     boxShadow: auditModuleFilter === m.id ? 'var(--shadow)' : 'none'
                   }}
                 >
+                  <m.icon size={13} />
                   {m.label}
                 </button>
               ))}
@@ -650,8 +652,11 @@ export default function Settings() {
 
           {/* Danger Zone */}
           <div className="card" style={{ border: '1.5px solid rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.03)' }}>
-            <h4 style={{ margin: 0, color: 'var(--danger)', fontSize: '0.95rem', fontWeight: 800 }}>⚠️ Danger Zone</h4>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.35rem 0 1rem', lineHeight: 1.5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--danger)', marginBottom: '0.35rem' }}>
+              <AlertTriangle size={16} />
+              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>Danger Zone</h4>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 1rem', lineHeight: 1.5 }}>
               Purging data will permanently erase all shift sessions, transactions, and recharges in this schema. This cannot be undone.
             </p>
             <button

@@ -33,6 +33,17 @@ export default function Sidebar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [showSignOutModal, setShowSignOutModal] = useState(false)
   const [isPurging, setIsPurging] = useState(false)
+  const [cafeName, setCafeName] = useState(() => localStorage.getItem('nexus_tenant_name') || '')
+
+  useEffect(() => {
+    api.get('/settings').then(res => {
+      const nameSetting = res.settings?.find(s => s.key === 'cafe_name')?.value
+      if (nameSetting) {
+        setCafeName(nameSetting)
+        localStorage.setItem('nexus_tenant_name', nameSetting)
+      }
+    }).catch(() => {})
+  }, [activeTenant])
 
   const handleConfirmSignOut = async () => {
     setIsPurging(true)
@@ -74,18 +85,18 @@ export default function Sidebar() {
       }}>
         {/* Logo Panel */}
         <div style={{
-          padding: '1.25rem 1.25rem 1rem',
+          padding: '1.15rem 1.15rem 0.95rem',
           borderBottom: '1.5px solid var(--bevel-bottom)',
           background: 'rgba(0,0,0,0.05)',
           boxShadow: 'inset 0 -1px 0 var(--bevel-top)'
         }}>
           <p style={{
-            fontSize: '1.25rem', fontWeight: 800, color: 'var(--text)',
-            letterSpacing: '-0.02em', textShadow: '1px 1px 0 var(--bevel-top)', margin: 0
+            fontSize: '1.1rem', fontWeight: 900, color: 'var(--text)',
+            letterSpacing: '-0.025em', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
           }}>
-            Nexus Manager
+            {activeTenant?.name || cafeName || 'Gaming Lounge'}
           </p>
-          <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 650, marginTop: '0.15rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+          <p style={{ fontSize: '0.675rem', color: 'var(--accent-text)', fontWeight: 750, marginTop: '0.15rem', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
             Gaming Cafe Console
           </p>
         </div>

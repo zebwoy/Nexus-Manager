@@ -4,7 +4,7 @@ import { formatRupees, todayISO } from '../../lib/helpers'
 import { PageLoader, ErrorMsg, Field, Modal, Spinner } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
 import { toast } from 'react-toastify'
-import { Banknote, Calculator, CheckCircle, Save, FileCheck } from 'lucide-react'
+import { Banknote, Calculator, CheckCircle, Save, FileCheck, TrendingUp, TrendingDown, Receipt } from 'lucide-react'
 
 const DENOMINATIONS = [
   { value: 500, label: '₹500' },
@@ -206,9 +206,10 @@ export default function EODReconciliation() {
 
           {/* Inflows breakdown */}
           <div className="card">
-            <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.85rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
-              💰 Today's Inflows
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.85rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
+              <TrendingUp size={14} style={{ color: 'var(--success)' }} />
+              Today's Inflows
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-faint)', fontWeight: 700, textTransform: 'uppercase' }}>Category</span>
               <span style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 700, textTransform: 'uppercase', textAlign: 'right' }}>Cash</span>
@@ -225,9 +226,10 @@ export default function EODReconciliation() {
 
           {/* Cash outflows */}
           <div className="card">
-            <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.85rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
-              💸 Cash Outflows (Expenses)
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.85rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
+              <TrendingDown size={14} style={{ color: 'var(--danger)' }} />
+              Cash Outflows (Expenses)
+            </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'JetBrains Mono', monospace" }}>
               <span style={{ color: 'var(--text-muted)' }}>Expenses paid in cash</span>
               <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{formatRupees(cashOutflows)}</span>
@@ -237,9 +239,10 @@ export default function EODReconciliation() {
           {/* Expected vs Actual */}
           <div className="card" style={{ background: 'var(--bg-elevated)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-              <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                🧾 Cash Drawer Settlement
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <Receipt size={14} style={{ color: 'var(--accent)' }} />
+                Cash Drawer Settlement
+              </div>
               <button onClick={() => setShowDenomModal(true)} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem' }}>
                 <Calculator size={13} /> Count Notes &amp; Coins
               </button>
