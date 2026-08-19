@@ -118,14 +118,55 @@ export default async function handler(req, res) {
       try {
         await client.query('BEGIN')
 
-        // 1. Insert into public.tenants registry
+        // 1. Synchronize Organization with Clerk API if configured
+        let clerkOrgId = null
+        try {
+          if (process.env.CLERK_SECRET_KEY) {
+            const { createClerkClient } = await import('@clerk/backend')
+            const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
+            
+            // Check if user already exists in Clerk
+            let createdByUserId = null
+            try {
+              const users = await clerk.users.getUserList({ emailAddress: [admin_email.trim().toLowerCase()] })
+              if (users.data?.length > 0) {
+                createdByUserId = users.data[0].id
+              }
+            } catch (uErr) {}
+
+            const orgPayload = {
+              name: name.trim(),
+              slug: finalSlug,
+            }
+            if (createdByUserId) {
+              orgPayload.createdBy = createdByUserId
+            }
+            const clerkOrg = await clerk.organizations.createOrganization(orgPayload)
+            clerkOrgId = clerkOrg?.id
+
+            if (!createdByUserId && clerkOrgId) {
+              try {
+                await clerk.organizations.createOrganizationInvitation({
+                  organizationId: clerkOrgId,
+                  emailAddress: admin_email.trim().toLowerCase(),
+                  role: 'org:admin'
+                })
+              } catch (invErr) {}
+            }
+          }
+        } catch (clerkError) {
+          console.warn('Clerk organization provision notice:', clerkError?.message)
+        }
+
+        // 2. Insert into public.tenants registry
+        const finalOrgId = clerkOrgId || orgId
         const tenantR = await client.query(
           `INSERT INTO public.tenants
             (org_id, name, slug, schema_name, admin_email, plan, created_by)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING *`,
           [
-            orgId,
+            finalOrgId,
             name.trim(),
             finalSlug,
             schemaName,
@@ -136,10 +177,10 @@ export default async function handler(req, res) {
         )
         const tenant = tenantR.rows[0]
 
-        // 2. Provision PostgreSQL schema & template tables
+        // 3. Provision PostgreSQL schema & template tables
         await provisionTenantSchema(pool, schemaName)
 
-        // 3. Pre-seed admin user and cafe organization title in the newly provisioned tenant schema
+        // 4. Pre-seed admin user and cafe organization title in the newly provisioned tenant schema
         const adminUsername = admin_email.trim().toLowerCase().split('@')[0]
         await client.query(`
           INSERT INTO "${schemaName}".users (full_name, username, pin, role, email, status)
@@ -153,14 +194,14 @@ export default async function handler(req, res) {
           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
         `, [name.trim(), admin_email.trim().toLowerCase()])
 
-        // 4. Log Super Admin Audit Trail
+        // 5. Log Super Admin Audit Trail
         await client.query(
           `INSERT INTO public.super_admin_audit_logs (super_admin_id, super_admin_email, action, target_org_id, details)
            VALUES ($1, $2, 'CREATE_TENANT', $3, $4)`,
           [
             superAdminId,
             superAdminEmail,
-            orgId,
+            finalOrgId,
             `Created organization "${name}" (Schema: ${schemaName}) with admin: ${admin_email}`
           ]
         )

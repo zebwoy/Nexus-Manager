@@ -74,6 +74,10 @@ export default function Settings() {
       setStaffUsers(staffRes.users || [])
       setStaffInvites(staffRes.invites || [])
       setSettings(settRes.settings || [])
+      const cafeNameSetting = settRes.settings?.find(s => s.key === 'cafe_name')?.value
+      if (cafeNameSetting) {
+        localStorage.setItem('nexus_tenant_name', cafeNameSetting)
+      }
       setPlatforms(platRes.platforms || [])
     } catch (err) {
       setError(err.message)
@@ -214,6 +218,10 @@ export default function Settings() {
     setSettingsSaving(true)
     try {
       await api.post('/settings', { settings })
+      const cafeNameSetting = settings.find(s => s.key === 'cafe_name')?.value
+      if (cafeNameSetting) {
+        localStorage.setItem('nexus_tenant_name', cafeNameSetting)
+      }
       setSaveMsg('Configuration updated!')
       toast.success('System variables updated!')
       setTimeout(() => setSaveMsg(''), 2500)
@@ -632,7 +640,8 @@ export default function Settings() {
             <Field label="Cafe Organization Title">
               <input
                 className="input"
-                value={settings.find(s => s.key === 'cafe_name')?.value || 'Nexus Gaming Lounge'}
+                value={settings.find(s => s.key === 'cafe_name')?.value || ''}
+                placeholder="e.g. Headshot Gaming Cafe"
                 onChange={e => handleSettingChange('cafe_name', e.target.value)}
               />
             </Field>

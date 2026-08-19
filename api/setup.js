@@ -79,6 +79,24 @@ export default async function handler(req, res) {
     // ─── SETTINGS ──────────────────────────────────────────────
     if (resource === 'settings') {
       if (req.method === 'GET') {
+        // Auto-sync real organization name and admin email from public.tenants if available
+        try {
+          const tRes = await pool.query('SELECT name, admin_email FROM public.tenants WHERE schema_name = $1', [schemaName])
+          if (tRes.rows.length > 0 && tRes.rows[0].name) {
+            const orgName = tRes.rows[0].name
+            const curSetting = await client.query("SELECT value FROM settings WHERE key = 'cafe_name'")
+            if (curSetting.rows.length === 0 || curSetting.rows[0].value === 'Nexus Gaming Lounge' || !curSetting.rows[0].value) {
+              await client.query(`
+                INSERT INTO settings (key, value)
+                VALUES ('cafe_name', $1)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+              `, [orgName])
+            }
+          }
+        } catch (e) {
+          console.error('Error syncing organization name to settings:', e)
+        }
+
         const r = await client.query('SELECT * FROM settings ORDER BY key')
         return ok(res, { settings: r.rows })
       }
@@ -93,6 +111,15 @@ export default async function handler(req, res) {
               SET value = EXCLUDED.value
           `, [s.key, String(s.value)])
         }
+
+        // If cafe_name was updated by admin, sync back to public.tenants
+        const updatedName = list.find(s => s.key === 'cafe_name')?.value
+        if (updatedName) {
+          try {
+            await pool.query('UPDATE public.tenants SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE schema_name = $2', [String(updatedName).trim(), schemaName])
+          } catch (e) {}
+        }
+
         const r = await client.query('SELECT * FROM settings ORDER BY key')
         return ok(res, { settings: r.rows })
       }
