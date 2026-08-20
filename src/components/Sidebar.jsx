@@ -34,13 +34,19 @@ export default function Sidebar() {
   const [showSignOutModal, setShowSignOutModal] = useState(false)
   const [isPurging, setIsPurging] = useState(false)
   const [cafeName, setCafeName] = useState(() => localStorage.getItem('nexus_tenant_name') || '')
+  const [cafeLogo, setCafeLogo] = useState(() => localStorage.getItem('nexus_tenant_logo') || '')
 
   useEffect(() => {
     api.get('/settings').then(res => {
       const nameSetting = res.settings?.find(s => s.key === 'cafe_name')?.value
+      const logoSetting = res.settings?.find(s => s.key === 'cafe_logo')?.value
       if (nameSetting) {
         setCafeName(nameSetting)
         localStorage.setItem('nexus_tenant_name', nameSetting)
+      }
+      if (logoSetting) {
+        setCafeLogo(logoSetting)
+        localStorage.setItem('nexus_tenant_logo', logoSetting)
       }
     }).catch(() => {})
   }, [activeTenant])
@@ -71,6 +77,9 @@ export default function Sidebar() {
   const activeMobileNav = visibleNav.slice(0, 4)
   const moreMobileNav = visibleNav.slice(4)
 
+  const currentDisplayName = activeTenant?.name || cafeName || 'Gaming Lounge'
+  const initials = currentDisplayName.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase() || 'GL'
+
   return (
     <>
       {/* ─── DESKTOP SIDEBAR ────────────────────────────────────────── */}
@@ -85,20 +94,60 @@ export default function Sidebar() {
       }}>
         {/* Logo Panel */}
         <div style={{
-          padding: '1.15rem 1.15rem 0.95rem',
+          padding: '1rem 1.15rem 0.95rem',
           borderBottom: '1.5px solid var(--bevel-bottom)',
           background: 'rgba(0,0,0,0.05)',
-          boxShadow: 'inset 0 -1px 0 var(--bevel-top)'
+          boxShadow: 'inset 0 -1px 0 var(--bevel-top)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem'
         }}>
-          <p style={{
-            fontSize: '1.1rem', fontWeight: 900, color: 'var(--text)',
-            letterSpacing: '-0.025em', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-          }}>
-            {activeTenant?.name || cafeName || 'Gaming Lounge'}
-          </p>
-          <p style={{ fontSize: '0.675rem', color: 'var(--accent-text)', fontWeight: 750, marginTop: '0.15rem', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
-            Gaming Cafe Console
-          </p>
+          {cafeLogo ? (
+            <img
+              src={cafeLogo}
+              alt="Logo"
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '9px',
+                objectFit: 'cover',
+                border: '1px solid var(--border)',
+                flexShrink: 0
+              }}
+              onError={(e) => { e.target.style.display = 'none' }}
+            />
+          ) : (
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '9px',
+              background: 'linear-gradient(135deg, var(--accent) 0%, rgba(59, 130, 246, 0.4) 100%)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              fontWeight: 900,
+              fontSize: '0.85rem',
+              letterSpacing: '0.04em',
+              flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+            }}>
+              {initials}
+            </div>
+          )}
+
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p style={{
+              fontSize: '0.975rem', fontWeight: 900, color: 'var(--text)',
+              letterSpacing: '-0.025em', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+            }}>
+              {currentDisplayName}
+            </p>
+            <p style={{ fontSize: '0.625rem', color: 'var(--accent-text)', fontWeight: 750, marginTop: '0.15rem', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+              Gaming Cafe Console
+            </p>
+          </div>
         </div>
 
         {/* Active Tenant Impersonation / Context Pill */}

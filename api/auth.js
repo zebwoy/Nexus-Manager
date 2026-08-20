@@ -80,35 +80,30 @@ export default async function handler(req, res) {
         })
       }
 
-      if (cleanUser === 'admin' && (cleanPin === '1234' || cleanPin === '9999')) {
-        await client.query(`
-          INSERT INTO users (full_name, username, pin, role)
-          VALUES ('Cafe Administrator', 'admin', $1, 'admin')
-          ON CONFLICT (username) DO UPDATE SET pin = EXCLUDED.pin, role = 'admin'
-        `, [cleanPin])
-      }
+      let result = await client.query(
+        `SELECT id, full_name, username, COALESCE(role, 'staff') AS role, status
+         FROM users
+         WHERE (username = $1 OR username = $2 OR username ILIKE '%' || $1) AND pin = $3
+         ORDER BY id ASC LIMIT 1`,
+        [cleanUser, `${cleanUser}_staff`, cleanPin]
+      )
 
-      let result
-      try {
+      if (result.rows.length === 0) {
+        // Also check if cleanUser matches role (e.g. role = 'admin' or role = 'staff')
         result = await client.query(
-          'SELECT id, full_name, username, COALESCE(role, \'operator\') AS role FROM users WHERE username = $1 AND pin = $2',
+          `SELECT id, full_name, username, COALESCE(role, 'staff') AS role, status
+           FROM users
+           WHERE role = $1 AND pin = $2
+           ORDER BY id ASC LIMIT 1`,
           [cleanUser, cleanPin]
         )
-      } catch {
-        result = await client.query(
-          'SELECT id, full_name, username FROM users WHERE username = $1 AND pin = $2',
-          [cleanUser, cleanPin]
-        )
-        if (result.rows[0]) {
-          result.rows[0].role = result.rows[0].username === 'superadmin' ? 'super_admin' : result.rows[0].username === 'admin' ? 'admin' : 'operator'
-        }
       }
       
       if (result.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
 
       const user = result.rows[0]
-      if (cleanUser === 'superadmin') {
-        user.role = 'super_admin'
+      if (user.status === 'suspended') {
+        return err(res, 'Account suspended. Contact your cafe administrator.', 403)
       }
 
       // Record in operator_sessions and audit_logs

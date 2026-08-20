@@ -312,6 +312,8 @@ export async function ensureGlobalRegistry(pool) {
         admin_email VARCHAR(255) NOT NULL,
         admin_name VARCHAR(200),
         admin_clerk_id VARCHAR(255),
+        phone VARCHAR(50),
+        logo_url TEXT,
         status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'pending')),
         plan VARCHAR(50) NOT NULL DEFAULT 'pro',
         max_devices INT NOT NULL DEFAULT 20,
@@ -319,6 +321,9 @@ export async function ensureGlobalRegistry(pool) {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
+
+    ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+    ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS logo_url TEXT;
 
     CREATE TABLE IF NOT EXISTS public.organization_staff (
         id SERIAL PRIMARY KEY,

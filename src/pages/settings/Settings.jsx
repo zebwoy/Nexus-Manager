@@ -9,7 +9,7 @@ import {
   KeyRound, UserPlus, UserCheck, UserX, Clock, Database,
   Activity, CheckCircle2, AlertCircle, RefreshCw, X, Eye, EyeOff,
   Gamepad2, Coffee, Zap, TrendingDown, DollarSign, FileCheck, Layers,
-  AlertTriangle
+  AlertTriangle, Building2, Phone, Sparkles
 } from 'lucide-react'
 
 const TABS = [
@@ -632,31 +632,77 @@ export default function Settings() {
               System Configuration &amp; Danger Zone
             </h3>
             <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Manage lounge branding and database reset utilities.
+              Organization identity profile and database reset utilities.
             </p>
           </div>
 
+          {/* Provisioned Organization Profile Card */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <Field label="Cafe Organization Title">
-              <input
-                className="input"
-                value={settings.find(s => s.key === 'cafe_name')?.value || ''}
-                placeholder="e.g. Headshot Gaming Cafe"
-                onChange={e => handleSettingChange('cafe_name', e.target.value)}
-              />
-            </Field>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '0.85rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                {settings.find(s => s.key === 'cafe_logo')?.value ? (
+                  <img
+                    src={settings.find(s => s.key === 'cafe_logo')?.value}
+                    alt="Logo"
+                    style={{ width: '42px', height: '42px', borderRadius: '10px', objectFit: 'cover', border: '1px solid var(--border)' }}
+                    onError={(e) => { e.target.style.display = 'none' }}
+                  />
+                ) : (
+                  <div style={{
+                    width: '42px', height: '42px', borderRadius: '10px',
+                    background: 'linear-gradient(135deg, var(--accent) 0%, rgba(59, 130, 246, 0.4) 100%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff',
+                    fontWeight: 900, fontSize: '1rem', border: '1px solid var(--border)'
+                  }}>
+                    {(settings.find(s => s.key === 'cafe_name')?.value || 'NL').split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, color: 'var(--text)' }}>
+                    {settings.find(s => s.key === 'cafe_name')?.value || 'Nexus Gaming Lounge'}
+                  </h4>
+                  <p style={{ margin: '0.15rem 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Schema: <code style={{ fontFamily: 'monospace', color: 'var(--accent-text)' }}>tenant_{settings.find(s => s.key === 'org_slug')?.value || 'org'}</code>
+                  </p>
+                </div>
+              </div>
 
-            <Field label="Counter Help / Phone Number">
-              <input
-                className="input"
-                value={settings.find(s => s.key === 'counter_phone')?.value || '+91 98765 43210'}
-                onChange={e => handleSettingChange('counter_phone', e.target.value)}
-              />
-            </Field>
+              <span className="badge badge-accent" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.7rem' }}>
+                <Shield size={12} /> Managed by Super Admin
+              </span>
+            </div>
 
-            <button onClick={saveSettings} disabled={settingsSaving} className="btn-primary" style={{ width: 'fit-content' }}>
-              {settingsSaving ? 'Saving...' : 'Save Organization Variables'}
-            </button>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+              <div style={{ padding: '0.85rem', background: 'var(--bg-input)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Counter Support Phone
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.35rem' }}>
+                  <Phone size={14} style={{ color: 'var(--accent)' }} />
+                  <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)' }}>
+                    {settings.find(s => s.key === 'counter_phone')?.value || '+91 98765 43210'}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ padding: '0.85rem', background: 'var(--bg-input)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  System Operator Handles
+                </p>
+                <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+                  <span className="badge badge-neutral" style={{ fontFamily: 'monospace', fontSize: '0.725rem' }}>
+                    @{settings.find(s => s.key === 'org_slug')?.value || 'org'}_admin
+                  </span>
+                  <span className="badge badge-neutral" style={{ fontFamily: 'monospace', fontSize: '0.725rem' }}>
+                    @{settings.find(s => s.key === 'org_slug')?.value || 'org'}_staff
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '0.65rem 0.85rem', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+              To update your cafe organization branding, title, or support phone number, please contact your Super Admin platform administrator.
+            </div>
           </div>
 
           {/* Danger Zone */}

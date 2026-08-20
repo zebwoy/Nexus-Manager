@@ -104,7 +104,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // Augment with station and session counts
+      // Augment with station, session counts, and auto-seed standard <slug>_<role> operator accounts
       const enriched = await Promise.all(r.rows.map(async (t) => {
         let deviceCount = 0
         let sessionCount = 0
@@ -115,6 +115,27 @@ export default async function handler(req, res) {
           ])
           deviceCount = Number(dR.rows[0]?.count || 0)
           sessionCount = Number(sR.rows[0]?.count || 0)
+
+          // Auto-ensure standard system operator accounts exist in tenant schema: <slug>_admin and <slug>_staff
+          const adminOpUser = `${t.slug}_admin`
+          const staffOpUser = `${t.slug}_staff`
+          await pool.query(`
+            INSERT INTO "${t.schema_name}".users (full_name, username, pin, role, email, status)
+            VALUES ($1, $2, '1234', 'admin', $3, 'active')
+            ON CONFLICT (username) DO UPDATE
+            SET full_name = EXCLUDED.full_name, email = EXCLUDED.email;
+
+            INSERT INTO "${t.schema_name}".users (full_name, username, pin, role, email, status)
+            VALUES ('Counter Staff', $4, '1234', 'staff', NULL, 'active')
+            ON CONFLICT (username) DO NOTHING;
+          `, [t.admin_name || `${t.name} Admin`, adminOpUser, t.admin_email, staffOpUser])
+
+          // Sync settings in tenant schema
+          await pool.query(`
+            INSERT INTO "${t.schema_name}".settings (key, value)
+            VALUES ('cafe_name', $1), ('org_slug', $2), ('counter_phone', $3), ('cafe_logo', $4)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+          `, [t.name, t.slug, t.phone || '+91 98765 43210', t.logo_url || ''])
         } catch {}
         return { ...t, device_count: deviceCount, session_count: sessionCount }
       }))
@@ -184,7 +205,7 @@ export default async function handler(req, res) {
     // ─── POST /api/super-admin?action=tenants (Create Org & Provision Schema) ───
     if (action === 'tenants' && req.method === 'POST') {
       const b = req.body || {}
-      const { name, slug, admin_email, admin_name, plan, max_devices } = b
+      const { name, slug, admin_email, admin_name, phone, logo_url, plan, max_devices } = b
 
       if (!name?.trim() || !admin_email?.trim()) {
         return err(res, 'Organization name and Admin email are required', 400)
@@ -221,13 +242,10 @@ export default async function handler(req, res) {
             const { createClerkClient } = await import('@clerk/backend')
             const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
             
-            // Check if user already exists in Clerk
             let createdByUserId = null
             try {
               const users = await clerk.users.getUserList({ emailAddress: [admin_email.trim().toLowerCase()] })
-              if (users.data?.length > 0) {
-                createdByUserId = users.data[0].id
-              }
+              if (users.data?.length > 0) createdByUserId = users.data[0].id
             } catch (uErr) {}
 
             let clerkSlug = name
@@ -239,13 +257,9 @@ export default async function handler(req, res) {
             if (clerkSlug.length < 4) clerkSlug = `org-${clerkSlug}`
             if (clerkSlug.length < 4) clerkSlug = `org-${finalSlug}`
 
-            const orgPayload = {
-              name: name.trim(),
-              slug: clerkSlug,
-            }
-            if (createdByUserId) {
-              orgPayload.createdBy = createdByUserId
-            }
+            const orgPayload = { name: name.trim(), slug: clerkSlug }
+            if (createdByUserId) orgPayload.createdBy = createdByUserId
+
             const clerkOrg = await clerk.organizations.createOrganization(orgPayload)
             clerkOrgId = clerkOrg?.id
 
@@ -267,8 +281,8 @@ export default async function handler(req, res) {
         const finalOrgId = clerkOrgId || orgId
         const tenantR = await client.query(
           `INSERT INTO public.tenants
-            (org_id, name, slug, schema_name, admin_email, plan, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+            (org_id, name, slug, schema_name, admin_email, admin_name, phone, logo_url, plan, max_devices, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING *`,
           [
             finalOrgId,
@@ -276,7 +290,11 @@ export default async function handler(req, res) {
             finalSlug,
             schemaName,
             admin_email.trim().toLowerCase(),
+            admin_name || `${name} Admin`,
+            phone || '+91 98765 43210',
+            logo_url || null,
             plan || 'pro',
+            max_devices || 20,
             superAdminEmail
           ]
         )
@@ -285,19 +303,25 @@ export default async function handler(req, res) {
         // 3. Provision PostgreSQL schema & template tables
         await provisionTenantSchema(pool, schemaName)
 
-        // 4. Pre-seed admin user and cafe organization title in the newly provisioned tenant schema
-        const adminUsername = admin_email.trim().toLowerCase().split('@')[0]
+        // 4. Pre-seed fixed system operator accounts in format: <slug>_admin and <slug>_staff
+        const adminOpUser = `${finalSlug}_admin`
+        const staffOpUser = `${finalSlug}_staff`
+
         await client.query(`
           INSERT INTO "${schemaName}".users (full_name, username, pin, role, email, status)
           VALUES ($1, $2, '1234', 'admin', $3, 'active')
-          ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, status = 'active'
-        `, [admin_name || name || 'Cafe Administrator', adminUsername, admin_email.trim().toLowerCase()])
+          ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, status = 'active';
+
+          INSERT INTO "${schemaName}".users (full_name, username, pin, role, email, status)
+          VALUES ('Counter Staff', $4, '1234', 'staff', NULL, 'active')
+          ON CONFLICT (username) DO NOTHING;
+        `, [admin_name || `${name} Admin`, adminOpUser, admin_email.trim().toLowerCase(), staffOpUser])
 
         await client.query(`
           INSERT INTO "${schemaName}".settings (key, value)
-          VALUES ('cafe_name', $1), ('admin_email', $2)
+          VALUES ('cafe_name', $1), ('admin_email', $2), ('org_slug', $3), ('counter_phone', $4), ('cafe_logo', $5)
           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-        `, [name.trim(), admin_email.trim().toLowerCase()])
+        `, [name.trim(), admin_email.trim().toLowerCase(), finalSlug, phone || '+91 98765 43210', logo_url || ''])
 
         // 5. Log Super Admin Audit Trail
         await client.query(
@@ -307,7 +331,7 @@ export default async function handler(req, res) {
             superAdminId,
             superAdminEmail,
             finalOrgId,
-            `Created organization "${name}" (Schema: ${schemaName}) with admin: ${admin_email}`
+            `Created organization "${name}" (Schema: ${schemaName}, Operators: @${adminOpUser}, @${staffOpUser}) with admin: ${admin_email}`
           ]
         )
 
@@ -335,25 +359,32 @@ export default async function handler(req, res) {
       const name = b.name !== undefined ? b.name : cur.name
       const admin_email = b.admin_email !== undefined ? b.admin_email.trim().toLowerCase() : cur.admin_email
       const admin_name = b.admin_name !== undefined ? b.admin_name : cur.admin_name
+      const phone = b.phone !== undefined ? b.phone : cur.phone
+      const logo_url = b.logo_url !== undefined ? b.logo_url : cur.logo_url
       const status = b.status !== undefined ? b.status : cur.status
       const plan = b.plan !== undefined ? b.plan : cur.plan
       const max_devices = b.max_devices !== undefined ? Number(b.max_devices) : cur.max_devices
 
       const updated = await pool.query(
         `UPDATE public.tenants
-         SET name = $1, admin_email = $2, admin_name = $3, status = $4, plan = $5, max_devices = $6, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $7
+         SET name = $1, admin_email = $2, admin_name = $3, phone = $4, logo_url = $5, status = $6, plan = $7, max_devices = $8, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $9
          RETURNING *`,
-        [name, admin_email, admin_name, status, plan, max_devices, id]
+        [name, admin_email, admin_name, phone, logo_url, status, plan, max_devices, id]
       )
 
-      // Sync settings in private tenant schema
+      // Sync settings and operator admin account in private tenant schema
       try {
+        const adminOpUser = `${cur.slug}_admin`
         await pool.query(`
           INSERT INTO "${cur.schema_name}".settings (key, value)
-          VALUES ('cafe_name', $1), ('admin_email', $2)
-          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-        `, [name.trim(), admin_email.trim().toLowerCase()])
+          VALUES ('cafe_name', $1), ('admin_email', $2), ('counter_phone', $3), ('cafe_logo', $4)
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
+          UPDATE "${cur.schema_name}".users
+          SET full_name = $5, email = $2
+          WHERE username = $6;
+        `, [name.trim(), admin_email.trim().toLowerCase(), phone || '+91 98765 43210', logo_url || '', admin_name || `${name} Admin`, adminOpUser])
       } catch {}
 
       await pool.query(
