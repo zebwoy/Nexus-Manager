@@ -160,7 +160,11 @@ export default function TenantManagement() {
     setSyncingClerk(true)
     try {
       const res = await api.post('/super-admin?action=sync-clerk')
-      toast.success(`Synced ${res.synced?.length || 0} organizations with Clerk!`)
+      if (res.errors?.length > 0) {
+        toast.error(`Clerk Notice: ${res.errors[0].error}`)
+      } else {
+        toast.success(`Successfully synced organizations with Clerk!`)
+      }
       loadTenants()
     } catch (e) {
       toast.error(e.message || 'Clerk sync failed')

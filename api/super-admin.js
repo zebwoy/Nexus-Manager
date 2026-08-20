@@ -149,7 +149,16 @@ export default async function handler(req, res) {
                 if (users.data?.length > 0) createdByUserId = users.data[0].id
               } catch {}
 
-              const orgPayload = { name: t.name, slug: t.slug }
+              let clerkSlug = t.name
+                .toLowerCase()
+                .trim()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .slice(0, 30)
+              if (clerkSlug.length < 4) clerkSlug = `org-${clerkSlug}`
+              if (clerkSlug.length < 4) clerkSlug = `org-${t.id || '1000'}`
+
+              const orgPayload = { name: t.name.trim(), slug: clerkSlug }
               if (createdByUserId) orgPayload.createdBy = createdByUserId
 
               const newClerkOrg = await clerk.organizations.createOrganization(orgPayload)
@@ -158,7 +167,8 @@ export default async function handler(req, res) {
                 synced.push({ name: t.name, clerk_org_id: newClerkOrg.id })
               }
             } catch (err) {
-              errors.push({ name: t.name, error: err.message })
+              const errMsg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err.message
+              errors.push({ name: t.name, error: errMsg })
             }
           } else {
             synced.push({ name: t.name, status: 'already_exists_in_clerk' })
@@ -220,9 +230,18 @@ export default async function handler(req, res) {
               }
             } catch (uErr) {}
 
+            let clerkSlug = name
+              .toLowerCase()
+              .trim()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '')
+              .slice(0, 30)
+            if (clerkSlug.length < 4) clerkSlug = `org-${clerkSlug}`
+            if (clerkSlug.length < 4) clerkSlug = `org-${finalSlug}`
+
             const orgPayload = {
               name: name.trim(),
-              slug: finalSlug,
+              slug: clerkSlug,
             }
             if (createdByUserId) {
               orgPayload.createdBy = createdByUserId
