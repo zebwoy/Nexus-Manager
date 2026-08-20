@@ -122,6 +122,55 @@ export default async function handler(req, res) {
       return ok(res, { tenants: enriched })
     }
 
+    // ─── POST /api/super-admin?action=sync-clerk (Explicit Clerk Sync) ───
+    if (action === 'sync-clerk' && req.method === 'POST') {
+      const secretKey = process.env.CLERK_SECRET_KEY
+      if (!secretKey) {
+        return err(res, 'CLERK_SECRET_KEY is missing in Vercel Environment Variables. Please copy sk_test_... from Clerk Dashboard -> API Keys into Vercel Settings -> Environment Variables and redeploy.', 400)
+      }
+
+      try {
+        const { createClerkClient } = await import('@clerk/backend')
+        const clerk = createClerkClient({ secretKey })
+        const clerkOrgs = await clerk.organizations.getOrganizationList({ limit: 100 })
+        const existingClerkSlugs = new Set(clerkOrgs.data?.map(o => o.slug) || [])
+        const existingClerkIds = new Set(clerkOrgs.data?.map(o => o.id) || [])
+
+        const tenantsR = await pool.query('SELECT * FROM public.tenants ORDER BY id ASC')
+        const synced = []
+        const errors = []
+
+        for (const t of tenantsR.rows) {
+          if (!existingClerkIds.has(t.org_id) && !existingClerkSlugs.has(t.slug)) {
+            try {
+              let createdByUserId = null
+              try {
+                const users = await clerk.users.getUserList({ emailAddress: [t.admin_email.trim().toLowerCase()] })
+                if (users.data?.length > 0) createdByUserId = users.data[0].id
+              } catch {}
+
+              const orgPayload = { name: t.name, slug: t.slug }
+              if (createdByUserId) orgPayload.createdBy = createdByUserId
+
+              const newClerkOrg = await clerk.organizations.createOrganization(orgPayload)
+              if (newClerkOrg?.id) {
+                await pool.query('UPDATE public.tenants SET org_id = $1 WHERE id = $2', [newClerkOrg.id, t.id])
+                synced.push({ name: t.name, clerk_org_id: newClerkOrg.id })
+              }
+            } catch (err) {
+              errors.push({ name: t.name, error: err.message })
+            }
+          } else {
+            synced.push({ name: t.name, status: 'already_exists_in_clerk' })
+          }
+        }
+
+        return ok(res, { success: true, synced, errors, total: tenantsR.rows.length })
+      } catch (e) {
+        return err(res, `Clerk API Error: ${e.message}`, 500)
+      }
+    }
+
     // ─── POST /api/super-admin?action=tenants (Create Org & Provision Schema) ───
     if (action === 'tenants' && req.method === 'POST') {
       const b = req.body || {}

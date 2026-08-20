@@ -6,7 +6,7 @@ import { PageLoader, ErrorMsg, Modal, ConfirmModal, Field, Spinner } from '../..
 import {
   Building2, Plus, Search, Edit3, Trash2, Power, RotateCcw,
   ExternalLink, Shield, Monitor, Gamepad2, Database, Mail,
-  CheckCircle2, AlertCircle, X, Sparkles, Filter, Users
+  CheckCircle2, AlertCircle, X, Sparkles, Filter, Users, RefreshCw
 } from 'lucide-react'
 import { toast } from 'react-toastify'
 
@@ -54,6 +54,7 @@ export default function TenantManagement() {
   // Reset modal
   const [resetTenant, setResetTenant] = useState(null)
   const [resetting, setResetting] = useState(false)
+  const [syncingClerk, setSyncingClerk] = useState(false)
 
   const loadTenants = useCallback(async () => {
     try {
@@ -152,6 +153,19 @@ export default function TenantManagement() {
       toast.error('Reset failed: ' + e.message)
     } finally {
       setResetting(false)
+    }
+  }
+
+  const handleSyncClerk = async () => {
+    setSyncingClerk(true)
+    try {
+      const res = await api.post('/super-admin?action=sync-clerk')
+      toast.success(`Synced ${res.synced?.length || 0} organizations with Clerk!`)
+      loadTenants()
+    } catch (e) {
+      toast.error(e.message || 'Clerk sync failed')
+    } finally {
+      setSyncingClerk(false)
     }
   }
 
@@ -327,18 +341,34 @@ export default function TenantManagement() {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="btn-primary"
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.5rem',
-            padding: '0.65rem 1.25rem', fontSize: '0.875rem', fontWeight: 800,
-            boxShadow: '0 4px 14px rgba(0,0,0,0.15)'
-          }}
-        >
-          <Plus size={16} strokeWidth={2.5} />
-          Create Organization
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleSyncClerk}
+            disabled={syncingClerk}
+            className="btn-secondary"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.45rem',
+              padding: '0.65rem 1rem', fontSize: '0.825rem', fontWeight: 750
+            }}
+            title="Push all tenant schemas to Clerk Organizations"
+          >
+            <RefreshCw size={14} className={syncingClerk ? 'animate-spin' : ''} />
+            {syncingClerk ? 'Syncing...' : 'Sync with Clerk'}
+          </button>
+
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn-primary"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+              padding: '0.65rem 1.25rem', fontSize: '0.875rem', fontWeight: 800,
+              boxShadow: '0 4px 14px rgba(0,0,0,0.15)'
+            }}
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            Create Organization
+          </button>
+        </div>
       </div>
 
       <ErrorMsg error={error} />
