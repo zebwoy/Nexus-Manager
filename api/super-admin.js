@@ -67,6 +67,43 @@ export default async function handler(req, res) {
 
       const r = await pool.query('SELECT * FROM public.tenants ORDER BY created_at DESC')
       
+      // Auto-sync tenants to Clerk Organizations if enabled
+      if (process.env.CLERK_SECRET_KEY) {
+        try {
+          const { createClerkClient } = await import('@clerk/backend')
+          const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
+          const clerkOrgs = await clerk.organizations.getOrganizationList({ limit: 100 })
+          const existingClerkSlugs = new Set(clerkOrgs.data?.map(o => o.slug) || [])
+          const existingClerkIds = new Set(clerkOrgs.data?.map(o => o.id) || [])
+
+          for (const t of r.rows) {
+            if (!existingClerkIds.has(t.org_id) && !existingClerkSlugs.has(t.slug)) {
+              try {
+                // Find admin user in Clerk
+                let createdByUserId = null
+                try {
+                  const users = await clerk.users.getUserList({ emailAddress: [t.admin_email.trim().toLowerCase()] })
+                  if (users.data?.length > 0) createdByUserId = users.data[0].id
+                } catch {}
+
+                const orgPayload = { name: t.name, slug: t.slug }
+                if (createdByUserId) orgPayload.createdBy = createdByUserId
+
+                const newClerkOrg = await clerk.organizations.createOrganization(orgPayload)
+                if (newClerkOrg?.id) {
+                  t.org_id = newClerkOrg.id
+                  await pool.query('UPDATE public.tenants SET org_id = $1 WHERE id = $2', [newClerkOrg.id, t.id])
+                }
+              } catch (singleSyncErr) {
+                console.warn(`Clerk org sync notice for ${t.name}:`, singleSyncErr?.message)
+              }
+            }
+          }
+        } catch (clerkSyncErr) {
+          console.warn('Clerk sync check notice:', clerkSyncErr?.message)
+        }
+      }
+
       // Augment with station and session counts
       const enriched = await Promise.all(r.rows.map(async (t) => {
         let deviceCount = 0
