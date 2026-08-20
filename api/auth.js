@@ -64,9 +64,14 @@ export default async function handler(req, res) {
       const cleanUser = String(username).toLowerCase().trim()
       const cleanPin = String(pin).trim()
 
-      // Auto-cleanup any accidental platform superadmin in tenant users table
+      // Auto-cleanup any accidental platform superadmin in tenant users table and ensure columns
       try {
-        await client.query("DELETE FROM users WHERE role = 'super_admin' OR username = 'superadmin'")
+        await client.query(`
+          DELETE FROM users WHERE role = 'super_admin' OR username = 'superadmin';
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(100);
+        `)
       } catch {}
 
       if (cleanUser === 'superadmin' && (cleanPin === '9999' || cleanPin === '1234')) {
@@ -80,23 +85,44 @@ export default async function handler(req, res) {
         })
       }
 
-      let result = await client.query(
-        `SELECT id, full_name, username, COALESCE(role, 'staff') AS role, status
-         FROM users
-         WHERE (username = $1 OR username = $2 OR username ILIKE '%' || $1) AND pin = $3
-         ORDER BY id ASC LIMIT 1`,
-        [cleanUser, `${cleanUser}_staff`, cleanPin]
-      )
+      let result
+      try {
+        result = await client.query(
+          `SELECT id, full_name, username, COALESCE(role, 'staff') AS role, COALESCE(status, 'active') AS status
+           FROM users
+           WHERE (username = $1 OR username = $2 OR username ILIKE '%' || $1) AND pin = $3
+           ORDER BY id ASC LIMIT 1`,
+          [cleanUser, `${cleanUser}_staff`, cleanPin]
+        )
+      } catch (err1) {
+        result = await client.query(
+          `SELECT id, full_name, username, COALESCE(role, 'staff') AS role
+           FROM users
+           WHERE (username = $1 OR username = $2 OR username ILIKE '%' || $1) AND pin = $3
+           ORDER BY id ASC LIMIT 1`,
+          [cleanUser, `${cleanUser}_staff`, cleanPin]
+        )
+      }
 
       if (result.rows.length === 0) {
         // Also check if cleanUser matches role (e.g. role = 'admin' or role = 'staff')
-        result = await client.query(
-          `SELECT id, full_name, username, COALESCE(role, 'staff') AS role, status
-           FROM users
-           WHERE role = $1 AND pin = $2
-           ORDER BY id ASC LIMIT 1`,
-          [cleanUser, cleanPin]
-        )
+        try {
+          result = await client.query(
+            `SELECT id, full_name, username, COALESCE(role, 'staff') AS role, COALESCE(status, 'active') AS status
+             FROM users
+             WHERE role = $1 AND pin = $2
+             ORDER BY id ASC LIMIT 1`,
+            [cleanUser, cleanPin]
+          )
+        } catch (err2) {
+          result = await client.query(
+            `SELECT id, full_name, username, COALESCE(role, 'staff') AS role
+             FROM users
+             WHERE role = $1 AND pin = $2
+             ORDER BY id ASC LIMIT 1`,
+            [cleanUser, cleanPin]
+          )
+        }
       }
       
       if (result.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
