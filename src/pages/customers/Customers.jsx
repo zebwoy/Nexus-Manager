@@ -3,7 +3,7 @@ import { api } from '../../lib/api'
 import { formatDate } from '../../lib/helpers'
 import { PageLoader, EmptyState, ErrorMsg, FilterBar } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
-import { Users, Search, UserCheck } from 'lucide-react'
+import { Users, Search, UserCheck, Gamepad2, Coffee } from 'lucide-react'
 
 export default function Customers() {
   const [customers, setCustomers] = useState([])
@@ -28,11 +28,13 @@ export default function Customers() {
     }
   }
 
-  const filtered = customers.filter(c =>
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.mobile?.includes(search) ||
-    c.shop_name?.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = customers.filter(c => {
+    const q = search.toLowerCase()
+    return !q ||
+      c.name?.toLowerCase().includes(q) ||
+      c.mobile?.includes(q) ||
+      c.shop_name?.toLowerCase().includes(q)
+  })
 
   return (
     <div>
@@ -47,20 +49,24 @@ export default function Customers() {
       <FilterBar style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: '10px', padding: '3px', border: '1.5px solid var(--border)', gap: '2px' }}>
           {[
-            { key: 'session',   label: '🎮 Gaming Sessions' },
-            { key: 'cafeteria', label: '☕ Cafeteria Sales'  },
+            { key: 'session',   label: 'Gaming Sessions', icon: <Gamepad2 size={13} /> },
+            { key: 'cafeteria', label: 'Cafeteria Sales', icon: <Coffee size={13} /> },
           ].map(opt => (
             <button
               key={opt.key}
               onClick={() => { setView(opt.key); setSearch('') }}
               style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
                 padding: '0.35rem 0.85rem', borderRadius: '8px', cursor: 'pointer', border: 'none',
                 fontSize: '0.8rem', fontWeight: 650,
                 background: view === opt.key ? 'var(--accent)' : 'transparent',
                 color: view === opt.key ? 'var(--btn-primary-text, #fff)' : 'var(--text-muted)',
-                transition: 'all 0.15s',
+                transition: 'all 0.15s'
               }}
-            >{opt.label}</button>
+            >
+              {opt.icon}
+              <span>{opt.label}</span>
+            </button>
           ))}
         </div>
         <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: '360px' }}>

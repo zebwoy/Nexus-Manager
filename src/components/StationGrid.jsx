@@ -232,15 +232,16 @@ export default function StationGrid({ activeSessions = [], onRefresh, onLaunchNe
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: '10px', padding: '3px', border: '1.5px solid var(--border)', gap: '2px' }}>
           {[
-            { key: 'ALL',  label: `⚡ All Stations (${devices.length})` },
-            { key: 'PC',   label: `🖥️ PCs (${devices.filter(d => d.type === 'PC').length})` },
-            { key: 'PS',   label: `🎮 PS5 (${devices.filter(d => d.type === 'PS').length})` },
-            { key: 'XBOX', label: `🕹️ Xbox (${devices.filter(d => d.type === 'XBOX').length})` },
+            { key: 'ALL',  label: 'All Stations', count: devices.length, icon: <Zap size={13} /> },
+            { key: 'PC',   label: 'PCs', count: devices.filter(d => d.type === 'PC').length, icon: <Monitor size={13} /> },
+            { key: 'PS',   label: 'PS5', count: devices.filter(d => d.type === 'PS').length, icon: <Tv size={13} /> },
+            { key: 'XBOX', label: 'Xbox', count: devices.filter(d => d.type === 'XBOX').length, icon: <Gamepad2 size={13} /> },
           ].map(t => (
             <button
               key={t.key}
               onClick={() => setTypeFilter(t.key)}
               style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
                 padding: '0.35rem 0.75rem', borderRadius: '8px', cursor: 'pointer', border: 'none',
                 fontSize: '0.775rem', fontWeight: 700,
                 background: typeFilter === t.key ? 'var(--accent)' : 'transparent',
@@ -248,7 +249,8 @@ export default function StationGrid({ activeSessions = [], onRefresh, onLaunchNe
                 transition: 'all 0.15s'
               }}
             >
-              {t.label}
+              {t.icon}
+              <span>{t.label} ({t.count})</span>
             </button>
           ))}
         </div>
@@ -303,7 +305,7 @@ export default function StationGrid({ activeSessions = [], onRefresh, onLaunchNe
                       </div>
                       <span style={{ fontWeight: 800, fontSize: '0.925rem', color: 'var(--text)' }}>{device.label}</span>
                     </div>
-                    <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>🟢 FREE</span>
+                    <span className="badge badge-success" style={{ fontSize: '0.65rem', fontWeight: 800 }}>FREE</span>
                   </div>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>
                     Type: {device.type} Station · Ready
@@ -316,7 +318,7 @@ export default function StationGrid({ activeSessions = [], onRefresh, onLaunchNe
                     className="btn-primary"
                     style={{ flex: 1, padding: '0.45rem 0.75rem', fontSize: '0.775rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
                   >
-                    <Plus size={13} /> Start Session
+                    <Plus size={13} strokeWidth={2.5} /> Start Session
                   </Link>
                 </div>
               </div>

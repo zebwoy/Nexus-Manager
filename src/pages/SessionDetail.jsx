@@ -4,7 +4,12 @@ import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { formatRupees, formatTime, formatDate, formatDuration, todayISO, validateName, validateMobile, toISO, addMinutes } from '../lib/helpers'
 import { PageLoader, ErrorMsg, Field, Modal, Spinner, SlidePanel, PanelSection, ConfirmModal, FilterBar } from '../components/UI'
-import { ArrowLeft, Plus, Minus, CreditCard, Banknote, Clock, ShoppingCart, History, Edit3, Trash2, SlidersHorizontal, Share2, Printer, ArrowRightLeft, PowerOff, CheckCircle } from 'lucide-react'
+import {
+  ArrowLeft, Plus, Minus, CreditCard, Banknote, Clock,
+  ShoppingCart, History, Edit3, Trash2, SlidersHorizontal,
+  Share2, Printer, ArrowRightLeft, PowerOff, CheckCircle,
+  Coffee, Receipt, Users, CheckCircle2
+} from 'lucide-react'
 import { toast } from 'react-toastify'
 
 function PayMethodToggle({ value, onChange }) {
@@ -320,7 +325,7 @@ export default function SessionDetail() {
   const handleWhatsAppReceipt = () => {
     const phone = s.mobile ? `91${s.mobile.replace(/\D/g, '')}` : ''
     const snackLines = (data.sales || []).flatMap(sa => (sa.items || []).map(it => `• ${it.name} x${it.qty} = ₹${it.unit_price * it.qty}`)).join('%0A')
-    const text = `*Nexus Gaming Cafe - Session Invoice*%0A--------------------------%0A*Session:* %23${s.id}%0A*Station:* ${s.device_label}%0A*Client:* ${s.name || 'Gamer'}%0A*Duration:* ${formatDuration(s.duration_mins)} (${formatTime(s.time_in)} - ${formatTime(s.time_out)})%0A*Gaming Charge:* ₹${s.charge}%0A${Number(s.controller_total) > 0 ? `*Controllers:* ₹${s.controller_total}%0A` : ''}${snackLines ? `*Cafeteria Items:*%0A${snackLines}%0A` : ''}--------------------------%0A*TOTAL BILL:* ₹${grandTotal}%0A*Total Paid:* ₹${totalPaid}%0A${creditRemaining > 0 ? `*Due Balance:* ₹${creditRemaining}%0A` : '*Status:* Fully Paid ✓%0A'}Thank you for playing at Nexus!`
+    const text = `*Nexus Gaming Cafe - Session Invoice*%0A--------------------------%0A*Session:* %23${s.id}%0A*Station:* ${s.device_label}%0A*Client:* ${s.name || 'Gamer'}%0A*Duration:* ${formatDuration(s.duration_mins)} (${formatTime(s.time_in)} - ${formatTime(s.time_out)})%0A*Gaming Charge:* ₹${s.charge}%0A${Number(s.controller_total) > 0 ? `*Controllers:* ₹${s.controller_total}%0A` : ''}${snackLines ? `*Cafeteria Items:*%0A${snackLines}%0A` : ''}--------------------------%0A*TOTAL BILL:* ₹${grandTotal}%0A*Total Paid:* ₹${totalPaid}%0A${creditRemaining > 0 ? `*Due Balance:* ₹${creditRemaining}%0A` : '*Status:* Fully Paid (Complete)%0A'}Thank you for playing at Nexus!`
     
     window.open(`https://wa.me/${phone}?text=${text}`, '_blank')
   }
@@ -501,7 +506,7 @@ export default function SessionDetail() {
 
       {/* Slide Panel for add items & extend */}
       <SlidePanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Session Actions & Add-ons">
-        <PanelSection title="Add Cafeteria Refreshments" icon="🥤">
+        <PanelSection title="Add Cafeteria Refreshments" icon={<Coffee size={15} />}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
               {inventory.filter(i => i.stock_qty > 0).map(item => (
@@ -538,7 +543,7 @@ export default function SessionDetail() {
         </PanelSection>
 
         {isActive && (
-          <PanelSection title="Extend Station Time" icon="⏱️">
+          <PanelSection title="Extend Station Time" icon={<Clock size={15} />}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem' }}>
                 {[30, 60, 90].map(mins => (
@@ -594,12 +599,12 @@ export default function SessionDetail() {
         <FilterBar style={{ marginBottom: '1.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
             <button onClick={() => setPanelOpen(true)} className="btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <ShoppingCart size={13} /> + Add Drinks / Snacks
+              <ShoppingCart size={13} /> Add Refreshments
             </button>
             {isActive && (
               <>
                 <button onClick={() => setPanelOpen(true)} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <Clock size={13} /> + Extend Time
+                  <Clock size={13} /> Extend Time
                 </button>
                 <button onClick={() => setShowSwitchModal(true)} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <ArrowRightLeft size={13} /> Switch Station
@@ -636,7 +641,7 @@ export default function SessionDetail() {
         
         {/* Left column: Bill Summary */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {sectionCard('Session Invoice Breakdown', '📊', (
+          {sectionCard('Session Invoice Breakdown', <Receipt size={14} />, (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>
               <BillRow label={`Seat Charge (${formatDuration(s.duration_mins)} · ${s.device_label})`} value={s.charge} />
               {Number(s.controller_total) > 0 && <BillRow label="Controller Rentals" value={s.controller_total} />}
@@ -658,7 +663,9 @@ export default function SessionDetail() {
                       <span style={{ color: 'var(--danger)', fontWeight: 700 }}>OUTSTANDING</span>
                       <span className="badge badge-danger">{formatRupees(creditRemaining)}</span>
                     </div>
-                  : <div style={{ color: 'var(--success)', fontWeight: 700, textAlign: 'right', fontSize: '0.75rem' }}>✓ Fully Paid</div>}
+                  : <div style={{ color: 'var(--success)', fontWeight: 700, textAlign: 'right', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
+                      <CheckCircle2 size={12} /> Fully Paid
+                    </div>}
               </div>
               {s.remark && (
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.5rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
@@ -668,7 +675,7 @@ export default function SessionDetail() {
             </div>
           ))}
 
-          {players.length > 0 && sectionCard('Player Allocations', '👥', (
+          {players.length > 0 && sectionCard('Player Allocations', <Users size={14} />, (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               {players.map((p, i) => (
                 <div key={i} style={{
@@ -707,11 +714,11 @@ export default function SessionDetail() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <label className="label" style={{ marginBottom: 0 }}>Payment Breakdown</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <Field label="💵 Cash (₹)">
+                  <Field label="Cash Amount (₹)">
                     <input type="number" className="input" placeholder="0"
                       value={collectAmount} onChange={e => setCollectAmount(e.target.value)} />
                   </Field>
-                  <Field label="📲 Online (₹)">
+                  <Field label="Online / UPI (₹)">
                     <input type="number" className="input" placeholder="0"
                       value={collectOnline} onChange={e => setCollectOnline(e.target.value)} />
                   </Field>

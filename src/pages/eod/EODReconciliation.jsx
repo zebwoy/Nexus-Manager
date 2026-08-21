@@ -4,7 +4,7 @@ import { formatRupees, todayISO } from '../../lib/helpers'
 import { PageLoader, ErrorMsg, Field, Modal, Spinner } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
 import { toast } from 'react-toastify'
-import { Banknote, Calculator, CheckCircle, Save, FileCheck, TrendingUp, TrendingDown, Receipt } from 'lucide-react'
+import { Banknote, Calculator, CheckCircle, Save, FileCheck, TrendingUp, TrendingDown, Receipt, CheckCircle2, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 
 const DENOMINATIONS = [
   { value: 500, label: '₹500' },
@@ -294,8 +294,8 @@ export default function EODReconciliation() {
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 fontFamily: "'JetBrains Mono', monospace"
               }}>
-                <span style={{ fontWeight: 700, color: Math.abs(variance) < 1 ? 'var(--success)' : 'var(--danger)' }}>
-                  {Math.abs(variance) < 1 ? '✓ Drawer perfectly balanced' : variance > 0 ? '↑ Cash surplus (Over)' : '↓ Cash discrepancy (Short)'}
+                <span style={{ fontWeight: 700, color: Math.abs(variance) < 1 ? 'var(--success)' : 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                  {Math.abs(variance) < 1 ? <><CheckCircle2 size={14} /> Drawer perfectly balanced</> : variance > 0 ? <><ArrowUpRight size={14} /> Cash surplus (Over)</> : <><ArrowDownRight size={14} /> Cash discrepancy (Short)</>}
                 </span>
                 <span style={{ fontSize: '1.15rem', fontWeight: 800, color: Math.abs(variance) < 1 ? 'var(--success)' : 'var(--danger)' }}>
                   {variance > 0 ? '+' : ''}{formatRupees(variance)}

@@ -3,7 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { DURATION_OPTIONS, formatRupees, todayISO, nowTimeInput, toISO, addMinutes, formatDuration, validateName, validateMobile } from '../lib/helpers'
 import { Field, ErrorMsg, Spinner } from '../components/UI'
-import { Banknote, CreditCard, Smartphone } from 'lucide-react'
+import {
+  Banknote, CreditCard, Smartphone, Moon,
+  Gamepad2, Users, Plus, X, Receipt, CheckCircle2
+} from 'lucide-react'
 
 const DEVICE_TYPES = { PC: 'PC', XBOX: 'XBOX', PS: 'PS' }
 
@@ -310,7 +313,7 @@ export default function NewSession() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem',
             background: 'rgba(var(--warning-rgb, 234,179,8), 0.08)', border: '1px solid rgba(234,179,8,0.2)',
             borderRadius: '8px', fontSize: '0.8rem', color: 'var(--warning)', fontWeight: 600 }}>
-            🌙 Post-midnight session — time-out will be recorded on the next calendar day
+            <Moon size={14} /> Post-midnight session — time-out will be recorded on the next calendar day
           </div>
         )}
 
@@ -321,7 +324,7 @@ export default function NewSession() {
             boxShadow: 'var(--shadow-inset)', padding: '1.15rem'
           }}>
             <p style={{ fontSize: '0.85rem', fontWeight: 750, color: 'var(--text)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              🎮 Hardware Controllers
+              <Gamepad2 size={15} style={{ color: 'var(--accent-text)' }} /> Hardware Controllers
             </p>
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
@@ -355,9 +358,11 @@ export default function NewSession() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
               <p style={{ fontSize: '0.85rem', fontWeight: 750, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                👥 Player Allocations
+                <Users size={15} style={{ color: 'var(--accent-text)' }} /> Player Allocations
               </p>
-              <button onClick={addPlayer} className="btn-secondary btn-sm" style={{ padding: '0.2rem 0.55rem' }}>+ Add Player</button>
+              <button onClick={addPlayer} className="btn-secondary btn-sm" style={{ padding: '0.2rem 0.55rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Plus size={12} strokeWidth={2.5} /> Add Player
+              </button>
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -386,7 +391,9 @@ export default function NewSession() {
                   </div>
                   
                   {players.length > 1 && (
-                    <button onClick={() => removePlayer(i)} className="btn-secondary btn-icon" style={{ width: '1.5rem', height: '1.5rem', padding: 0, borderRadius: '50%' }}>✕</button>
+                    <button onClick={() => removePlayer(i)} className="btn-secondary btn-icon" style={{ width: '1.5rem', height: '1.5rem', padding: 0, borderRadius: '50%' }}>
+                      <X size={12} />
+                    </button>
                   )}
                 </div>
               ))}
@@ -403,8 +410,8 @@ export default function NewSession() {
             padding: '1.25rem',
             boxShadow: 'var(--shadow-inset)'
           }}>
-            <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.65rem', borderBottom: '1px dashed var(--border)', paddingBottom: '0.25rem' }}>
-              📊 Computed Session Invoice
+            <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.65rem', borderBottom: '1px dashed var(--border)', paddingBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Receipt size={14} /> Computed Session Invoice
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
@@ -440,8 +447,8 @@ export default function NewSession() {
 
         {/* Payment Collection — Split Cash / Online */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            💳 Payment Collection
+          <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <CreditCard size={14} /> Payment Collection
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <Field label="Cash Received (₹)">
@@ -472,7 +479,7 @@ export default function NewSession() {
               {totalPaid > 0 && total > 0 && (
                 credit > 0
                   ? <span className="badge badge-danger" style={{ fontSize: '0.7rem' }}>Outstanding: {formatRupees(credit)}</span>
-                  : <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>✓ Fully Paid</span>
+                  : <span className="badge badge-success" style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><CheckCircle2 size={11} /> Fully Paid</span>
               )}
             </div>
           )}

@@ -439,9 +439,93 @@ export default async function handler(req, res) {
       }
     }
 
-    // ─── POST /api/super-admin?action=reset-tenant&id=X (Purge Test Data in Schema) ───
+    // ─── POST /api/super-admin?action=reset-tenant&id=X (Purge Transactions with Dual-Verification & Snapshot Backup) ───
     if (action === 'reset-tenant' && req.method === 'POST') {
-      const id = Number(req.query.id)
+      const id = Number(req.query.id || req.body?.id)
+      const { pin, confirm_text } = req.body || {}
+      if (!id) return err(res, 'Tenant ID is required', 400)
+
+      // Dual verification check
+      const cleanPin = String(pin || '').trim()
+      if (cleanPin !== '9999' && cleanPin !== '1234') {
+        return err(res, 'Invalid Super Admin Security PIN. Authorization denied.', 403)
+      }
+
+      const curR = await pool.query('SELECT * FROM public.tenants WHERE id = $1', [id])
+      if (curR.rows.length === 0) return err(res, 'Tenant not found', 404)
+      const tenant = curR.rows[0]
+
+      const cleanConfirm = String(confirm_text || '').trim().toLowerCase()
+      if (cleanConfirm !== tenant.slug.toLowerCase() &&
+          cleanConfirm !== `reset ${tenant.slug.toLowerCase()}` &&
+          cleanConfirm !== tenant.name.toLowerCase()) {
+        return err(res, `Confirmation mismatch. You must type "RESET ${tenant.slug}" to authorize ledger purge.`, 400)
+      }
+
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        await client.query(`SET search_path TO "${tenant.schema_name}", public`)
+
+        // 1. Create Snapshot Backup Tables before truncation
+        await client.query(`
+          DROP TABLE IF EXISTS _snapshot_backup_sessions CASCADE;
+          DROP TABLE IF EXISTS _snapshot_backup_sales CASCADE;
+          DROP TABLE IF EXISTS _snapshot_backup_sale_items CASCADE;
+          DROP TABLE IF EXISTS _snapshot_backup_recharges CASCADE;
+          DROP TABLE IF EXISTS _snapshot_backup_expenses CASCADE;
+          DROP TABLE IF EXISTS _snapshot_backup_openings CASCADE;
+          DROP TABLE IF EXISTS _snapshot_backup_closings CASCADE;
+
+          CREATE TABLE _snapshot_backup_sessions AS SELECT * FROM sessions;
+          CREATE TABLE _snapshot_backup_sales AS SELECT * FROM sales;
+          CREATE TABLE _snapshot_backup_sale_items AS SELECT * FROM sale_items;
+          CREATE TABLE _snapshot_backup_recharges AS SELECT * FROM recharges;
+          CREATE TABLE _snapshot_backup_expenses AS SELECT * FROM expenses;
+          CREATE TABLE _snapshot_backup_openings AS SELECT * FROM day_openings;
+          CREATE TABLE _snapshot_backup_closings AS SELECT * FROM shift_closings;
+        `)
+
+        // 2. Truncate live transactional ledgers
+        await client.query(`
+          TRUNCATE TABLE sale_items, sales, session_payments, session_players, sessions,
+                         recharges, expenses, day_openings, shift_closings CASCADE;
+          UPDATE inventory_items SET stock_qty = 0;
+        `)
+
+        // 3. Write immutable Super Admin Audit Log
+        await client.query(
+          `INSERT INTO public.super_admin_audit_logs (super_admin_id, super_admin_email, action, target_org_id, details)
+           VALUES ($1, $2, 'PURGE_TRANSACTIONAL_DATA', $3, $4)`,
+          [
+            superAdminId,
+            superAdminEmail,
+            tenant.org_id,
+            `Purged transaction ledger for "${tenant.name}" (${tenant.schema_name}) with dual-verification. Snapshot backup retained.`
+          ]
+        )
+        await client.query('COMMIT')
+        return ok(res, {
+          success: true,
+          message: `Transactional data for "${tenant.name}" purged. Snapshot backup available for immediate undo.`,
+          canUndo: true,
+          tenant_id: tenant.id,
+          schema_name: tenant.schema_name
+        })
+      } catch (e) {
+        await client.query('ROLLBACK')
+        console.error('Failed to reset tenant data:', e)
+        return err(res, e, 500)
+      } finally {
+        client.release()
+      }
+    }
+
+    // ─── POST /api/super-admin?action=undo-reset-tenant&id=X (Restore from Snapshot Backup) ───
+    if (action === 'undo-reset-tenant' && req.method === 'POST') {
+      const id = Number(req.query.id || req.body?.id)
+      if (!id) return err(res, 'Tenant ID is required', 400)
+
       const curR = await pool.query('SELECT * FROM public.tenants WHERE id = $1', [id])
       if (curR.rows.length === 0) return err(res, 'Tenant not found', 404)
       const tenant = curR.rows[0]
@@ -450,26 +534,46 @@ export default async function handler(req, res) {
       try {
         await client.query('BEGIN')
         await client.query(`SET search_path TO "${tenant.schema_name}", public`)
-        await client.query(`
-          TRUNCATE TABLE sale_items, sales, session_payments, session_players, sessions,
-                         recharges, expenses, day_openings, shift_closings CASCADE;
-          UPDATE inventory_items SET stock_qty = 0;
+
+        // Check if snapshot tables exist
+        const checkR = await client.query(`
+          SELECT to_regclass('"${tenant.schema_name}"._snapshot_backup_sessions') as has_sessions
         `)
+        if (!checkR.rows[0]?.has_sessions) {
+          await client.query('ROLLBACK')
+          return err(res, 'No snapshot backup found for this tenant.', 404)
+        }
+
+        // Restore records
+        await client.query(`
+          INSERT INTO sessions SELECT * FROM _snapshot_backup_sessions ON CONFLICT (id) DO NOTHING;
+          INSERT INTO sales SELECT * FROM _snapshot_backup_sales ON CONFLICT (id) DO NOTHING;
+          INSERT INTO sale_items SELECT * FROM _snapshot_backup_sale_items ON CONFLICT (id) DO NOTHING;
+          INSERT INTO recharges SELECT * FROM _snapshot_backup_recharges ON CONFLICT (id) DO NOTHING;
+          INSERT INTO expenses SELECT * FROM _snapshot_backup_expenses ON CONFLICT (id) DO NOTHING;
+          INSERT INTO day_openings SELECT * FROM _snapshot_backup_openings ON CONFLICT (id) DO NOTHING;
+          INSERT INTO shift_closings SELECT * FROM _snapshot_backup_closings ON CONFLICT (id) DO NOTHING;
+        `)
+
+        // Log restore in Super Admin Audit
         await client.query(
           `INSERT INTO public.super_admin_audit_logs (super_admin_id, super_admin_email, action, target_org_id, details)
-           VALUES ($1, $2, 'RESET_TENANT_DATA', $3, $4)`,
+           VALUES ($1, $2, 'RESTORE_PURGED_DATA', $3, $4)`,
           [
             superAdminId,
             superAdminEmail,
             tenant.org_id,
-            `Reset all test transactions for tenant "${tenant.name}" in schema "${tenant.schema_name}"`
+            `Restored purged transaction ledger for "${tenant.name}" (${tenant.schema_name}) from snapshot backup.`
           ]
         )
         await client.query('COMMIT')
-        return ok(res, { success: true })
+        return ok(res, {
+          success: true,
+          message: `Transaction ledger for "${tenant.name}" successfully restored from snapshot backup.`
+        })
       } catch (e) {
         await client.query('ROLLBACK')
-        console.error('Failed to reset tenant data:', e)
+        console.error('Failed to restore snapshot:', e)
         return err(res, e, 500)
       } finally {
         client.release()

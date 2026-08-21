@@ -125,21 +125,9 @@ export default async function handler(req, res) {
       }
     }
 
-    // ─── PURGE TRANSACTIONAL TEST DATA ─────────────────────────
-    if (resource === 'purge' && req.method === 'POST') {
-      await client.query('BEGIN')
-      try {
-        await client.query(`
-          TRUNCATE TABLE sale_items, sales, session_payments, session_players, sessions,
-                         recharges, expenses, day_openings, shift_closings CASCADE;
-          UPDATE inventory_items SET stock_qty = 0;
-        `)
-        await client.query('COMMIT')
-        return ok(res, { success: true, message: 'All transactional data purged successfully' })
-      } catch (e) {
-        await client.query('ROLLBACK')
-        throw e
-      }
+    // Purge is strictly forbidden on tenant endpoint; only platform Super Admin can perform resets.
+    if (resource === 'purge') {
+      return err(res, 'Access Denied: Only Super Admin is authorized to purge or reset tenant transaction ledgers.', 403)
     }
 
     return err(res, 'Unknown resource or method', 400)

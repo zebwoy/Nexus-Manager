@@ -4,6 +4,7 @@ import { api } from '../../lib/api'
 import { formatRupees, todayISO, validateFirstName, validateMobile } from '../../lib/helpers'
 import { Field, ErrorMsg, TrialWarningModal, Spinner } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
+import { Zap } from 'lucide-react'
 
 export default function NewRecharge() {
   const navigate = useNavigate()
@@ -148,8 +149,8 @@ export default function NewRecharge() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between'
           }}>
             <div>
-              <p style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
-                ⚡ Smart Margin Calculator
+              <p style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Zap size={13} style={{ color: 'var(--accent)' }} /> Smart Margin Calculator
               </p>
               <p style={{ fontSize: '1.1rem', fontWeight: 800, color: margin >= 0 ? 'var(--success)' : 'var(--danger)', fontFamily: "'JetBrains Mono', monospace", marginTop: '0.15rem' }}>
                 {margin >= 0 ? '+' : ''}{formatRupees(margin)}

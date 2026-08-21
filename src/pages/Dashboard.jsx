@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { formatRupees, formatDate, formatTime, todayISO } from '../lib/helpers'
 import { PageLoader, ErrorMsg, SectionHeader, Modal, Field, Spinner, TrialWarningModal } from '../components/UI'
-import { Plus, LayoutGrid, List } from 'lucide-react'
+import { Plus, LayoutGrid, List, Coffee, Zap, TrendingDown, FileCheck, RefreshCw } from 'lucide-react'
 import LogSessionModal from '../components/LogSessionModal'
 import StationGrid from '../components/StationGrid'
 
@@ -80,7 +80,7 @@ export default function Dashboard() {
       <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => setTrialModal({ isOpen: false, action: '' })} />
       
       {/* Day-start modal */}
-      <Modal open={showOpeningModal} onClose={() => setShowOpeningModal(false)} title="☀️ Good morning — Start of Day">
+      <Modal open={showOpeningModal} onClose={() => setShowOpeningModal(false)} title="Good morning — Start of Day">
         <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.6 }}>
           How much cash is currently in the cafe? This sets the opening balance for today's EOD reconciliation.
         </p>
@@ -95,7 +95,7 @@ export default function Dashboard() {
           </Field>
           <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1.5px solid var(--border)' }}>
             <button onClick={handleSaveOpening} disabled={savingOpening} className="btn-primary" style={{ flex: 1 }}>
-              {savingOpening ? <><Spinner size="sm" /> Saving...</> : 'Set Opening Balance'}
+              {savingOpening ? <><Spinner size="sm" /> Saving...</> : 'Save & Start Day'}
             </button>
             <button onClick={() => setShowOpeningModal(false)} className="btn-secondary" style={{ flex: 1 }}>
               Skip for now
@@ -158,7 +158,7 @@ export default function Dashboard() {
             </p>
           </div>
           <button onClick={() => setShowLogModal(true)} className="btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <Plus size={13} /> + New Session
+            <Plus size={13} strokeWidth={2.5} /> New Session
           </button>
         </div>
 
@@ -251,11 +251,21 @@ export default function Dashboard() {
       <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
         <p style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.95rem' }}>Quick Actions</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <button onClick={() => setShowLogModal(true)} className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={3} />Log New Session</button>
-          <Link to="/inventory/sell"  className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Foreign Sale</Link>
-          <Link to="/recharges/new"   className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Recharge Platform</Link>
-          <Link to="/expenses/new"    className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}><Plus size={14} strokeWidth={2.5} />Log Expense</Link>
-          <Link to="/eod"             className="btn-secondary"  style={{ padding: '0.6rem 1.25rem' }}>EOD Reconciliation</Link>
+          <button onClick={() => setShowLogModal(true)} className="btn-primary" style={{ padding: '0.6rem 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Plus size={14} strokeWidth={2.5} /> Log New Session
+          </button>
+          <Link to="/inventory/sell" className="btn-secondary" style={{ padding: '0.6rem 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Coffee size={14} /> Walk-in Sale
+          </Link>
+          <Link to="/recharges/new" className="btn-secondary" style={{ padding: '0.6rem 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Zap size={14} /> Platform Recharge
+          </Link>
+          <Link to="/expenses/new" className="btn-secondary" style={{ padding: '0.6rem 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+            <TrendingDown size={14} /> Log Expense
+          </Link>
+          <Link to="/eod" className="btn-secondary" style={{ padding: '0.6rem 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+            <FileCheck size={14} /> EOD Reconciliation
+          </Link>
         </div>
       </div>
     </div>

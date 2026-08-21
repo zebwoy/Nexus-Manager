@@ -314,8 +314,8 @@ export default function Login() {
           {/* Interactive Station Floor Mini-Teaser Card */}
           <div className="card" style={{ padding: '1.25rem', border: '1.5px solid var(--border)', background: 'linear-gradient(145deg, var(--bg-card) 0%, var(--bg-elevated) 100%)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 750, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                ⚡ Live Station Telemetry
+              <span style={{ fontSize: '0.75rem', fontWeight: 750, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Zap size={14} style={{ color: 'var(--accent)' }} /> Live Station Telemetry
               </span>
               <span className="badge badge-accent" style={{ fontSize: '0.65rem', fontWeight: 800 }}>
                 Real-Time
@@ -382,8 +382,8 @@ export default function Login() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem'
           }}>
             <div>
-              <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: 'var(--text)' }}>
-                🎮 Instant Demo Sandbox
+              <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Sparkles size={15} style={{ color: 'var(--accent)' }} /> Instant Demo Sandbox
               </p>
               <p style={{ margin: '0.15rem 0 0', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                 Test all POS, sessions &amp; inventory safely in isolated schema.
@@ -606,8 +606,8 @@ export default function Login() {
                         <p style={{ margin: 0, fontWeight: 800, fontSize: '0.95rem', color: 'var(--text)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                           {clerkUser?.fullName || clerkUser?.primaryEmailAddress?.emailAddress}
                         </p>
-                        <span style={{ fontSize: '0.725rem', color: 'var(--accent-text)', fontWeight: 650 }}>
-                          ✓ Authenticated via Clerk Cloud
+                        <span style={{ fontSize: '0.725rem', color: 'var(--accent-text)', fontWeight: 650, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <CheckCircle2 size={12} /> Authenticated via Clerk Cloud
                         </span>
                       </div>
                     </div>

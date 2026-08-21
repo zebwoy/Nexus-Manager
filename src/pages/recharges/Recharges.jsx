@@ -143,7 +143,9 @@ export default function Recharges() {
           <h1 className="page-title">Platform Recharges</h1>
           <p className="page-sub">Mobile and in-game RC transaction logs</p>
         </div>
-        <Link to="/recharges/new" className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ New Recharge</Link>
+        <Link to="/recharges/new" className="btn-primary" style={{ padding: '0.6rem 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+          <Plus size={14} strokeWidth={2.5} /> New Recharge
+        </Link>
       </div>
 
       <ErrorMsg error={error} />

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatRupees, formatDate, formatTime, todayISO } from '../../lib/helpers'
 import { PageLoader, EmptyState, ErrorMsg, Field, Modal, TrialWarningModal, ConfirmModal, Spinner, Tabs, FilterBar } from '../../components/UI'
-import { ShoppingBag, Edit3, Trash2 } from 'lucide-react'
+import { ShoppingBag, Edit3, Trash2, Plus, Package, Settings } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { toast } from 'react-toastify'
 
@@ -247,14 +247,16 @@ export default function Inventory() {
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <Link to="/inventory/sell" className="btn-secondary" style={{ padding: '0.6rem 1.25rem' }}><ShoppingBag size={15} /> Foreign Sale</Link>
-          <button onClick={() => setShowAdd(true)} className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ Add Item</button>
+          <button onClick={() => setShowAdd(true)} className="btn-primary" style={{ padding: '0.6rem 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Plus size={14} strokeWidth={2.5} /> Add Item
+          </button>
         </div>
       </div>
       
       <Tabs
         tabs={[
-          { key: 'stock', label: '📦 Stock Catalog' },
-          { key: 'sales', label: '🛍️ Walk-in Sales Log' },
+          { key: 'stock', label: 'Stock Catalog', icon: <Package size={14} /> },
+          { key: 'sales', label: 'Walk-in Sales Log', icon: <ShoppingBag size={14} /> },
         ]}
         active={tab}
         onChange={setTab}
@@ -323,9 +325,9 @@ export default function Inventory() {
                               setActivePopover(activePopover === item.id ? null : item.id)
                             }}
                             className="btn-secondary btn-sm"
-                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.725rem' }}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.725rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
                           >
-                            ⚙️ Manage
+                            <Settings size={12} /> Manage
                           </button>
                         </td>
                       )}
@@ -372,9 +374,9 @@ export default function Inventory() {
                       setActivePopover(null)
                     }}
                     className="btn-secondary btn-sm"
-                    style={{ width: '100%', textAlign: 'left', padding: '0.4rem 0.65rem', fontSize: '0.775rem' }}
+                    style={{ width: '100%', textAlign: 'left', padding: '0.4rem 0.65rem', fontSize: '0.775rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
                   >
-                    ✏️ Edit Details
+                    <Edit3 size={12} /> Edit Details
                   </button>
                   <button
                     onClick={() => {
@@ -382,9 +384,9 @@ export default function Inventory() {
                       setActivePopover(null)
                     }}
                     className="btn-danger btn-sm"
-                    style={{ width: '100%', textAlign: 'left', padding: '0.4rem 0.65rem', fontSize: '0.775rem' }}
+                    style={{ width: '100%', textAlign: 'left', padding: '0.4rem 0.65rem', fontSize: '0.775rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
                   >
-                    🗑️ Delete Item
+                    <Trash2 size={12} /> Delete Item
                   </button>
                 </div>
               )
@@ -405,7 +407,7 @@ export default function Inventory() {
           </FilterBar>
 
           {loading ? <PageLoader /> : sales.length === 0 ? (
-            <EmptyState icon="🛍️" title="No Walk-in Sales" description="No foreign cafeteria sales logged for the selected period."
+            <EmptyState icon={<ShoppingBag size={32} />} title="No Walk-in Sales" description="No foreign cafeteria sales logged for the selected period."
               action={<Link to="/inventory/sell" className="btn-primary">New Foreign Sale</Link>} />
           ) : (
             <div className="card-flush" style={{ overflowX: 'auto' }}>

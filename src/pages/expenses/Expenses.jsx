@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatRupees, formatDate, todayISO } from '../../lib/helpers'
 import { PageLoader, EmptyState, ErrorMsg, FilterBar } from '../../components/UI'
-import { TrendingDown } from 'lucide-react'
+import { TrendingDown, Plus } from 'lucide-react'
 
 export default function Expenses() {
   const [items, setItems] = useState([])
@@ -34,7 +34,9 @@ export default function Expenses() {
           <h1 className="page-title">Expenses Ledger</h1>
           <p className="page-sub">Operating expenditures logs</p>
         </div>
-        <Link to="/expenses/new" className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ Add Expense</Link>
+        <Link to="/expenses/new" className="btn-primary" style={{ padding: '0.6rem 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+          <Plus size={14} strokeWidth={2.5} /> Add Expense
+        </Link>
       </div>
 
       <ErrorMsg error={error} />

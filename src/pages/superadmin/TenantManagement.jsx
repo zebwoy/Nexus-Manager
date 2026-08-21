@@ -55,8 +55,10 @@ export default function TenantManagement() {
   const [deleteTenant, setDeleteTenant] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Reset modal
+  // Dual-Verification Purge Modal State
   const [resetTenant, setResetTenant] = useState(null)
+  const [resetConfirmSlug, setResetConfirmSlug] = useState('')
+  const [resetAdminPin, setResetAdminPin] = useState('')
   const [resetting, setResetting] = useState(false)
   const [syncingClerk, setSyncingClerk] = useState(false)
 
@@ -149,16 +151,63 @@ export default function TenantManagement() {
     }
   }
 
-  const handleResetData = async () => {
-    if (!resetTenant) return
-    setResetting(true)
+  const handleUndoReset = async (tenantId, tenantName) => {
     try {
-      await api.post(`/super-admin?action=reset-tenant&id=${resetTenant.id}`)
-      toast.success(`Reset transactional data for ${resetTenant.name}`)
-      setResetTenant(null)
+      const res = await api.post(`/super-admin?action=undo-reset-tenant&id=${tenantId}`)
+      toast.success(res.message || `Restored ledger for ${tenantName}!`)
       loadTenants()
     } catch (e) {
-      toast.error('Reset failed: ' + e.message)
+      toast.error('Undo failed: ' + e.message)
+    }
+  }
+
+  const handleResetData = async () => {
+    if (!resetTenant) return
+    if (!resetAdminPin || resetAdminPin.length !== 4) {
+      toast.error('Enter 4-digit Super Admin Security PIN')
+      return
+    }
+
+    setResetting(true)
+    try {
+      const res = await api.post(`/super-admin?action=reset-tenant&id=${resetTenant.id}`, {
+        pin: resetAdminPin,
+        confirm_text: resetConfirmSlug
+      })
+
+      const targetId = resetTenant.id
+      const targetName = resetTenant.name
+
+      // Render rich toast with Undo action
+      toast.info(
+        ({ closeToast }) => (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+            <span style={{ fontWeight: 800 }}>Ledger Purged for {targetName}</span>
+            <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>Snapshot backup retained.</span>
+            <button
+              onClick={async () => {
+                closeToast()
+                await handleUndoReset(targetId, targetName)
+              }}
+              style={{
+                marginTop: '0.25rem', padding: '0.35rem 0.65rem', borderRadius: '6px',
+                background: '#ffffff', color: '#090d16', fontWeight: 850, fontSize: '0.75rem',
+                border: 'none', cursor: 'pointer', width: 'fit-content'
+              }}
+            >
+              ↩ UNDO RESTORE
+            </button>
+          </div>
+        ),
+        { autoClose: 20000 }
+      )
+
+      setResetTenant(null)
+      setResetConfirmSlug('')
+      setResetAdminPin('')
+      loadTenants()
+    } catch (e) {
+      toast.error(e.message || 'Reset failed')
     } finally {
       setResetting(false)
     }
@@ -359,14 +408,67 @@ export default function TenantManagement() {
         danger
       />
 
-      <ConfirmModal
+      {/* ─── DUAL-VERIFICATION PURGE LEDGER MODAL ─── */}
+      <Modal
         open={!!resetTenant}
-        onClose={() => setResetTenant(null)}
-        onConfirm={handleResetData}
-        loading={resetting}
-        title="Reset Transactional Data"
-        message={`Are you sure you want to purge all transactional session, sales, and expense logs for "${resetTenant?.name}"? System configurations, devices, and inventory catalog items will be preserved.`}
-      />
+        onClose={() => { setResetTenant(null); setResetConfirmSlug(''); setResetAdminPin('') }}
+        title={`Purge Transaction Ledger: ${resetTenant?.name}`}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{
+            padding: '0.85rem', borderRadius: '10px',
+            background: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid rgba(239, 68, 68, 0.3)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--danger)', marginBottom: '0.35rem' }}>
+              <Shield size={16} />
+              <strong style={{ fontSize: '0.875rem' }}>High-Privilege Super Admin Operation</strong>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+              This will truncate all active sessions, cafeteria sales, platform recharges, and cash logs in schema <code style={{ fontFamily: 'monospace', color: 'var(--text)' }}>"{resetTenant?.schema_name}"</code>. Devices, pricing rules, and users will remain intact. A snapshot backup will be created allowing immediate undo.
+            </p>
+          </div>
+
+          <Field label={`Step 1: Type "RESET ${resetTenant?.slug}" to confirm`}>
+            <input
+              className="input"
+              placeholder={`RESET ${resetTenant?.slug}`}
+              value={resetConfirmSlug}
+              onChange={e => setResetConfirmSlug(e.target.value)}
+              style={{ fontFamily: 'monospace', fontWeight: 700 }}
+            />
+          </Field>
+
+          <Field label="Step 2: Enter Master Super Admin PIN (4 Digits)">
+            <input
+              type="password"
+              maxLength={4}
+              className="input"
+              placeholder="••••"
+              value={resetAdminPin}
+              onChange={e => setResetAdminPin(e.target.value)}
+              style={{ letterSpacing: '0.25em', textAlign: 'center', fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: 800 }}
+            />
+          </Field>
+
+          <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+            <button
+              onClick={handleResetData}
+              disabled={resetting || !resetAdminPin || !resetConfirmSlug}
+              className="btn-danger"
+              style={{ flex: 1 }}
+            >
+              {resetting ? <><Spinner size="sm" /> Purging Ledger...</> : 'Purge Transaction Ledger'}
+            </button>
+            <button
+              onClick={() => { setResetTenant(null); setResetConfirmSlug(''); setResetAdminPin('') }}
+              className="btn-secondary"
+              style={{ flex: 1 }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* ─── TOP HEADER BAR ─── */}
       <div style={{

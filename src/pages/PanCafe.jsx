@@ -6,6 +6,7 @@ import { formatRupees, formatTime, formatDate, todayISO, validateName, validateM
 import { useAuth } from '../context/AuthContext'
 import { PageLoader, EmptyState, ErrorMsg, Field, Modal, Spinner, TrialWarningModal } from '../components/UI'
 import LogSessionModal from '../components/LogSessionModal'
+import { Coffee } from 'lucide-react'
 
 export function PanCafe() {
   const { user } = useAuth()
@@ -116,7 +117,7 @@ export function PanCafe() {
       </div>
 
       {loading ? <PageLoader /> : sessions.length === 0 ? (
-        <EmptyState icon="☕" title="No PanCafe Logs" description={`No membership sessions recorded for ${formatDate(dateFilter)}`}
+        <EmptyState icon={<Coffee size={32} />} title="No PanCafe Logs" description={`No membership sessions recorded for ${formatDate(dateFilter)}`}
           action={<Link to="/pancafe/new" className="btn-primary">Add PanCafe Log</Link>} />
       ) : (
         <div className="card-flush" style={{ overflowX: 'auto' }}>
@@ -299,7 +300,7 @@ export function NewPanCafe() {
             <option value="">Custom / No plan</option>
             {plans.filter(p => p.is_active).map(p => (
               <option key={p.id} value={p.id}>
-                {p.is_signup_plan ? '★ ' : ''}{p.label} — {p.hours}h for {formatRupees(p.price)}
+                {p.is_signup_plan ? '[Sign-up] ' : ''}{p.label} — {p.hours}h for {formatRupees(p.price)}
               </option>
             ))}
           </select>

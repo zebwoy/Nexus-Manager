@@ -17,7 +17,7 @@ const TABS = [
   { key: 'audit',     label: 'Staff Operations Audit',      icon: Shield },
   { key: 'tariffs',   label: 'Lounges & Tariffs',           icon: Gamepad2 },
   { key: 'platforms', label: 'Recharge Platforms',          icon: Zap },
-  { key: 'system',    label: 'System & Danger Zone',        icon: SettingsIcon },
+  { key: 'system',    label: 'Organization Profile & Identity', icon: Building2 },
 ]
 
 export default function Settings() {
@@ -579,7 +579,7 @@ export default function Settings() {
               <button onClick={saveSettings} disabled={settingsSaving} className="btn-primary" style={{ padding: '0.65rem 1.25rem' }}>
                 {settingsSaving ? <><Spinner size="sm" /> Saving...</> : 'Save Tariff Settings'}
               </button>
-              {saveMsg && <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 700 }}>✓ {saveMsg}</span>}
+              {saveMsg && <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><CheckCircle2 size={13} /> {saveMsg}</span>}
             </div>
           </div>
         </div>
@@ -623,16 +623,16 @@ export default function Settings() {
       )}
 
       {/* ════════════════════════════════════════════════════════════════ */}
-      {/* ─── TAB 5: SYSTEM & DANGER ZONE ──────────────────────────────── */}
+      {/* ─── TAB 5: ORGANIZATION PROFILE ──────────────────────────────── */}
       {/* ════════════════════════════════════════════════════════════════ */}
       {activeTab === 'system' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '680px' }}>
           <div>
             <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--text)' }}>
-              System Configuration &amp; Danger Zone
+              Organization Profile &amp; Identity
             </h3>
             <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Organization identity profile and database reset utilities.
+              Provisioned brand details and platform governance status.
             </p>
           </div>
 
@@ -701,32 +701,8 @@ export default function Settings() {
             </div>
 
             <div style={{ padding: '0.65rem 0.85rem', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-              To update your cafe organization branding, title, or support phone number, please contact your Super Admin platform administrator.
+              To update branding, cafe title, contact number, or request ledger resets, please contact your Super Admin platform administrator.
             </div>
-          </div>
-
-          {/* Danger Zone */}
-          <div className="card" style={{ border: '1.5px solid rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.03)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--danger)', marginBottom: '0.35rem' }}>
-              <AlertTriangle size={16} />
-              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>Danger Zone</h4>
-            </div>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 1rem', lineHeight: 1.5 }}>
-              Purging data will permanently erase all shift sessions, transactions, and recharges in this schema. This cannot be undone.
-            </p>
-            <button
-              onClick={() => {
-                if (isTrial) {
-                  setTrialModal({ isOpen: true, action: 'Purge Cafe Data' })
-                  return
-                }
-                setShowPurgeModal(true)
-              }}
-              className="btn-danger"
-              style={{ width: 'fit-content' }}
-            >
-              Reset / Purge Cafe Transaction Ledger
-            </button>
           </div>
         </div>
       )}

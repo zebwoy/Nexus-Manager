@@ -1,4 +1,5 @@
 import React from 'react'
+import { AlertTriangle } from 'lucide-react'
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -26,9 +27,16 @@ export default class ErrorBoundary extends React.Component {
           <div style={{
             background: '#1a202c', border: '1px solid #f87171',
             borderRadius: '16px', padding: '2.5rem 2rem', maxWidth: '500px',
-            boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center'
           }}>
-            <span style={{ fontSize: '3rem' }}>⚠️</span>
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '50%',
+              background: 'rgba(248, 113, 113, 0.12)', border: '1.5px solid rgba(248, 113, 113, 0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <AlertTriangle size={32} style={{ color: '#f87171' }} />
+            </div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '1rem', color: '#f87171' }}>System Exception</h1>
             <p style={{ fontSize: '0.9rem', color: '#a0aec0', marginTop: '0.5rem' }}>
               The console operator dashboard encountered a rendering crash.

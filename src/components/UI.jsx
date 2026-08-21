@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, Loader2, Inbox, X, AlertTriangle, Minus, Plus } from 'lucide-react'
+import { AlertCircle, CheckCircle, Loader2, Inbox, X, AlertTriangle, Minus, Plus, Sparkles } from 'lucide-react'
 
 export function Spinner({ size = 'md' }) {
   const s = size === 'sm' ? 14 : size === 'lg' ? 28 : 20
@@ -172,10 +172,10 @@ export function TrialWarningModal({ open, onClose, actionName }) {
           width: '3.5rem', height: '3.5rem', borderRadius: '50%',
           background: 'var(--danger-dim)', border: '1.5px solid var(--danger-border)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '1.75rem', color: 'var(--danger)', marginBottom: '1.25rem',
+          color: 'var(--danger)', marginBottom: '1.25rem',
           animation: 'pulseGlow 2s infinite'
         }}>
-          💡
+          <Sparkles size={24} />
         </div>
         <h3 style={{
           fontSize: '1.15rem',
@@ -305,8 +305,10 @@ export function Tabs({ tabs, active, onChange }) {
           key={t.key}
           className={`tab-item${active === t.key ? ' active' : ''}`}
           onClick={() => onChange(t.key)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
         >
-          {t.label}
+          {t.icon}
+          <span>{t.label}</span>
         </button>
       ))}
     </div>

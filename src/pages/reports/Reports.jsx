@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
 import { formatRupees } from '../../lib/helpers'
 import { PageLoader, ErrorMsg, FilterBar } from '../../components/UI'
-import { BarChart2, TrendingUp, TrendingDown, DollarSign } from 'lucide-react'
+import { BarChart2, TrendingUp, TrendingDown, DollarSign, Monitor } from 'lucide-react'
 
 export default function Reports() {
   const [data, setData] = useState(null)
@@ -63,7 +63,9 @@ export default function Reports() {
             
             {/* Revenue breakdown */}
             <div className="card">
-              <p className="label" style={{ borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem', fontWeight: 800 }}>💰 Revenue Streams</p>
+              <p className="label" style={{ borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <TrendingUp size={14} style={{ color: 'var(--success)' }} /> Revenue Streams
+              </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                 {[
                   { label: 'Gaming Station Sessions', value: data.gaming_revenue },
@@ -82,7 +84,9 @@ export default function Reports() {
             
             {/* Expenses breakdown */}
             <div className="card">
-              <p className="label" style={{ borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem', fontWeight: 800 }}>💸 Expenditures &amp; COGS</p>
+              <p className="label" style={{ borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <TrendingDown size={14} style={{ color: 'var(--danger)' }} /> Expenditures &amp; COGS
+              </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                 {[
                   { label: 'Operating Expenses (Ledger)', value: data.operating_expenses, badge: 'badge-warning' },
@@ -106,7 +110,9 @@ export default function Reports() {
           {/* Device utilization */}
           {data.device_stats?.length > 0 && (
             <div className="card">
-              <p className="label" style={{ borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1.25rem', fontSize: '0.85rem', fontWeight: 800 }}>🖥️ Device Terminal Utilization</p>
+              <p className="label" style={{ borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1.25rem', fontSize: '0.85rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Monitor size={14} style={{ color: 'var(--accent)' }} /> Device Terminal Utilization
+              </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
                 {data.device_stats.map(d => {
                   const percent = Math.min(100, (d.session_count / (data.max_sessions || 1)) * 100)

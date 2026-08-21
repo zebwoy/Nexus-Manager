@@ -4,6 +4,7 @@ import { api } from '../../lib/api'
 import { formatRupees, todayISO } from '../../lib/helpers'
 import { Field, ErrorMsg, TrialWarningModal, Spinner } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
+import { Package, Banknote, CreditCard } from 'lucide-react'
 
 const CATS = ['Marketing', 'Employee', 'Inventory', 'Cafeteria', 'Other']
 
@@ -112,8 +113,8 @@ export default function NewExpense() {
             background: 'var(--bg-elevated)', border: '1.5px solid var(--border)',
             padding: '1.15rem', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '1rem'
           }}>
-            <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--accent-text)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.25rem' }}>
-              📦 Cafeteria Inventory Linkage
+            <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--accent-text)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Package size={14} /> Cafeteria Inventory Linkage
             </p>
             
             <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -183,16 +184,21 @@ export default function NewExpense() {
         <div>
           <label className="label" style={{ marginBottom: '0.5rem' }}>Payment Method</label>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {['cash', 'online'].map(m => (
-              <button key={m} type="button" onClick={() => setPayMethod(m)}
+            {[
+              { id: 'cash', label: 'Cash', icon: <Banknote size={14} /> },
+              { id: 'online', label: 'Online / UPI', icon: <CreditCard size={14} /> }
+            ].map(m => (
+              <button key={m.id} type="button" onClick={() => setPayMethod(m.id)}
                 style={{
                   flex: 1, padding: '0.45rem 0.85rem', borderRadius: '10px', cursor: 'pointer',
-                  border: `1.5px solid ${payMethod === m ? 'var(--accent)' : 'var(--border)'}`,
-                  background: payMethod === m ? 'var(--accent-dim)' : 'var(--bg-input)',
-                  color: payMethod === m ? 'var(--accent-text)' : 'var(--text-muted)',
-                  fontWeight: 650, fontSize: '0.85rem'
-                }}>
-                {m === 'cash' ? '💵 Cash' : '📲 Online / UPI'}
+                  border: `1.5px solid ${payMethod === m.id ? 'var(--accent)' : 'var(--border)'}`,
+                  background: payMethod === m.id ? 'var(--accent-dim)' : 'var(--bg-input)',
+                  color: payMethod === m.id ? 'var(--accent-text)' : 'var(--text-muted)',
+                  fontWeight: 650, fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem'
+                }}
+              >
+                {m.icon}
+                {m.label}
               </button>
             ))}
           </div>

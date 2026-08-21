@@ -167,10 +167,10 @@ export default function Sidebar() {
             </div>
             <button
               onClick={() => setActiveTenant(null)}
-              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.75rem', padding: '0.2rem' }}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.2rem' }}
               title="Reset to default schema"
             >
-              ✕
+              <X size={12} />
             </button>
           </div>
         )}
