@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatRupees, formatDate, todayISO } from '../../lib/helpers'
 import { PageLoader, EmptyState, ErrorMsg, Field, Modal, ConfirmModal, Spinner, FilterBar } from '../../components/UI'
-import { Edit3, Trash2, Zap } from 'lucide-react'
+import { Edit3, Trash2, Zap, Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { toast } from 'react-toastify'
 
