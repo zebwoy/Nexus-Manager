@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
-import { formatRupees, formatDate, formatTime, todayISO } from '../../lib/helpers'
+import { formatRupees, formatDate, formatTime, todayISO, showUndoToast } from '../../lib/helpers'
 import { PageLoader, EmptyState, ErrorMsg, Field, Modal, TrialWarningModal, ConfirmModal, Spinner, Tabs, FilterBar } from '../../components/UI'
 import { ShoppingBag, Edit3, Trash2, Plus, Package, Settings } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -123,28 +123,18 @@ export default function Inventory() {
         setTrialModal({ isOpen: true, action: 'Delete Cafeteria Product' })
       }
 
-      toast.info(
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '0.75rem' }}>
-          <span>Deleted "{item.name}"</span>
-          <button 
-            className="btn-primary btn-sm" 
-            style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', textTransform: 'uppercase' }}
-            onClick={async (e) => {
-              e.stopPropagation()
-              try {
-                await api.post(`/inventory?action=restore&id=${item.id}`)
-                load()
-                toast.success(`Restored "${item.name}"`)
-              } catch (e) {
-                toast.error('Failed to restore item: ' + e.message)
-              }
-            }}
-          >
-            Undo
-          </button>
-        </div>,
-        { autoClose: 6000, closeOnClick: false }
-      )
+      showUndoToast({
+        message: `Deleted "${item.name}"`,
+        onUndo: async () => {
+          try {
+            await api.post(`/inventory?action=restore&id=${item.id}`)
+            load()
+            toast.success(`Restored "${item.name}"`)
+          } catch (e) {
+            toast.error('Failed to restore item: ' + e.message)
+          }
+        }
+      })
     } catch (err) {
       toast.error('Failed to delete item: ' + err.message)
     }

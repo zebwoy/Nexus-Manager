@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
-import { formatRupees, formatTime, formatDate, formatDuration, todayISO, validateName, validateMobile, toISO, addMinutes } from '../lib/helpers'
+import { formatRupees, formatTime, formatDate, formatDuration, todayISO, validateName, validateMobile, toISO, addMinutes, showUndoToast } from '../lib/helpers'
 import { PageLoader, ErrorMsg, Field, Modal, Spinner, SlidePanel, PanelSection, ConfirmModal, FilterBar } from '../components/UI'
 import {
   ArrowLeft, Plus, Minus, CreditCard, Banknote, Clock,
@@ -202,27 +202,17 @@ export default function SessionDetail() {
     setDeleting(true)
     try {
       await api.delete(`/sessions?id=${id}`)
-      toast.info(
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '0.75rem' }}>
-          <span>Deleted session #{id}</span>
-          <button 
-            className="btn-primary btn-sm" 
-            style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', textTransform: 'uppercase' }}
-            onClick={async (e) => {
-              e.stopPropagation()
-              try {
-                await api.post(`/sessions?action=restore&id=${id}`)
-                toast.success(`Restored session #${id}`)
-              } catch (err) {
-                toast.error('Failed to restore session: ' + err.message)
-              }
-            }}
-          >
-            Undo
-          </button>
-        </div>,
-        { autoClose: 6000, closeOnClick: false }
-      )
+      showUndoToast({
+        message: `Deleted session #${id}`,
+        onUndo: async () => {
+          try {
+            await api.post(`/sessions?action=restore&id=${id}`)
+            toast.success(`Restored session #${id}`)
+          } catch (err) {
+            toast.error('Failed to restore session: ' + err.message)
+          }
+        }
+      })
       navigate('/sessions')
     } catch (e) {
       setError(e.message)

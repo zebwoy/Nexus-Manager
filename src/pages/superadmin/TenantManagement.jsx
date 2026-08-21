@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
-import { formatDate } from '../../lib/helpers'
+import { formatDate, showUndoToast } from '../../lib/helpers'
 import { PageLoader, ErrorMsg, Modal, ConfirmModal, Field, Spinner } from '../../components/UI'
 import {
   Building2, Plus, Search, Edit3, Trash2, Power, RotateCcw,
@@ -179,28 +179,15 @@ export default function TenantManagement() {
       const targetName = resetTenant.name
 
       // Render rich toast with Undo action
-      toast.info(
-        ({ closeToast }) => (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-            <span style={{ fontWeight: 800 }}>Ledger Purged for {targetName}</span>
-            <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>Snapshot backup retained.</span>
-            <button
-              onClick={async () => {
-                closeToast()
-                await handleUndoReset(targetId, targetName)
-              }}
-              style={{
-                marginTop: '0.25rem', padding: '0.35rem 0.65rem', borderRadius: '6px',
-                background: '#ffffff', color: '#090d16', fontWeight: 850, fontSize: '0.75rem',
-                border: 'none', cursor: 'pointer', width: 'fit-content'
-              }}
-            >
-              ↩ UNDO RESTORE
-            </button>
-          </div>
-        ),
-        { autoClose: 20000 }
-      )
+      showUndoToast({
+        message: `Ledger Purged for ${targetName}`,
+        subtitle: 'Snapshot backup retained.',
+        undoText: '↩ UNDO RESTORE',
+        autoClose: 20000,
+        onUndo: async () => {
+          await handleUndoReset(targetId, targetName)
+        }
+      })
 
       setResetTenant(null)
       setResetConfirmSlug('')
