@@ -211,27 +211,25 @@ export default function DateInput({
         style={{
           display: 'inline-flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '0.75rem',
+          justifyContent: 'center',
+          gap: '0.65rem',
           cursor: disabled ? 'not-allowed' : 'pointer',
           padding: '0.45rem 0.85rem',
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: '0.825rem',
           fontWeight: 700,
           color: isValidSelected ? 'var(--text)' : 'var(--text-faint)',
-          minWidth: '160px',
+          minWidth: '150px',
           borderColor: isOpen ? 'var(--accent)' : 'var(--border)',
           boxShadow: isOpen ? '0 0 0 3px var(--accent-dim), var(--shadow-inset)' : 'var(--shadow-inset)',
           transition: 'all 0.15s ease',
           ...inputStyle
         }}
       >
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.55rem' }}>
-          <Calendar size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-          <span>{formattedDisplay}</span>
-        </span>
-        <Calendar size={13} style={{ opacity: 0.45, flexShrink: 0 }} />
+        <Calendar size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+        <span>{formattedDisplay}</span>
       </button>
+
 
       {/* Optional Stepper: Next Day */}
       {showSteppers && (
