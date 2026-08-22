@@ -1,0 +1,5 @@
+feat(eod): add DateInput filter and Start of Day (BOD) balance trigger to EOD Reconciliation
+
+- Added DateInput date selector with day steppers (< and >) and 'Today' quick button to audit any day's drawer reconciliation
+- Added Start of Day (BOD) balance modal trigger button in header and inline edit button on opening cash card
+- Fully dynamic state updates and persistence via /api/day-openings

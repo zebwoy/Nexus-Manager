@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '../../lib/api'
-import { formatRupees, todayISO } from '../../lib/helpers'
-import { PageLoader, ErrorMsg, Field, Modal, Spinner } from '../../components/UI'
+import { formatRupees, formatDate, todayISO } from '../../lib/helpers'
+import { PageLoader, ErrorMsg, Field, Modal, Spinner, FilterBar, DateInput } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
 import { toast } from 'react-toastify'
-import { Banknote, Calculator, CheckCircle, Save, FileCheck, TrendingUp, TrendingDown, Receipt, CheckCircle2, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { Banknote, Calculator, CheckCircle2, Save, TrendingUp, TrendingDown, Receipt, ArrowUpRight, ArrowDownRight, Edit3 } from 'lucide-react'
 
 const DENOMINATIONS = [
   { value: 500, label: '₹500' },
@@ -20,6 +20,7 @@ const DENOMINATIONS = [
 
 export default function EODReconciliation() {
   const { user } = useAuth()
+  const [selectedDate, setSelectedDate] = useState(todayISO())
   const [snapshot, setSnapshot] = useState(null)
   const [opening, setOpening] = useState(null)
   const [rcData, setRcData] = useState({ cash: 0, online: 0 })
@@ -30,25 +31,34 @@ export default function EODReconciliation() {
   const [savingShift, setSavingShift] = useState(false)
   const [showDenomModal, setShowDenomModal] = useState(false)
   
+  // Start of Day (BOD) Modal State
+  const [showBODModal, setShowBODModal] = useState(false)
+  const [bodCash, setBodCash] = useState('')
+  const [bodNote, setBodNote] = useState('')
+  const [savingBOD, setSavingBOD] = useState(false)
+
   // Currency Denominations State
   const [denoms, setDenoms] = useState({
     500: '', 200: '', 100: '', 50: '', 20: '', 10: '', 5: '', 2: '', 1: ''
   })
 
-  const today = todayISO()
-
-  useEffect(() => { load() }, [])
-
-  const load = async () => {
+  const load = useCallback(async (targetDate) => {
     try {
       setLoading(true)
       const [snap, openR, rcR] = await Promise.all([
-        api.get('/dashboard-snapshot'),
-        api.get(`/day-openings?date=${today}`),
-        api.get(`/recharges?date=${today}`),
+        api.get(`/dashboard-snapshot?date=${targetDate}`),
+        api.get(`/day-openings?date=${targetDate}`),
+        api.get(`/recharges?date=${targetDate}`),
       ])
       setSnapshot(snap)
       setOpening(openR.opening)
+      if (openR.opening) {
+        setBodCash(String(openR.opening.opening_cash || ''))
+        setBodNote(openR.opening.note || '')
+      } else {
+        setBodCash('')
+        setBodNote('')
+      }
       const recharges = rcR.recharges || []
       setRcData({
         cash: recharges.filter(r => r.payment_method === 'cash').reduce((s, r) => s + Number(r.payment_received || r.charge_price), 0),
@@ -59,7 +69,11 @@ export default function EODReconciliation() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    load(selectedDate)
+  }, [load, selectedDate])
 
   const openingCash = Number(opening?.opening_cash || 0)
 
@@ -93,6 +107,29 @@ export default function EODReconciliation() {
     toast.success(`Drawer cash updated: ${formatRupees(totalFromDenoms)}`)
   }
 
+  const handleSaveBOD = async () => {
+    if (bodCash === '') {
+      setError('Please enter the opening cash balance amount')
+      return
+    }
+    setSavingBOD(true)
+    setError('')
+    try {
+      await api.post('/day-openings', {
+        date: selectedDate,
+        opening_cash: Number(bodCash),
+        note: bodNote || null
+      })
+      toast.success(`Opening balance of ${formatRupees(Number(bodCash))} saved for ${formatDate(selectedDate)}`)
+      setShowBODModal(false)
+      load(selectedDate)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSavingBOD(false)
+    }
+  }
+
   const handleSaveShiftClose = async () => {
     if (actualCash === '') {
       setError('Please enter or calculate the actual cash counted in drawer')
@@ -102,7 +139,7 @@ export default function EODReconciliation() {
     setError('')
     try {
       await api.post('/day-openings', {
-        date: today,
+        date: selectedDate,
         opening_cash: openingCash,
         note: `EOD Close: Expected ₹${expectedCash}, Actual ₹${actualCash}, Variance ₹${variance}. ${notes}`.trim()
       })
@@ -128,7 +165,43 @@ export default function EODReconciliation() {
   )
 
   return (
-    <div style={{ maxWidth: '740px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+      
+      {/* Start of Day (BOD) Balance Modal */}
+      <Modal open={showBODModal} onClose={() => setShowBODModal(false)} title="Start of Day (BOD) Opening Cash">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+          <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>
+            Record or update the initial drawer opening cash balance for <strong>{formatDate(selectedDate)}</strong>:
+          </p>
+
+          <Field label="Opening Drawer Cash (₹)" required>
+            <input
+              type="number"
+              className="input"
+              placeholder="e.g. 500"
+              value={bodCash}
+              onChange={e => setBodCash(e.target.value)}
+            />
+          </Field>
+
+          <Field label="Opening Note (optional)">
+            <input
+              className="input"
+              placeholder="e.g. Morning shift handover, petty cash reserve"
+              value={bodNote}
+              onChange={e => setBodNote(e.target.value)}
+            />
+          </Field>
+
+          <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
+            <button onClick={handleSaveBOD} disabled={savingBOD || bodCash === ''} className="btn-primary" style={{ flex: 1 }}>
+              {savingBOD ? <><Spinner size="sm" /> Saving...</> : 'Save Opening Balance'}
+            </button>
+            <button onClick={() => setShowBODModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Denominations Calculator Modal */}
       <Modal open={showDenomModal} onClose={() => setShowDenomModal(false)} title="Currency Denomination Counter">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -183,10 +256,39 @@ export default function EODReconciliation() {
         </div>
       </Modal>
 
-      <div style={{ marginBottom: '2rem' }}>
-        <h1 className="page-title">End of Day Reconciliation</h1>
-        <p className="page-sub">Cash drawer balance check · {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      {/* Page Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h1 className="page-title">End of Day Reconciliation</h1>
+          <p className="page-sub">Cash drawer audit and shift settlement ledger</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowBODModal(true)}
+          className="btn-primary"
+          style={{ padding: '0.6rem 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
+        >
+          <Banknote size={15} /> {opening ? 'Edit Start of Day Balance' : 'Set Start of Day Balance'}
+        </button>
       </div>
+
+      {/* Date Filter Bar */}
+      <FilterBar style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <label className="label" style={{ marginBottom: 0 }}>Reconciliation Date</label>
+          <DateInput
+            value={selectedDate}
+            onChange={e => setSelectedDate(e.target.value)}
+            showSteppers={true}
+            showTodayButton={true}
+          />
+        </div>
+        {opening && (
+          <span className="badge badge-accent" style={{ fontSize: '0.75rem' }}>
+            BOD Opening: {formatRupees(openingCash)}
+          </span>
+        )}
+      </FilterBar>
 
       <ErrorMsg error={error} />
 
@@ -194,21 +296,34 @@ export default function EODReconciliation() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
           {/* Opening balance card */}
-          <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem' }}>
+          <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
               <p style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Opening Cash Balance</p>
               <p style={{ fontSize: '1.75rem', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: 'var(--text)', marginTop: '0.15rem' }}>{formatRupees(openingCash)}</p>
+              {opening?.note && (
+                <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Note: {opening.note}</p>
+              )}
             </div>
-            {opening
-              ? <span className="badge badge-success">Set at {new Date(opening.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
-              : <span className="badge badge-danger">Not set today</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {opening
+                ? <span className="badge badge-success">Set at {new Date(opening.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                : <span className="badge badge-danger">Not set for this date</span>}
+              <button
+                type="button"
+                onClick={() => setShowBODModal(true)}
+                className="btn-secondary btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.65rem' }}
+              >
+                <Edit3 size={12} /> {opening ? 'Change' : 'Set Balance'}
+              </button>
+            </div>
           </div>
 
           {/* Inflows breakdown */}
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.85rem', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem' }}>
               <TrendingUp size={14} style={{ color: 'var(--success)' }} />
-              Today's Inflows
+              Inflows ({formatDate(selectedDate)})
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-faint)', fontWeight: 700, textTransform: 'uppercase' }}>Category</span>
@@ -241,7 +356,7 @@ export default function EODReconciliation() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1.5px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 <Receipt size={14} style={{ color: 'var(--accent)' }} />
-                Cash Drawer Settlement
+                Cash Drawer Settlement ({formatDate(selectedDate)})
               </div>
               <button onClick={() => setShowDenomModal(true)} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem' }}>
                 <Calculator size={13} /> Count Notes &amp; Coins
@@ -254,7 +369,7 @@ export default function EODReconciliation() {
                 <span>{formatRupees(openingCash)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>+ Cash collected today</span>
+                <span style={{ color: 'var(--text-muted)' }}>+ Cash collected</span>
                 <span style={{ color: 'var(--success)' }}>+{formatRupees(cashInflows)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
