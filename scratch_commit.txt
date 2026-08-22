@@ -1,4 +1,0 @@
-fix(ui): remove redundant trailing calendar icon in DateInput trigger
-
-- Cleaned up DateInput trigger button by removing the duplicate trailing calendar icon
-- Kept the single glowing accent Calendar icon on the left for a balanced, clean look
