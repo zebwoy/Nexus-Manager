@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatRupees, todayISO, validateFirstName, validateMobile } from '../../lib/helpers'
-import { Field, ErrorMsg, TrialWarningModal, Spinner } from '../../components/UI'
+import { Field, ErrorMsg, TrialWarningModal, Spinner, DateInput } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
 import { Zap } from 'lucide-react'
 
@@ -194,8 +194,9 @@ export default function NewRecharge() {
             <input type="number" className="input" placeholder="Client cash" value={form.payment_received} onChange={e => f('payment_received', e.target.value)} />
           </Field>
           <Field label="Operational Date">
-            <input type="date" className="input" value={form.date} onChange={e => f('date', e.target.value)} />
+            <DateInput value={form.date} onChange={e => f('date', e.target.value)} showTodayButton={true} />
           </Field>
+
         </div>
         
         <Field label="Reference notes">

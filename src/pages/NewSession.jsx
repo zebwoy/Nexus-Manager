@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { DURATION_OPTIONS, formatRupees, todayISO, nowTimeInput, toISO, addMinutes, formatDuration, validateName, validateMobile, calculateDynamicTariff } from '../lib/helpers'
-import { Field, ErrorMsg, Spinner } from '../components/UI'
+import { Field, ErrorMsg, Spinner, DateInput } from '../components/UI'
 import DurationSelector from '../components/DurationSelector'
 import { toast } from 'react-toastify'
 import {
@@ -315,9 +315,13 @@ export default function NewSession() {
         {/* Row 3: Date & Access Times */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
           <Field label="System Date">
-            <input type="date" className="input" value={form.date}
-              onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
+            <DateInput
+              value={form.date}
+              onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+              showTodayButton={true}
+            />
           </Field>
+
           <Field label="Connection Time">
             <input type="time" className="input" value={form.time_in}
               onChange={e => setForm(f => ({ ...f, time_in: e.target.value }))} />

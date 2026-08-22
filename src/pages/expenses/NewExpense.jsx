@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatRupees, todayISO } from '../../lib/helpers'
-import { Field, ErrorMsg, TrialWarningModal, Spinner } from '../../components/UI'
+import { Field, ErrorMsg, TrialWarningModal, Spinner, DateInput } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
 import { Package, Banknote, CreditCard } from 'lucide-react'
 
@@ -104,8 +104,9 @@ export default function NewExpense() {
             <input type="number" className="input" placeholder="Amount" value={form.amount} onChange={e => f('amount', e.target.value)} />
           </Field>
           <Field label="Operational Date">
-            <input type="date" className="input" value={form.date} onChange={e => f('date', e.target.value)} />
+            <DateInput value={form.date} onChange={e => f('date', e.target.value)} showTodayButton={true} />
           </Field>
+
         </div>
 
         {form.category === 'Cafeteria' && (

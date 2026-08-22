@@ -354,8 +354,9 @@ export function NewPanCafe() {
             </select>
           </Field>
           <Field label="Session Date">
-            <input type="date" className="input" value={form.date} onChange={e => f('date', e.target.value)} />
+            <DateInput value={form.date} onChange={e => f('date', e.target.value)} showTodayButton={true} />
           </Field>
+
         </div>
 
         {/* Timestamps */}
