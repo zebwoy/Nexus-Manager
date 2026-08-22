@@ -109,10 +109,20 @@ export default function Recharges() {
                 </div>
               )
             })()}
-            <Field label="Payment Received (₹)">
-              <input type="number" className="input" value={editItem.payment_received || ''}
-                onChange={e => setEditItem(p => ({ ...p, payment_received: e.target.value }))} />
-            </Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <Field label="Payment Method">
+                <select className="input" value={editItem.payment_method || 'cash'}
+                  onChange={e => setEditItem(p => ({ ...p, payment_method: e.target.value }))}>
+                  <option value="cash">Cash</option>
+                  <option value="online">Online / UPI</option>
+                  <option value="split">Split</option>
+                </select>
+              </Field>
+              <Field label="Payment Received (₹)">
+                <input type="number" className="input" value={editItem.payment_received || ''}
+                  onChange={e => setEditItem(p => ({ ...p, payment_received: e.target.value }))} />
+              </Field>
+            </div>
             <Field label="Note">
               <input className="input" value={editItem.note || ''}
                 onChange={e => setEditItem(p => ({ ...p, note: e.target.value }))} />
@@ -123,6 +133,7 @@ export default function Recharges() {
               </button>
               <button onClick={() => setEditItem(null)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
             </div>
+
           </div>
         )}
       </Modal>
@@ -183,7 +194,7 @@ export default function Recharges() {
           <table className="tbl">
             <thead>
               <tr>
-                {['Client Profile', 'Game Platform', 'System Cost', 'Amount Charged', 'Net Profit', 'Cash Received', 'System Note', 'Operator', ...(isAdmin ? ['Actions'] : [])].map(h => (
+                {['Client Profile', 'Game Platform', 'System Cost', 'Amount Charged', 'Net Profit', 'Payment', 'Received', 'System Note', 'Operator', ...(isAdmin ? ['Actions'] : [])].map(h => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -200,9 +211,15 @@ export default function Recharges() {
                       {formatRupees(r.margin)}
                     </span>
                   </td>
-                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{r.payment_received != null ? formatRupees(r.payment_received) : '—'}</td>
+                  <td className="table-cell">
+                    <span className={`badge ${r.payment_method === 'online' ? 'badge-warning' : r.payment_method === 'split' ? 'badge-neutral' : 'badge-accent'}`} style={{ fontSize: '0.65rem' }}>
+                      {r.payment_method || 'cash'}
+                    </span>
+                  </td>
+                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 650 }}>{r.payment_received != null ? formatRupees(r.payment_received) : '—'}</td>
                   <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{r.note || '—'}</td>
                   <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontWeight: 600 }}>@{r.created_by_username || 'system'}</td>
+
                   {isAdmin && (
                     <td className="table-cell">
                       <div style={{ display: 'flex', gap: '0.35rem' }}>

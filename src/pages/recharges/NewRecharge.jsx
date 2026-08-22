@@ -3,19 +3,33 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatRupees, todayISO, validateFirstName, validateMobile } from '../../lib/helpers'
 import { Field, ErrorMsg, TrialWarningModal, Spinner, DateInput } from '../../components/UI'
+import SplitPayment from '../../components/SplitPayment'
 import { useAuth } from '../../context/AuthContext'
 import { Zap } from 'lucide-react'
 
 export default function NewRecharge() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [form, setForm] = useState({ name: '', mobile: '', customer_id: null, game_platform: '', cost_price: '', charge_price: '', payment_received: '', note: '', date: todayISO() })
+  const [form, setForm] = useState({
+    name: '',
+    mobile: '',
+    customer_id: null,
+    game_platform: '',
+    cost_price: '',
+    charge_price: '',
+    note: '',
+    date: todayISO()
+  })
+  const [cashAmount, setCashAmount] = useState('')
+  const [onlineAmount, setOnlineAmount] = useState('')
+
   const [platforms, setPlatforms] = useState([])
   const [customPlatform, setCustomPlatform] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [customerSuggestions, setCustomerSuggestions] = useState([])
   const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
+  
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   useEffect(() => {
@@ -58,6 +72,13 @@ export default function NewRecharge() {
       setError('Cost and charge price are required')
       return
     }
+
+    const c = Number(cashAmount || 0)
+    const o = Number(onlineAmount || 0)
+    const totalCollected = c + o
+    const paymentMethod = (c > 0 && o > 0) ? 'split' : (o > 0 ? 'online' : 'cash')
+    const finalReceived = totalCollected > 0 ? totalCollected : charge
+
     setLoading(true)
     setError('')
 
@@ -66,7 +87,8 @@ export default function NewRecharge() {
         ...form,
         cost_price: Number(form.cost_price),
         charge_price: Number(form.charge_price),
-        payment_received: form.payment_received ? Number(form.payment_received) : null
+        payment_received: finalReceived,
+        payment_method: paymentMethod
       })
       if (user?.username === 'trial') {
         setTrialModal({ isOpen: true, action: 'Recharge Entry' })
@@ -81,11 +103,11 @@ export default function NewRecharge() {
   }
 
   return (
-    <div style={{ maxWidth: '540px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '560px', margin: '0 auto' }}>
       <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => { setTrialModal({ isOpen: false, action: '' }); navigate('/recharges') }} />
       <div style={{ marginBottom: '2rem' }}>
         <h1 className="page-title">New Recharge Entry</h1>
-        <p className="page-sub">Log platform, store costs, and margins</p>
+        <p className="page-sub">Log platform, store costs, margins, and tender collections</p>
       </div>
 
       <ErrorMsg error={error} />
@@ -188,20 +210,27 @@ export default function NewRecharge() {
             )}
           </div>
         )}
+
+        {/* Split Payment Component */}
+        <div style={{ background: 'var(--bg-elevated)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
+          <SplitPayment
+            cashValue={cashAmount}
+            onlineValue={onlineAmount}
+            onCashChange={setCashAmount}
+            onOnlineChange={setOnlineAmount}
+            totalBill={charge}
+            label="Recharge Payment Collection (Cash / UPI / Split)"
+          />
+        </div>
         
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <Field label="Tender Received (₹)">
-            <input type="number" className="input" placeholder="Client cash" value={form.payment_received} onChange={e => f('payment_received', e.target.value)} />
-          </Field>
           <Field label="Operational Date">
             <DateInput value={form.date} onChange={e => f('date', e.target.value)} showTodayButton={true} />
           </Field>
-
+          <Field label="Reference notes">
+            <input className="input" placeholder="Transaction IDs, codes..." value={form.note} onChange={e => f('note', e.target.value)} />
+          </Field>
         </div>
-        
-        <Field label="Reference notes">
-          <input className="input" placeholder="Transaction IDs, codes..." value={form.note} onChange={e => f('note', e.target.value)} />
-        </Field>
         
         <div style={{ display: 'flex', gap: '0.85rem', marginTop: '0.5rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
           <button onClick={handleSubmit} disabled={loading} className="btn-primary" style={{ padding: '0.65rem 1.35rem' }}>

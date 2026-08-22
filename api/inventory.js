@@ -76,6 +76,50 @@ export default async function handler(req, res) {
 
     // ─── EXPENSES ───────────────────────────────────────────────
     if (resource === 'expenses') {
+      const username = req.headers['x-username']
+      const expIdMatch = (req.url || '').match(/[?&]expense_id=(\d+)/) || (req.url || '').match(/\/expenses\/(\d+)/)
+      const expenseId = expIdMatch ? Number(expIdMatch[1]) : (req.query.expense_id ? Number(req.query.expense_id) : (req.query.id ? Number(req.query.id) : null))
+
+      // ── Per-expense PATCH ─────────────────────────────────────
+      if (expenseId && req.method === 'PATCH') {
+        const b = req.body || {}
+        const updates = []; const vals = []; let idx = 1
+        if (b.category       !== undefined) { updates.push(`category = $${idx++}`);       vals.push(b.category) }
+        if (b.amount         !== undefined) { updates.push(`amount = $${idx++}`);         vals.push(Number(b.amount)) }
+        if (b.vendor_name    !== undefined) { updates.push(`vendor_name = $${idx++}`);    vals.push(b.vendor_name || null) }
+        if (b.note           !== undefined) { updates.push(`note = $${idx++}`);           vals.push(b.note || null) }
+        if (b.date           !== undefined) { updates.push(`date = $${idx++}`);           vals.push(b.date) }
+        if (b.payment_method !== undefined) { updates.push(`payment_method = $${idx++}`); vals.push(b.payment_method) }
+        if (updates.length === 0) return err(res, 'No fields to update', 400)
+        vals.push(expenseId)
+        await client.query(`UPDATE expenses SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'EXPENSE_EDIT','expenses',$3,$4)`,
+          [userId || null, username || 'system', `Edited expense #${expenseId}`, JSON.stringify(b)]
+        )
+        return ok(res, { success: true })
+      }
+
+      // ── Per-expense DELETE ────────────────────────────────────
+      if (expenseId && req.method === 'DELETE') {
+        await client.query('BEGIN')
+        try {
+          const expR = await client.query('SELECT * FROM expenses WHERE id = $1', [expenseId])
+          if (expR.rowCount === 0) { await client.query('ROLLBACK'); return err(res, 'Expense not found', 404) }
+          const exp = expR.rows[0]
+          await client.query('DELETE FROM expenses WHERE id = $1', [expenseId])
+          await client.query(
+            `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'EXPENSE_DELETE','expenses',$3,$4)`,
+            [userId || null, username || 'system', `Deleted expense #${expenseId} | Category: ${exp.category} | Amount: ₹${exp.amount}`, JSON.stringify(exp)]
+          )
+          await client.query('COMMIT')
+          return ok(res, { success: true })
+        } catch (e) {
+          await client.query('ROLLBACK')
+          throw e
+        }
+      }
+
       if (req.method === 'GET') {
         const date = req.query.date
         let q = `SELECT e.*, u.username AS created_by_username FROM expenses e LEFT JOIN users u ON u.id = e.created_by`
@@ -164,6 +208,7 @@ export default async function handler(req, res) {
 
       return err(res, 'Method not allowed', 405)
     }
+
 
     // ─── SALES ──────────────────────────────────────────────────
     if (resource === 'sales') {

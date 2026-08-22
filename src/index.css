@@ -259,18 +259,19 @@
     letter-spacing: 0.06em;
   }
 
-  /* ── LCD / VFD Stat Screens (Glowing Digital Readouts) ── */
+  /* ── LCD / VFD Stat Screens (Glowing Digital Readouts in Dark Mode, Crisp Tactile Cards in Light Mode) ── */
   .lcd-screen {
-    background: #020617;
+    background: #060911;
     border: 1px solid #1e293b;
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 1.15rem;
     box-shadow: inset 3px 3px 8px rgba(0, 0, 0, 0.9), 0 1px 0 rgba(255, 255, 255, 0.05);
-    color: #38bdf8;
+    color: var(--accent);
     font-family: 'JetBrains Mono', monospace;
     text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
     position: relative;
     overflow: hidden;
+    transition: all 0.2s ease;
   }
   .lcd-screen::after {
     content: '';
@@ -281,17 +282,49 @@
     pointer-events: none;
   }
   .lcd-screen.danger {
-    color: #f87171;
+    color: var(--danger);
     text-shadow: 0 0 8px rgba(248, 113, 113, 0.4);
   }
   .lcd-screen.success {
-    color: #4ade80;
+    color: var(--success);
     text-shadow: 0 0 8px rgba(74, 222, 128, 0.4);
   }
   .lcd-screen.warning {
-    color: #fbbf24;
+    color: var(--warning);
     text-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
   }
+
+  /* ── Light Mode Adaptations for KPI / LCD Screens ── */
+  [data-dark="false"] .lcd-screen,
+  [data-theme="light"] .lcd-screen {
+    background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-elevated) 100%);
+    border: 1px solid var(--border);
+    border-top: 1.5px solid var(--bevel-top);
+    border-bottom: 1.5px solid var(--bevel-bottom);
+    box-shadow: var(--shadow-outset);
+    color: var(--accent-text);
+    text-shadow: none;
+  }
+  [data-dark="false"] .lcd-screen::after,
+  [data-theme="light"] .lcd-screen::after {
+    display: none;
+  }
+  [data-dark="false"] .lcd-screen.danger,
+  [data-theme="light"] .lcd-screen.danger {
+    color: var(--danger);
+    text-shadow: none;
+  }
+  [data-dark="false"] .lcd-screen.success,
+  [data-theme="light"] .lcd-screen.success {
+    color: var(--success);
+    text-shadow: none;
+  }
+  [data-dark="false"] .lcd-screen.warning,
+  [data-theme="light"] .lcd-screen.warning {
+    color: var(--warning);
+    text-shadow: none;
+  }
+
 
   .stat-label { font-size: 0.725rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
   .stat-value { font-size: 1.75rem; font-weight: 700; color: var(--text); line-height: 1.1; margin-top: 0.35rem; }

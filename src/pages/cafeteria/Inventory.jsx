@@ -227,7 +227,6 @@ export default function Inventory() {
                 {['Item name', 'Category', 'Unit Cost', 'Retail Price', 'Stock Level', 'Terminal Status'].map(h => (
                   <th key={h}>{h}</th>
                 ))}
-                {isAdmin && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -237,7 +236,7 @@ export default function Inventory() {
                   <td className="table-cell"><span className="badge badge-neutral">{item.category}</span></td>
                   <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatRupees(item.buy_price)}</td>
                   <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 650 }}>{formatRupees(item.sell_price)}</td>
-                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{item.stock_qty}</td>
+                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 750 }}>{item.stock_qty}</td>
                   <td className="table-cell">
                     {item.stock_qty === 0 ? (
                       <span className="badge badge-danger">Out of stock</span>
@@ -247,19 +246,10 @@ export default function Inventory() {
                       <span className="badge badge-success">In Stock</span>
                     )}
                   </td>
-                  {isAdmin && (
-                    <td className="table-cell">
-                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                        <button onClick={() => handleQuickAdjust(item.id, -1)} className="btn-secondary btn-icon" style={{ width: '1.75rem', height: '1.75rem', borderRadius: '4px', padding: 0 }} title="Subtract 1">−</button>
-                        <button onClick={() => handleQuickAdjust(item.id, 1)} className="btn-secondary btn-icon" style={{ width: '1.75rem', height: '1.75rem', borderRadius: '4px', padding: 0 }} title="Add 1">+</button>
-                        <button onClick={() => handleOpenEdit(item)} className="btn-secondary btn-icon" style={{ width: '1.75rem', height: '1.75rem', borderRadius: '4px', padding: 0 }} title="Edit Product"><Edit3 size={13} /></button>
-                        <button onClick={() => handleDelete(item.id, item.name)} className="btn-secondary btn-icon" style={{ width: '1.75rem', height: '1.75rem', borderRadius: '4px', padding: 0, color: 'var(--danger)', borderColor: 'var(--danger-border)' }} title="Delete Product"><Trash2 size={13} /></button>
-                      </div>
-                    </td>
-                  )}
                 </tr>
               ))}
             </tbody>
+
           </table>
         </div>
       )}

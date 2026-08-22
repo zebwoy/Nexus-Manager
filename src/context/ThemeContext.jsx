@@ -91,8 +91,10 @@ export function ThemeProvider({ children }) {
     const root = document.documentElement
     Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v))
     root.setAttribute('data-dark', isDark ? 'true' : 'false')
+    root.setAttribute('data-theme', isDark ? 'dark' : 'light')
     localStorage.setItem('nexus_dark', isDark)
     localStorage.setItem('nexus_accent', accentId)
+
   }, [isDark, accentId, accent])
 
   const toggleDark = () => setIsDark(d => !d)

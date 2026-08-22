@@ -164,8 +164,9 @@ CREATE TABLE IF NOT EXISTS recharges (
     charge_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     margin DECIMAL(10, 2) GENERATED ALWAYS AS (charge_price - cost_price) STORED,
     payment_received DECIMAL(10, 2),
-    payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online')),
+    payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'split')),
     note TEXT,
+
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
