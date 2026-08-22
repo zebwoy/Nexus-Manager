@@ -479,14 +479,29 @@ export default async function handler(req, res) {
       await client.query('BEGIN')
       try {
         await client.query(`UPDATE sessions SET is_deleted = FALSE WHERE id = $1`, [restoreId])
+        
+        // Re-deduct any attached cafeteria inventory items
+        const salesR = await client.query(
+          `SELECT si.item_id, si.qty FROM sales s
+           JOIN sale_items si ON si.sale_id = s.id
+           WHERE s.session_id = $1`,
+          [restoreId]
+        )
+        for (const item of salesR.rows) {
+          await client.query(
+            `UPDATE inventory_items SET stock_qty = GREATEST(0, stock_qty - $1) WHERE id = $2`,
+            [item.qty, item.item_id]
+          )
+        }
         await client.query(`UPDATE sales SET is_deleted = FALSE WHERE session_id = $1`, [restoreId]).catch(() => {})
+
         await client.query(
           `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'SESSION_RESTORE','sessions',$3,$4)`,
           [
             Number(userId || 0),
             req.headers['x-username'] || 'system',
             `Restored session #${restoreId}`,
-            JSON.stringify({ restoreId })
+            JSON.stringify({ restoreId, re_deducted_items: salesR.rows })
           ]
         )
         await client.query('COMMIT')
