@@ -17,7 +17,7 @@ async function request(path, options = {}) {
 
   const headers = {
     'Content-Type': 'application/json',
-    ...(user ? { 'x-user-id': String(user.id), 'x-username': user.username } : {}),
+    ...(user ? { 'x-user-id': String(user.id), 'x-username': user.username, 'x-role': user.role || 'operator' } : {}),
     ...(tenantSchema ? { 'x-tenant-schema': tenantSchema } : {}),
     ...(orgId ? { 'x-org-id': orgId } : {}),
     ...(userEmail ? { 'x-user-email': userEmail } : {}),
@@ -50,4 +50,25 @@ export const api = {
   put:    (path, body)   => request(path, { method: 'PUT',    body: JSON.stringify(body) }),
   delete: (path)         => request(path, { method: 'DELETE' }),
   patch:  (path, body)   => request(path, { method: 'PATCH',  body: JSON.stringify(body) }),
+
+  // Binary upload for Vercel Blob (logo images, etc.)
+  uploadBlob: async (file, schemaName) => {
+    const user = getUser()
+    const tenantSchema = localStorage.getItem('nexus_tenant_schema')
+    const userEmail = localStorage.getItem('nexus_user_email')
+    const headers = {
+      'Content-Type': file.type,
+      'x-filename': file.name,
+      'x-content-type': file.type,
+      'x-schema-name': schemaName || tenantSchema || 'org',
+      ...(user ? { 'x-user-id': String(user.id), 'x-username': user.username, 'x-role': user.role || 'operator' } : {}),
+      ...(userEmail ? { 'x-user-email': userEmail } : {}),
+    }
+    const res = await fetch(`${BASE}/blob-upload`, { method: 'POST', headers, body: file })
+    const text = await res.text()
+    let data
+    try { data = text ? JSON.parse(text) : {} } catch { data = {} }
+    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`)
+    return data
+  }
 }

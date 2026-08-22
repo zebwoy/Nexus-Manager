@@ -115,15 +115,38 @@ export default function NewRecharge() {
           </Field>
 
           <Field label="Recharge Platform">
-            {!customPlatform && platforms.length > 0 ? (
-              <div style={{ display: 'flex', gap: '0.35rem' }}>
-                <select className="input" style={{ flex: 1 }} value={form.game_platform} onChange={e => {
-                  if (e.target.value === '__custom__') setCustomPlatform(true)
-                  else f('game_platform', e.target.value)
+            {platforms.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <select className="input" value={customPlatform ? '__custom__' : form.game_platform} onChange={e => {
+                  if (e.target.value === '__custom__') {
+                    setCustomPlatform(true)
+                    f('game_platform', '')
+                  } else {
+                    setCustomPlatform(false)
+                    f('game_platform', e.target.value)
+                  }
                 }}>
                   {platforms.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                   <option value="__custom__">+ Other Custom Platform</option>
                 </select>
+                {customPlatform && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <input
+                      className="input"
+                      placeholder="e.g. Steam, EA Play..."
+                      value={form.game_platform}
+                      onChange={e => f('game_platform', e.target.value)}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setCustomPlatform(false); f('game_platform', platforms[0]?.name || '') }}
+                      style={{ background: 'none', border: 'none', color: 'var(--accent-text)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', textAlign: 'left', padding: '0' }}
+                    >
+                      ← Back to platform list
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <input className="input" placeholder="e.g. Steam, EA Play..." value={form.game_platform} onChange={e => f('game_platform', e.target.value)} />

@@ -116,9 +116,9 @@ export default async function handler(req, res) {
           deviceCount = Number(dR.rows[0]?.count || 0)
           sessionCount = Number(sR.rows[0]?.count || 0)
 
-          // Auto-ensure standard system operator accounts exist in tenant schema: <slug>_admin and <slug>_staff
+          // Auto-ensure standard system operator accounts exist in tenant schema: <slug>_admin and <slug>_operator
           const adminOpUser = `${t.slug}_admin`
-          const staffOpUser = `${t.slug}_staff`
+          const operatorOpUser = `${t.slug}_operator`
           await pool.query(`
             INSERT INTO "${t.schema_name}".users (full_name, username, pin, role, email, status)
             VALUES ($1, $2, '1234', 'admin', $3, 'active')
@@ -126,9 +126,9 @@ export default async function handler(req, res) {
             SET full_name = EXCLUDED.full_name, email = EXCLUDED.email;
 
             INSERT INTO "${t.schema_name}".users (full_name, username, pin, role, email, status)
-            VALUES ('Counter Staff', $4, '1234', 'staff', NULL, 'active')
+            VALUES ('Counter Operator', $4, '1234', 'operator', NULL, 'active')
             ON CONFLICT (username) DO NOTHING;
-          `, [t.admin_name || `${t.name} Admin`, adminOpUser, t.admin_email, staffOpUser])
+          `, [t.admin_name || `${t.name} Admin`, adminOpUser, t.admin_email, operatorOpUser])
 
           // Sync settings in tenant schema
           await pool.query(`
@@ -578,6 +578,82 @@ export default async function handler(req, res) {
       } finally {
         client.release()
       }
+    }
+
+
+    // ─── GET /api/super-admin?action=profile-changes ────────────────
+    // Super admin views all pending profile change requests across tenants
+    if (action === 'profile-changes' && req.method === 'GET') {
+      const statusFilter = req.query.status || 'pending'
+      const changesR = await pool.query(`
+        SELECT pc.*, t.name AS tenant_name, t.slug AS tenant_slug
+        FROM public.tenant_profile_changes pc
+        JOIN public.tenants t ON pc.schema_name = t.schema_name
+        WHERE ($1 = 'all' OR pc.status = $1)
+        ORDER BY pc.requested_at DESC
+        LIMIT 100
+      `, [statusFilter])
+      return ok(res, { changes: changesR.rows })
+    }
+
+    // ─── PATCH /api/super-admin?action=profile-changes&id=X ─────────
+    // Super admin approves or rejects a profile change request
+    if (action === 'profile-changes' && req.method === 'PATCH') {
+      const changeId = Number(req.query.id)
+      const { decision, reject_reason } = req.body || {}
+      if (!changeId) return err(res, 'Change ID required', 400)
+      if (!['approved', 'rejected'].includes(decision)) return err(res, 'Decision must be approved or rejected', 400)
+
+      const changeR = await pool.query(
+        'SELECT * FROM public.tenant_profile_changes WHERE id = $1',
+        [changeId]
+      )
+      if (changeR.rows.length === 0) return err(res, 'Change request not found', 404)
+      const change = changeR.rows[0]
+      if (change.status !== 'pending') return err(res, 'This request has already been reviewed', 400)
+
+      // If approved, apply the change to both public.tenants and the tenant's settings table
+      if (decision === 'approved') {
+        try {
+          // Apply to public.tenants
+          if (change.field === 'cafe_name') {
+            await pool.query('UPDATE public.tenants SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE schema_name = $2', [change.new_value, change.schema_name])
+          } else if (change.field === 'counter_phone') {
+            await pool.query('UPDATE public.tenants SET phone = $1, updated_at = CURRENT_TIMESTAMP WHERE schema_name = $2', [change.new_value, change.schema_name])
+          } else if (change.field === 'cafe_logo') {
+            await pool.query('UPDATE public.tenants SET logo_url = $1, updated_at = CURRENT_TIMESTAMP WHERE schema_name = $2', [change.new_value, change.schema_name])
+          }
+
+          // Apply to tenant schema settings
+          await pool.query(`
+            INSERT INTO "${change.schema_name}".settings (key, value)
+            VALUES ($1, $2)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+          `, [change.field, change.new_value])
+        } catch (e) {
+          console.error('Failed to apply profile change:', e)
+          return err(res, 'Failed to apply change: ' + e.message, 500)
+        }
+      }
+
+      // Update status
+      await pool.query(`
+        UPDATE public.tenant_profile_changes
+        SET status = $1, reviewed_by = $2, reviewed_at = CURRENT_TIMESTAMP, reject_reason = $3
+        WHERE id = $4
+      `, [decision, superAdminEmail, reject_reason || null, changeId])
+
+      // Audit log
+      await pool.query(`
+        INSERT INTO public.super_admin_audit_logs (super_admin_id, super_admin_email, action, target_org_id, details)
+        VALUES ($1, $2, 'PROFILE_CHANGE_' || UPPER($3), $4, $5)
+      `, [
+        superAdminId, superAdminEmail, decision,
+        change.schema_name,
+        `${decision === 'approved' ? 'Approved' : 'Rejected'} profile change request for field "${change.field}" from "${change.old_value}" to "${change.new_value}"${reject_reason ? ` — Reason: ${reject_reason}` : ''}`
+      ])
+
+      return ok(res, { success: true, decision, change_id: changeId })
     }
 
     return err(res, 'Method not allowed', 405)

@@ -62,6 +62,13 @@ export default function TenantManagement() {
   const [resetting, setResetting] = useState(false)
   const [syncingClerk, setSyncingClerk] = useState(false)
 
+  // Profile change requests
+  const [profileChanges, setProfileChanges] = useState([])
+  const [profileChangesLoading, setProfileChangesLoading] = useState(false)
+  const [reviewModal, setReviewModal] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [reviewSaving, setReviewSaving] = useState(false)
+
   const loadTenants = useCallback(async () => {
     try {
       setLoading(true)
@@ -77,7 +84,36 @@ export default function TenantManagement() {
 
   useEffect(() => {
     loadTenants()
+    loadProfileChanges()
   }, [loadTenants])
+
+  const loadProfileChanges = async () => {
+    setProfileChangesLoading(true)
+    try {
+      const res = await api.get('/super-admin?action=profile-changes&status=pending')
+      setProfileChanges(res.changes || [])
+    } catch {}
+    finally { setProfileChangesLoading(false) }
+  }
+
+  const handleProfileChangeDecision = async (changeId, decision) => {
+    if (decision === 'rejected' && !rejectReason.trim()) {
+      toast.error('Please provide a reason for rejection.')
+      return
+    }
+    setReviewSaving(true)
+    try {
+      await api.patch(`/super-admin?action=profile-changes&id=${changeId}`, { decision, reject_reason: rejectReason || null })
+      toast.success(`Change request ${decision === 'approved' ? 'approved' : 'rejected'}!`)
+      setReviewModal(null)
+      setRejectReason('')
+      loadProfileChanges()
+      loadTenants()
+    } catch (e) {
+      toast.error(e.message)
+    } finally {
+      setReviewSaving(false) }
+  }
 
   const handleCreateOrg = async () => {
     if (!createForm.name?.trim() || !createForm.admin_email?.trim()) {
@@ -281,7 +317,7 @@ export default function TenantManagement() {
                   Admin: <strong style={{ color: 'var(--text)' }}>@{createForm.slug ? `${createForm.slug}_admin` : '..._admin'}</strong>
                 </div>
                 <div style={{ flex: 1, padding: '0.4rem 0.65rem', borderRadius: '8px', background: 'var(--bg-card)', border: '1px solid var(--border)', fontSize: '0.75rem', fontFamily: 'monospace', color: 'var(--text-muted)' }}>
-                  Staff: <strong style={{ color: 'var(--text)' }}>@{createForm.slug ? `${createForm.slug}_staff` : '..._staff'}</strong>
+                  Operator: <strong style={{ color: 'var(--text)' }}>@{createForm.slug ? `${createForm.slug}_operator` : '..._operator'}</strong>
                 </div>
               </div>
             </div>
@@ -357,7 +393,7 @@ export default function TenantManagement() {
             <span>Immutable Handles:</span>
             <strong style={{ color: 'var(--accent-text)' }}>@{editTenant?.slug}_admin</strong>
             <span>•</span>
-            <strong style={{ color: 'var(--accent-text)' }}>@{editTenant?.slug}_staff</strong>
+            <strong style={{ color: 'var(--accent-text)' }}>@{editTenant?.slug}_operator</strong>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <Field label="Plan">
@@ -456,6 +492,104 @@ export default function TenantManagement() {
           </div>
         </div>
       </Modal>
+
+      {/* ─── PROFILE CHANGE REVIEW MODAL ─── */}
+      <Modal open={!!reviewModal} onClose={() => { setReviewModal(null); setRejectReason('') }} title="Review Profile Change Request">
+        {reviewModal && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              <div style={{ padding: '0.85rem 1rem', background: 'var(--bg-input)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                <p style={{ margin: '0 0 0.35rem', fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  {reviewModal.tenant_name} — {reviewModal.field === 'cafe_name' ? 'Cafe Name' : reviewModal.field === 'counter_phone' ? 'Counter Phone' : 'Brand Logo'}
+                </p>
+                <p style={{ margin: '0 0 0.25rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  From: <span style={{ textDecoration: 'line-through', color: 'var(--text-faint)' }}>{reviewModal.old_value || '(not set)'}</span>
+                </p>
+                <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--accent-text)' }}>
+                  To: {reviewModal.field === 'cafe_logo' ? <a href={reviewModal.new_value} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>View uploaded logo</a> : reviewModal.new_value}
+                </p>
+              </div>
+              {reviewModal.field === 'cafe_logo' && (
+                <img src={reviewModal.new_value} alt="New Logo" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '12px', border: '1.5px solid var(--border)' }} />
+              )}
+              <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                Requested by <strong>{reviewModal.requested_by}</strong>
+              </p>
+            </div>
+
+            <Field label="Reason for Rejection (required if rejecting)">
+              <input
+                className="input"
+                placeholder="e.g. Name does not comply with platform naming policy..."
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+              />
+            </Field>
+
+            <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+              <button
+                onClick={() => handleProfileChangeDecision(reviewModal.id, 'approved')}
+                disabled={reviewSaving}
+                className="btn-primary"
+                style={{ flex: 1, background: 'var(--success)' }}
+              >
+                {reviewSaving ? <><Spinner size="sm" /> Processing...</> : '✓ Approve & Apply'}
+              </button>
+              <button
+                onClick={() => handleProfileChangeDecision(reviewModal.id, 'rejected')}
+                disabled={reviewSaving}
+                className="btn-danger"
+                style={{ flex: 1 }}
+              >
+                ✗ Reject
+              </button>
+              <button onClick={() => { setReviewModal(null); setRejectReason('') }} className="btn-secondary">Cancel</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ─── PENDING PROFILE CHANGES PANEL ─── */}
+      {profileChanges.length > 0 && (
+        <div style={{
+          padding: '1.15rem 1.25rem', borderRadius: '12px',
+          background: 'rgba(245,158,11,0.07)', border: '1.5px solid rgba(245,158,11,0.3)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.9rem' }}>
+            <AlertCircle size={16} style={{ color: '#f59e0b' }} />
+            <strong style={{ fontSize: '0.9rem', color: 'var(--text)' }}>
+              {profileChanges.length} Pending Identity Change Request{profileChanges.length !== 1 ? 's' : ''}
+            </strong>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>Tenant admins are waiting for your review</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {profileChanges.map(change => (
+              <div key={change.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap',
+                padding: '0.75rem 0.9rem', borderRadius: '10px', background: 'var(--bg-card)', border: '1px solid var(--border)'
+              }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: 'var(--text)' }}>
+                    <span className="badge badge-accent" style={{ fontSize: '0.68rem', marginRight: '0.4rem' }}>{change.tenant_name}</span>
+                    {change.field === 'cafe_name' ? 'Name' : change.field === 'counter_phone' ? 'Phone' : 'Logo'}
+                    {' '}→ <span style={{ color: 'var(--accent-text)' }}>{change.field === 'cafe_logo' ? '(new logo)' : change.new_value}</span>
+                  </p>
+                  <p style={{ margin: '0.15rem 0 0', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                    by {change.requested_by} · {change.requested_at ? new Date(change.requested_at).toLocaleDateString() : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setReviewModal(change); setRejectReason('') }}
+                  className="btn-primary"
+                  style={{ fontSize: '0.78rem', padding: '0.4rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  <Shield size={12} /> Review
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ─── TOP HEADER BAR ─── */}
       <div style={{

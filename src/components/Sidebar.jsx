@@ -77,8 +77,8 @@ export default function Sidebar() {
   const activeMobileNav = visibleNav.slice(0, 4)
   const moreMobileNav = visibleNav.slice(4)
 
-  const currentDisplayName = activeTenant?.name || cafeName || 'Gaming Lounge'
-  const initials = currentDisplayName.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase() || 'GL'
+  const currentDisplayName = cafeName || activeTenant?.name || 'Nexus Console'
+  const initials = currentDisplayName.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase() || 'NC'
 
   return (
     <>

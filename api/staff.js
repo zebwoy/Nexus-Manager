@@ -101,12 +101,19 @@ export default async function handler(req, res) {
         const tenantR = await pool.query('SELECT name, admin_name, admin_email FROM public.tenants WHERE schema_name = $1', [schemaName])
         if (tenantR.rows.length > 0 && tenantR.rows[0].admin_email) {
           const t = tenantR.rows[0]
+          // Sync real admin name if: name is placeholder, name is email prefix, or name is missing
+          const emailPrefix = t.admin_email.split('@')[0].replace(/[^a-z0-9_]/gi, '')
           await client.query(`
             UPDATE users
             SET full_name = COALESCE(NULLIF($1, ''), full_name),
                 email = $2
-            WHERE role = 'admin' AND (email IS NULL OR full_name = 'Cafe Administrator')
-          `, [t.admin_name || t.admin_email.split('@')[0], t.admin_email])
+            WHERE role = 'admin' AND (
+              email IS NULL OR
+              full_name = 'Cafe Administrator' OR
+              LOWER(full_name) = LOWER($3) OR
+              full_name = ''
+            )
+          `, [t.admin_name || t.admin_email.split('@')[0], t.admin_email, emailPrefix])
         }
       } catch {}
 
@@ -134,7 +141,7 @@ export default async function handler(req, res) {
 
       const cleanPin = pin && /^\d{4}$/.test(pin) ? pin : '1234'
       const username = email.trim().toLowerCase().split('@')[0].replace(/[^a-z0-9_]/g, '')
-      const assignedRole = role === 'admin' ? 'admin' : 'staff'
+      const assignedRole = role === 'admin' ? 'admin' : 'operator'
 
       // 1. Insert/update in private tenant schema users table
       const userR = await client.query(
@@ -180,6 +187,14 @@ export default async function handler(req, res) {
       const current = curR.rows[0]
       if (current.role === 'super_admin' || current.username === 'superadmin') {
         return err(res, 'Access denied: Cannot modify platform super administrator accounts', 403)
+      }
+
+      // Access control: operators can only update their own PIN, admins can update anyone
+      const callerRole = req.headers['x-role'] || 'operator'
+      const callerUsername = req.headers['x-username'] || ''
+      const isCallerAdmin = callerRole === 'admin' || callerUsername.endsWith('_admin')
+      if (!isCallerAdmin && current.username !== callerUsername) {
+        return err(res, 'Access denied: You can only update your own PIN', 403)
       }
 
       const nextName = full_name || current.full_name
@@ -230,6 +245,20 @@ export default async function handler(req, res) {
 
       if (current.role === 'super_admin' || current.username === 'superadmin') {
         return err(res, 'Access denied: Cannot delete platform super administrator accounts', 403)
+      }
+
+      // Admin cannot delete themselves
+      const callerRole2 = req.headers['x-role'] || 'operator'
+      const callerUsername2 = req.headers['x-username'] || ''
+      const isCallerAdmin2 = callerRole2 === 'admin' || callerUsername2.endsWith('_admin')
+      if (current.username === callerUsername2) {
+        if (current.role === 'admin') {
+          return err(res, 'Admins cannot delete their own account. Contact your Super Admin.', 403)
+        }
+        // Operators can delete themselves — allowed, fall through
+      } else if (!isCallerAdmin2) {
+        // Non-admin trying to delete someone else
+        return err(res, 'Access denied: You can only delete your own account', 403)
       }
       if (current.role === 'admin' && current.username === 'admin') {
         return err(res, 'Cannot delete the primary cafe admin account', 400)

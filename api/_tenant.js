@@ -256,11 +256,15 @@ CREATE INDEX IF NOT EXISTS idx_session_payments_session_id ON session_payments (
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_customers_search ON customers (name, mobile, shop_name);
 
--- Default Settings
+-- Default Settings (org_slug populated by super admin provisioning)
 INSERT INTO settings (key, value) VALUES
 ('controller_fee', '25'),
 ('extra_person_fee', '15'),
-('extra_person_from', '3')
+('extra_person_from', '3'),
+('cafe_name', 'Gaming Lounge'),
+('org_slug', 'org'),
+('counter_phone', ''),
+('cafe_logo', '')
 ON CONFLICT (key) DO NOTHING;
 
 -- Default Devices
@@ -348,6 +352,24 @@ export async function ensureGlobalRegistry(pool) {
         details TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
+
+    -- Tenant profile change requests (Option B approval flow)
+    CREATE TABLE IF NOT EXISTS public.tenant_profile_changes (
+        id SERIAL PRIMARY KEY,
+        schema_name VARCHAR(100) NOT NULL REFERENCES public.tenants(schema_name) ON DELETE CASCADE,
+        field VARCHAR(50) NOT NULL CHECK (field IN ('cafe_name', 'counter_phone', 'cafe_logo')),
+        old_value TEXT,
+        new_value TEXT NOT NULL,
+        logo_filename VARCHAR(255),
+        status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+        requested_by VARCHAR(255) NOT NULL,
+        requested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        reviewed_by VARCHAR(255),
+        reviewed_at TIMESTAMP WITH TIME ZONE,
+        reject_reason TEXT
+    );
+
+    ALTER TABLE public.tenant_profile_changes ADD COLUMN IF NOT EXISTS logo_filename VARCHAR(255);
   `)
 }
 

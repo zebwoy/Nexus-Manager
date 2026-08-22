@@ -46,7 +46,8 @@ export function AuthProvider({ children }) {
   const isTrial = user?.username === 'trial'
   const isSuperAdmin = !isTrial && (user?.role === 'super_admin' || user?.username === 'superadmin' || user?.is_super_admin === true)
   const isAdmin = !isTrial && (user?.role === 'admin' || user?.role === 'super_admin')
-  const isOperator = user?.role === 'operator' || isTrial
+  // Backwards compat: role was 'staff' before rename to 'operator'
+  const isOperator = user?.role === 'operator' || user?.role === 'staff' || isTrial
 
   return (
     <AuthContext.Provider value={{
@@ -55,6 +56,8 @@ export function AuthProvider({ children }) {
       logout,
       isAdmin,
       isSuperAdmin,
+      isTrial,
+      isOperator,
       activeTenant,
       setActiveTenant
     }}>

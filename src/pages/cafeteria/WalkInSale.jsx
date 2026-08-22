@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatRupees, todayISO, validateFirstName, validateMobile } from '../../lib/helpers'
 import { Field, ErrorMsg, TrialWarningModal, Modal, Spinner } from '../../components/UI'
+import SplitPayment from '../../components/SplitPayment'
 import { useAuth } from '../../context/AuthContext'
 import { ShoppingBag, Share2, Printer, CheckCircle } from 'lucide-react'
 
@@ -14,7 +15,8 @@ export default function WalkInSale() {
   const [customer, setCustomer] = useState({ id: null, name: '', shop_name: '', mobile: '' })
   const [customerSuggestions, setCustomerSuggestions] = useState([])
   const [payment, setPayment] = useState('')
-  const [payMethod, setPayMethod] = useState('cash')
+  const [cashAmount, setCashAmount] = useState('')
+  const [onlineAmount, setOnlineAmount] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
@@ -74,7 +76,10 @@ export default function WalkInSale() {
     setError('')
     try {
       const saleTotal = total
-      const paidAmount = payment !== '' ? Number(payment) : saleTotal
+      const cash = Number(cashAmount || 0)
+      const online = Number(onlineAmount || 0)
+      const paidAmount = (cash + online) > 0 ? (cash + online) : saleTotal
+      const payMethod = cash > 0 && online > 0 ? 'split' : online > 0 ? 'online' : 'cash'
       const res = await api.post('/sales', {
         sale_type: 'walkin',
         date: todayISO(),
@@ -288,18 +293,15 @@ export default function WalkInSale() {
                     <span style={{ color: 'var(--accent-text)' }}>{formatRupees(total)}</span>
                   </div>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                    <Field label="Amount Paid (₹)">
-                      <input type="number" className="input" placeholder={total} value={payment} onChange={e => setPayment(e.target.value)} />
-                    </Field>
-                    <Field label="Payment Mode">
-                      <select className="input" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
-                        <option value="cash">Cash</option>
-                        <option value="online">Online / UPI</option>
-                        <option value="credit">Credit / Due</option>
-                      </select>
-                    </Field>
-                  </div>
+                  <SplitPayment
+                    cashValue={cashAmount}
+                    onlineValue={onlineAmount}
+                    onCashChange={setCashAmount}
+                    onOnlineChange={setOnlineAmount}
+                    totalBill={total}
+                    label="Payment Collection"
+                    compact
+                  />
                   
                   <button onClick={handleSubmit} disabled={loading} className="btn-primary" style={{ width: '100%', marginTop: '0.5rem', padding: '0.65rem 1.25rem' }}>
                     {loading ? <><Spinner size="sm" /> Processing Sale...</> : 'Finalize Foreign Sale'}

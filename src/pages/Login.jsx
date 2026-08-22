@@ -19,6 +19,8 @@ export default function Login() {
   const [isFocused, setIsFocused] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
+  const [redirectMsg, setRedirectMsg] = useState('')
   const hiddenInputRef = useRef(null)
   const { user, login } = useAuth()
   const { isDark, toggleDark, accentId, setAccentId } = useTheme()
@@ -43,6 +45,10 @@ export default function Login() {
           return
         }
 
+        // Show transition loader while resolving membership
+        setIsRedirecting(true)
+        setRedirectMsg('Authenticating your console access...')
+
         // Check Admin vs Staff membership
         api.get('/staff?action=my-invites')
           .then(res => {
@@ -53,23 +59,27 @@ export default function Login() {
                 full_name: clerkUser.fullName || 'Cafe Administrator',
                 role: 'admin'
               }
+              setRedirectMsg('Loading admin console...')
               login(userData)
               navigate('/')
             } else if (res.staff_invites?.some(s => s.membership_status === 'active')) {
               const activeS = res.staff_invites.find(s => s.membership_status === 'active')
               const userData = {
                 id: activeS.invite_id || 1,
-                username: clerkUser.username || email.split('@')[0] || 'staff',
-                full_name: clerkUser.fullName || activeS.staff_name || 'Counter Staff',
-                role: 'staff'
+                username: clerkUser.username || email.split('@')[0] || 'operator',
+                full_name: clerkUser.fullName || activeS.staff_name || 'Counter Operator',
+                role: 'operator'
               }
+              setRedirectMsg('Entering operator console...')
               login(userData)
               navigate('/')
             } else {
+              setIsRedirecting(false)
               navigate('/join-organization')
             }
           })
           .catch(() => {
+            setIsRedirecting(false)
             navigate('/join-organization')
           })
       }
@@ -146,6 +156,62 @@ export default function Login() {
       position: 'relative',
       overflow: 'hidden'
     }}>
+
+      {/* ─── TRANSITION LOADER OVERLAY ─── */}
+      {isRedirecting && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'var(--bg)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: '1.5rem',
+          animation: 'fadeIn 0.25s ease'
+        }}>
+          {/* Logo glow */}
+          <div style={{ position: 'relative' }}>
+            <div style={{
+              position: 'absolute', inset: '-12px',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, var(--accent-dim) 0%, transparent 70%)',
+              animation: 'pulse 1.8s ease-in-out infinite'
+            }} />
+            <div style={{
+              width: '72px', height: '72px', borderRadius: '18px',
+              background: 'linear-gradient(135deg, var(--accent) 0%, rgba(59,130,246,0.5) 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.25), 0 0 0 1px var(--accent-border)',
+              position: 'relative'
+            }}>
+              <Sparkles size={30} style={{ color: '#fff' }} />
+            </div>
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>
+              Nexus Manager
+            </p>
+            <p style={{ margin: '0.35rem 0 0', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+              {redirectMsg}
+            </p>
+          </div>
+
+          {/* Pulsing dots */}
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{
+                width: '8px', height: '8px', borderRadius: '50%',
+                background: 'var(--accent)',
+                animation: `bounceDot 1.2s ease-in-out ${i * 0.2}s infinite`
+              }} />
+            ))}
+          </div>
+
+          <style>{`
+            @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+            @keyframes pulse { 0%,100% { opacity: 0.5; transform: scale(1) } 50% { opacity: 1; transform: scale(1.08) } }
+            @keyframes bounceDot { 0%,100% { transform: translateY(0); opacity: 0.4 } 50% { transform: translateY(-8px); opacity: 1 } }
+          `}</style>
+        </div>
+      )}
 
       {/* Ambient background glow effects */}
       <div style={{

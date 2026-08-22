@@ -13,6 +13,10 @@
     { "source": "/api/purge",                 "destination": "/api/setup?resource=purge" },
     { "source": "/api/platforms",             "destination": "/api/setup?resource=platforms" },
 
+    { "source": "/api/blob-upload",           "destination": "/api/blob-upload" },
+    { "source": "/api/profile-changes",       "destination": "/api/profile-changes" },
+    { "source": "/api/profile-changes/(.*)",  "destination": "/api/profile-changes?id=$1" },
+
     { "source": "/api/pancafe-plans",         "destination": "/api/pancafe?resource=plans" },
     { "source": "/api/pancafe-plans/(.*)",    "destination": "/api/pancafe?resource=plans&id=$1" },
 
