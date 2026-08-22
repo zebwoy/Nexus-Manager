@@ -247,10 +247,13 @@ export default async function handler(req, res) {
       }
     }
 
-    // ─── Route: /api/sessions/:id ────────────────────────────────
+    // ─── Route: /api/sessions/:id or /api/sessions?id=X ───────────────────
+    const queryId = req.query.id ? Number(req.query.id) : null
     const idMatch = subPath.match(/^(\d+)(\?|$)/) || rawUrl.match(/\/sessions\/(\d+)(\?|$)/)
-    if (idMatch && !subPath.includes('payments') && !subPath.includes('extend') && !subPath.includes('end-early') && !subPath.includes('switch-station') && !rawUrl.includes('/payments') && !rawUrl.includes('/extend') && !rawUrl.includes('/end-early') && !rawUrl.includes('/switch-station')) {
-      const sessionId = Number(idMatch[1])
+    const sessionId = idMatch ? Number(idMatch[1]) : queryId
+
+    if (sessionId && !subPath.includes('payments') && !subPath.includes('extend') && !subPath.includes('end-early') && !subPath.includes('switch-station') && !rawUrl.includes('/payments') && !rawUrl.includes('/extend') && !rawUrl.includes('/end-early') && !rawUrl.includes('/switch-station')) {
+
 
       if (req.method === 'GET') {
         const [sessR, playersR, salesR, paymentsR] = await Promise.all([
