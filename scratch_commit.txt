@@ -1,8 +1,0 @@
-feat(sessions): support non-regressive predated session entries across regular and PanCafe sessions
-
-- Aligned session_payments.created_at with session timestamp for predated sessions to prevent EOD physical cash drawer contamination
-- Added SESSION_CREATE_PREDATED and PANCAFE_CREATE_PREDATED audit log events with full metadata
-- Implemented robust ISO datetime arithmetic for session duration and post-midnight boundaries
-- Added 'Backdated Entry Mode' visual banner on NewSession and NewPanCafe forms when a past date is selected
-- Added 'Backdated' badges on Sessions and PanCafe tables, and SessionDetail view
-- Preserved date filter query parameter on form submissions and back navigation
