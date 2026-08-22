@@ -1,6 +1,0 @@
-feat(ui): implement bespoke tactile React calendar dropdown replacing browser OS popup
-
-- Built custom tactile DateInput popup with full month/year selector, days grid with prev/next month dimming, and quick Clear/Today shortcuts
-- Removed dependency on un-stylable Chromium native OS shadow DOM popup
-- Added day stepping (< and >), smooth pop-in animations, and escape/click-outside dismissal
-- Fully integrated across Sessions, PanCafe, NewSession, Expenses, Recharges, and Inventory logs
