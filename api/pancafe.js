@@ -82,7 +82,8 @@ export default async function handler(req, res) {
         SELECT ps.*, c.name, c.mobile, c.shop_name,
                d.label AS device_label,
                pp.label AS plan_label, pp.hours AS plan_hours,
-               u.username AS created_by_username
+               u.username AS created_by_username,
+               (ps.date < ps.created_at::date) AS is_predated
         FROM pancafe_sessions ps
         LEFT JOIN customers c ON c.id = ps.customer_id
         LEFT JOIN devices d ON d.id = ps.device_id
@@ -115,6 +116,10 @@ export default async function handler(req, res) {
       } = b
 
       if (!pancafe_username) return err(res, 'PanCafe username is required')
+
+      const sessDate = date || new Date().toISOString().slice(0, 10)
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const isPredated = sessDate < todayStr
 
       await client.query('BEGIN')
       try {
@@ -150,7 +155,7 @@ export default async function handler(req, res) {
             pancafe_username,
             device_id || null,
             plan_id || null,
-            date || new Date().toISOString().slice(0, 10),
+            sessDate,
             time_in || null,
             time_out || null,
             Number(amount_received || 0),
@@ -159,9 +164,30 @@ export default async function handler(req, res) {
             userId
           ]
         )
+        const pancafeSessId = r.rows[0].id
+
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata)
+           VALUES ($1, $2, $3, 'pancafe', $4, $5)`,
+          [
+            userId ? Number(userId) : null,
+            req.headers['x-username'] || 'staff',
+            isPredated
+              ? `[BACKDATED ENTRY] Logged past PanCafe session #${pancafeSessId} for ${sessDate} (User: ${pancafe_username})`
+              : `Logged PanCafe session #${pancafeSessId} for ${sessDate} (User: ${pancafe_username})`,
+            JSON.stringify({
+              pancafeSessId,
+              is_predated: isPredated,
+              business_date: sessDate,
+              pancafe_username,
+              amount_received,
+              created_at: new Date().toISOString()
+            })
+          ]
+        )
 
         await client.query('COMMIT')
-        return ok(res, { id: r.rows[0].id }, 201)
+        return ok(res, { id: pancafeSessId, is_predated: isPredated }, 201)
       } catch (e) {
         await client.query('ROLLBACK')
         throw e

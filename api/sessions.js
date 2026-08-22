@@ -256,7 +256,8 @@ export default async function handler(req, res) {
         const [sessR, playersR, salesR, paymentsR] = await Promise.all([
           client.query(
             `SELECT s.*, c.name, c.mobile, c.shop_name, d.label AS device_label, d.type AS device_type,
-                    u.username AS created_by_username
+                    u.username AS created_by_username,
+                    (s.date < s.created_at::date) AS is_predated
              FROM sessions s
              LEFT JOIN customers c ON c.id = s.customer_id
              JOIN devices d ON d.id = s.device_id
@@ -322,7 +323,7 @@ export default async function handler(req, res) {
           )
 
           await client.query('COMMIT')
-          return ok(res, { session: updated.rows[0] })
+          return ok(res, { success: true, ...updated.rows[0] })
         } catch (e) {
           await client.query('ROLLBACK')
           throw e
@@ -336,17 +337,26 @@ export default async function handler(req, res) {
             `SELECT s.*, d.label AS device_label FROM sessions s JOIN devices d ON d.id = s.device_id WHERE s.id = $1`,
             [sessionId]
           )
-          if (sessR.rowCount === 0) { await client.query('ROLLBACK'); return err(res, 'Session not found', 404) }
+          if (sessR.rowCount === 0) {
+            await client.query('ROLLBACK')
+            return err(res, 'Session not found', 404)
+          }
           const sess = sessR.rows[0]
 
-          const salesR = await client.query(`SELECT id FROM sales WHERE session_id = $1`, [sessionId])
-          for (const sale of salesR.rows) {
-            const itemsR = await client.query(`SELECT item_id, qty FROM sale_items WHERE sale_id = $1`, [sale.id])
-            for (const item of itemsR.rows) {
-              await client.query(`UPDATE inventory_items SET stock_qty = stock_qty + $1 WHERE id = $2`, [item.qty, item.item_id])
-            }
-            await client.query(`DELETE FROM sales WHERE id = $1`, [sale.id])
+          // Return any unreturned cafeteria inventory stock
+          const salesR = await client.query(
+            `SELECT si.item_id, si.qty FROM sales s
+             JOIN sale_items si ON si.sale_id = s.id
+             WHERE s.session_id = $1 AND s.is_deleted = FALSE`,
+            [sessionId]
+          )
+          for (const item of salesR.rows) {
+            await client.query(
+              `UPDATE inventory_items SET stock_qty = stock_qty + $1 WHERE id = $2`,
+              [item.qty, item.item_id]
+            )
           }
+          await client.query(`UPDATE sales SET is_deleted = TRUE WHERE session_id = $1`, [sessionId])
 
           await client.query(`UPDATE sessions SET is_deleted = TRUE WHERE id = $1`, [sessionId])
           await client.query(
@@ -377,7 +387,8 @@ export default async function handler(req, res) {
       let query = `
         SELECT s.*, c.name, c.mobile, c.shop_name, d.label AS device_label, d.type AS device_type,
                u.username AS created_by_username,
-               (s.time_out > NOW() AND s.date = CURRENT_DATE) AS is_active
+               (s.time_out > NOW() AND s.date = CURRENT_DATE) AS is_active,
+               (s.date < s.created_at::date) AS is_predated
         FROM sessions s
         LEFT JOIN customers c ON c.id = s.customer_id
         JOIN devices d ON d.id = s.device_id
@@ -430,6 +441,11 @@ export default async function handler(req, res) {
         finalMethod = payment_method || (finalCredit > 0 ? 'credit' : 'cash')
       }
 
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const isPredated = date && date < todayStr
+      // If session is predated, timestamp initial payment to the session datetime to preserve past ledger integrity & avoid contaminating today's EOD cash drawer
+      const paymentCreatedAt = time_in ? new Date(time_in).toISOString() : new Date().toISOString()
+
       await client.query('BEGIN')
       try {
         let cid = customer_id
@@ -471,20 +487,20 @@ export default async function handler(req, res) {
         if (hasSplit) {
           if (cashAmt > 0) {
             await client.query(
-              `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by) VALUES ($1,$2,'cash','Initial cash payment',$3)`,
-              [sessionId, cashAmt, userId || null]
+              `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by, created_at) VALUES ($1,$2,'cash','Initial cash payment',$3,$4)`,
+              [sessionId, cashAmt, userId || null, paymentCreatedAt]
             )
           }
           if (onlineAmt > 0) {
             await client.query(
-              `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by) VALUES ($1,$2,'online','Initial online payment',$3)`,
-              [sessionId, onlineAmt, userId || null]
+              `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by, created_at) VALUES ($1,$2,'online','Initial online payment',$3,$4)`,
+              [sessionId, onlineAmt, userId || null, paymentCreatedAt]
             )
           }
         } else if (finalPayment > 0) {
           await client.query(
-            `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by) VALUES ($1,$2,$3,'Initial payment',$4)`,
-            [sessionId, finalPayment, finalMethod === 'credit' ? 'cash' : finalMethod, userId || null]
+            `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by, created_at) VALUES ($1,$2,$3,'Initial payment',$4,$5)`,
+            [sessionId, finalPayment, finalMethod === 'credit' ? 'cash' : finalMethod, userId || null, paymentCreatedAt]
           )
         }
 
@@ -497,8 +513,31 @@ export default async function handler(req, res) {
           }
         }
 
+        // Audit Log entry with predated flag
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata)
+           VALUES ($1, $2, $3, 'sessions', $4, $5)`,
+          [
+            userId ? Number(userId) : null,
+            req.headers['x-username'] || 'staff',
+            isPredated
+              ? `[BACKDATED ENTRY] Created past session #${sessionId} for ${date} (${duration_mins}m)`
+              : `Created session #${sessionId} for ${date} (${duration_mins}m)`,
+            JSON.stringify({
+              sessionId,
+              is_predated: isPredated,
+              business_date: date,
+              time_in,
+              time_out,
+              total,
+              payment: finalPayment,
+              created_at: new Date().toISOString()
+            })
+          ]
+        )
+
         await client.query('COMMIT')
-        return ok(res, { id: sessionId }, 201)
+        return ok(res, { id: sessionId, is_predated: isPredated }, 201)
       } catch (e) {
         await client.query('ROLLBACK')
         throw e

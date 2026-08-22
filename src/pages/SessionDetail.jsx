@@ -556,14 +556,14 @@ export default function SessionDetail() {
 
       {/* Header */}
       <div style={{ marginBottom: '1.75rem' }}>
-        <button onClick={() => navigate('/sessions')} className="btn-secondary btn-sm"
+        <button onClick={() => navigate(s.date ? `/sessions?date=${s.date}` : '/sessions')} className="btn-secondary btn-sm"
           style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '1rem', padding: '0.35rem 0.75rem' }}>
           <ArrowLeft size={14} /> Back to Sessions
         </button>
 
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
               <h1 className="page-title" style={{ margin: 0 }}>
                 {s.name || 'Anonymous Client'}
               </h1>
@@ -571,6 +571,11 @@ export default function SessionDetail() {
               {isActive
                 ? <span className="badge-active-session animate-pulse">ACTIVE</span>
                 : <span className="badge badge-neutral">COMPLETED</span>}
+              {s.is_predated && (
+                <span className="badge badge-neutral" style={{ border: '1px solid var(--border)', fontSize: '0.68rem' }} title="This session was recorded on a date after it took place">
+                  Backdated Entry
+                </span>
+              )}
             </div>
             <p className="page-sub" style={{ marginTop: '0.35rem' }}>
               {formatDate(s.date)} · {formatTime(s.time_in)} to {formatTime(s.time_out)} ({formatDuration(s.duration_mins)})

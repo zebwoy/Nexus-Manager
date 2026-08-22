@@ -4,9 +4,10 @@ import { api } from '../lib/api'
 import { DURATION_OPTIONS, formatRupees, todayISO, nowTimeInput, toISO, addMinutes, formatDuration, validateName, validateMobile, calculateDynamicTariff } from '../lib/helpers'
 import { Field, ErrorMsg, Spinner } from '../components/UI'
 import DurationSelector from '../components/DurationSelector'
+import { toast } from 'react-toastify'
 import {
   Banknote, CreditCard, Smartphone, Moon,
-  Gamepad2, Users, Plus, X, Receipt, CheckCircle2
+  Gamepad2, Users, Plus, X, Receipt, CheckCircle2, Calendar
 } from 'lucide-react'
 
 const DEVICE_TYPES = { PC: 'PC', XBOX: 'XBOX', PS: 'PS' }
@@ -147,6 +148,8 @@ export default function NewSession() {
     idx === i ? { ...pl, own_controller: !pl.own_controller } : pl
   ))
 
+  const isPredated = Boolean(form.date && form.date < todayISO())
+
   const handleSubmit = async (e) => {
     if (e?.preventDefault) e.preventDefault()
     setError('')
@@ -162,8 +165,11 @@ export default function NewSession() {
 
     try {
       setLoading(true)
-      const timeInISO = toISO(form.date, form.time_in)
-      const timeOutISO = toISO(form.date, timeOut)
+      const startDt = new Date(`${form.date}T${form.time_in}`)
+      const timeInISO = startDt.toISOString()
+      const endDt = addMinutes(startDt, Number(form.duration_mins))
+      const timeOutISO = endDt.toISOString()
+
       const playersPayload = isConsole
         ? players.map((p, i) => ({
             player_number: i + 1,
@@ -198,8 +204,9 @@ export default function NewSession() {
         payload.payment_method   = 'credit'
       }
 
-      await api.post('/sessions', payload)
-      navigate('/sessions')
+      const res = await api.post('/sessions', payload)
+      toast.success(isPredated ? `Backdated session #${res.id} recorded for ${form.date}` : `Session #${res.id} created`)
+      navigate(`/sessions?date=${form.date}`)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -220,10 +227,24 @@ export default function NewSession() {
   return (
     <div style={{ maxWidth: '640px', margin: '0 auto' }}>
       {/* Page Header */}
-      <div style={{ marginBottom: '2rem' }}>
+      <div style={{ marginBottom: '1.5rem' }}>
         <h1 className="page-title">New Session</h1>
         <p className="page-sub">Establish operator connection and session allocation</p>
       </div>
+
+      {isPredated && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.85rem 1.1rem',
+          background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)',
+          borderRadius: '10px', fontSize: '0.825rem', color: 'var(--accent-text)', fontWeight: 650,
+          marginBottom: '1.25rem'
+        }}>
+          <Calendar size={16} style={{ flexShrink: 0 }} />
+          <span>
+            <strong>Backdated Entry Mode:</strong> Recording historical session for <strong>{form.date}</strong>. This record will not occupy today&apos;s live station grid or alter today&apos;s cash drawer.
+          </span>
+        </div>
+      )}
 
       <ErrorMsg error={error} />
 

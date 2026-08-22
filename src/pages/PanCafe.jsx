@@ -1,24 +1,27 @@
 // ─── PanCafe Page ─────────────────────────────────────────────
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatRupees, formatTime, formatDate, todayISO, validateName, validateMobile } from '../lib/helpers'
 import { useAuth } from '../context/AuthContext'
 import { PageLoader, EmptyState, ErrorMsg, Field, Modal, Spinner, TrialWarningModal } from '../components/UI'
 import LogSessionModal from '../components/LogSessionModal'
-import { Coffee } from 'lucide-react'
+import { Coffee, Calendar } from 'lucide-react'
+import { toast } from 'react-toastify'
 
 export function PanCafe() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [dateFilter, setDateFilter] = useState(todayISO())
+  const [dateFilter, setDateFilter] = useState(searchParams.get('date') || todayISO())
   const [closing, setClosing] = useState(null)
   const [closeForm, setCloseForm] = useState({ time_out: '', amount_received: '', payment_method: 'cash' })
   const [closeSaving, setCloseSaving] = useState(false)
   const [showLogModal, setShowLogModal] = useState(false)
   const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
+  const navigate = useNavigate()
 
 
   useEffect(() => { load() }, [dateFilter])
@@ -33,21 +36,20 @@ export function PanCafe() {
   }
 
   const handleCloseSession = async () => {
+    if (!closing) return
     setCloseSaving(true)
     try {
       await api.patch(`/pancafe/${closing.id}`, {
-        time_out: closeForm.time_out
-          ? new Date(`${closing.date}T${closeForm.time_out}`).toISOString()
-          : new Date().toISOString(),
-        amount_received: closeForm.amount_received ? Number(closeForm.amount_received) : closing.amount_received,
-        payment_method: closeForm.payment_method,
+        time_out: closeForm.time_out || new Date().toTimeString().slice(0,5),
+        amount_received: closeForm.amount_received !== '' ? Number(closeForm.amount_received) : closing.amount_received,
+        payment_method: closeForm.payment_method || 'cash',
       })
       setClosing(null)
       load()
       if (user?.username === 'trial') {
         setTrialModal({ isOpen: true, action: 'Close PanCafe Session' })
       }
-    } catch (e) { setError(e.message) }
+    } catch (err) { setError(err.message) }
     finally { setCloseSaving(false) }
   }
 
@@ -68,15 +70,15 @@ export function PanCafe() {
             </div>
 
             <Field label="Time Out (Auto: Now)">
-              <input type="datetime-local" className="input" defaultValue={new Date().toISOString().slice(0, 16)} onChange={e => setClosing(c => ({ ...c, time_out: e.target.value }))} />
+              <input type="time" className="input" defaultValue={new Date().toTimeString().slice(0, 5)} onChange={e => setCloseForm(c => ({ ...c, time_out: e.target.value }))} />
             </Field>
 
             <Field label="Amount Received (₹)">
-              <input type="number" className="input" value={closing.amount_received} onChange={e => setClosing(c => ({ ...c, amount_received: e.target.value }))} />
+              <input type="number" className="input" defaultValue={closing.amount_received} onChange={e => setCloseForm(c => ({ ...c, amount_received: e.target.value }))} />
             </Field>
 
             <Field label="Payment Method">
-              <select className="input" value={closing.payment_method} onChange={e => setClosing(c => ({ ...c, payment_method: e.target.value }))}>
+              <select className="input" value={closeForm.payment_method} onChange={e => setCloseForm(c => ({ ...c, payment_method: e.target.value }))}>
                 <option value="cash">Cash</option>
                 <option value="online">Online / UPI</option>
                 <option value="credit">Credit / Ledger</option>
@@ -134,6 +136,11 @@ export function PanCafe() {
                   <td className="table-cell" style={{ fontWeight: 700 }}>
                     {s.name || <span style={{ color: 'var(--text-faint)' }}>Anonymous</span>}
                     {s.shop_name && <p style={{ fontSize: '0.7rem', color: 'var(--text-faint)', marginTop: '0.1rem' }}>{s.shop_name}</p>}
+                    {s.is_predated && (
+                      <span className="badge badge-neutral" style={{ fontSize: '0.58rem', padding: '0.1rem 0.35rem', marginTop: '0.2rem', display: 'inline-block' }} title="Recorded after the session took place">
+                        BACKDATED
+                      </span>
+                    )}
                   </td>
                   <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 750, color: 'var(--accent-text)' }}>{s.pancafe_username}</td>
                   <td className="table-cell">
@@ -168,8 +175,8 @@ export function PanCafe() {
 
 // ─── New PanCafe Session ───────────────────────────────────────
 export function NewPanCafe() {
-  const navigate = useNavigate()
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [devices, setDevices] = useState([])
   const [plans, setPlans] = useState([])
   const [form, setForm] = useState({
@@ -182,6 +189,8 @@ export function NewPanCafe() {
   const [error, setError] = useState('')
   const [customerSuggestions, setCustomerSuggestions] = useState([])
   const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
+
+  const isPredated = Boolean(form.date && form.date < todayISO())
 
   useEffect(() => {
     Promise.all([
@@ -224,7 +233,7 @@ export function NewPanCafe() {
 
     setLoading(true); setError('')
     try {
-      await api.post('/pancafe', {
+      const res = await api.post('/pancafe', {
         ...form,
         plan_id: form.plan_id ? Number(form.plan_id) : null,
         device_id: form.device_id ? Number(form.device_id) : null,
@@ -233,10 +242,11 @@ export function NewPanCafe() {
         time_in: form.time_in ? new Date(`${form.date}T${form.time_in}`).toISOString() : null,
         time_out: form.time_out ? new Date(`${form.date}T${form.time_out}`).toISOString() : null,
       })
+      toast.success(isPredated ? `Backdated PanCafe session #${res.id} recorded for ${form.date}` : `PanCafe session #${res.id} logged`)
       if (user?.username === 'trial') {
         setTrialModal({ isOpen: true, action: 'Log PanCafe Session' })
       } else {
-        navigate('/pancafe')
+        navigate(`/pancafe?date=${form.date}`)
       }
     } catch (err) { setError(err.message) }
     finally { setLoading(false) }
@@ -247,13 +257,27 @@ export function NewPanCafe() {
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto' }}>
       <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => { setTrialModal({ isOpen: false, action: '' }); navigate('/pancafe') }} />
-      <div style={{ marginBottom: '2rem' }}>
+      <div style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <img src="/assets/favicon_PanCafe.ico" alt="PanCafe" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
           <h1 className="page-title" style={{ margin: 0 }}>Log PanCafe Session</h1>
         </div>
         <p className="page-sub" style={{ marginTop: '0.25rem' }}>Record a membership plan session</p>
       </div>
+
+      {isPredated && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.85rem 1.1rem',
+          background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)',
+          borderRadius: '10px', fontSize: '0.825rem', color: 'var(--accent-text)', fontWeight: 650,
+          marginBottom: '1.25rem'
+        }}>
+          <Calendar size={16} style={{ flexShrink: 0 }} />
+          <span>
+            <strong>Backdated Entry Mode:</strong> Recording historical PanCafe session for <strong>{form.date}</strong>.
+          </span>
+        </div>
+      )}
 
       <ErrorMsg error={error} />
 
