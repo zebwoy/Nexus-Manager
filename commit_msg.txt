@@ -1,0 +1,8 @@
+fix(staff): sync Google profile picture, real name, and <slug>_admin handle in Settings
+
+- api/staff.js: GET auto-syncs the real admin full name (Ayman Shaikh), Google avatar, and immutable <slug>_admin handle into the tenant users table
+- api/staff.js: cleans up duplicate or legacy placeholder accounts
+- src/lib/api.js: sends x-user-fullname and x-user-avatar headers on API requests
+- Settings.jsx: renders actual Google/Clerk profile picture and real name on staff cards
+- Login.jsx: assigns immutable <orgslug>_admin handle and real name on Clerk SSO login
+- Sidebar.jsx: ensures bottom left profile dynamically displays Clerk full name and avatar

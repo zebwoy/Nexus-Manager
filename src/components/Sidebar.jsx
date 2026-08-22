@@ -9,7 +9,7 @@ import {
   Zap, TrendingDown, Users, BarChart2, Settings,
   Sun, Moon, LogOut, Menu, X, FileCheck, Trash2, Shield
 } from 'lucide-react'
-import { SignedIn, SignedOut, UserButton, useClerk } from '@clerk/clerk-react'
+import { SignedIn, SignedOut, UserButton, useClerk, useUser } from '@clerk/clerk-react'
 
 
 const NAV = [
@@ -29,6 +29,7 @@ export default function Sidebar() {
   const { user, logout, isAdmin, isSuperAdmin, activeTenant, setActiveTenant } = useAuth()
   const { isDark, toggleDark, accentId, setAccentId } = useTheme()
   const { signOut } = useClerk()
+  const { user: clerkUser } = useUser()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [showSignOutModal, setShowSignOutModal] = useState(false)
@@ -257,7 +258,7 @@ export default function Sidebar() {
             </SignedOut>
             <div style={{ minWidth: 0 }}>
               <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {user?.full_name || 'Operator'}
+                {clerkUser?.fullName || user?.full_name || 'Operator'}
               </p>
               <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 @{user?.username}

@@ -30,14 +30,22 @@ export default function Login() {
   useEffect(() => {
     if (isLoaded && isSignedIn && clerkUser && !user) {
       const email = clerkUser.primaryEmailAddress?.emailAddress
+      const fullName = clerkUser.fullName || `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || email?.split('@')[0] || 'Admin'
+      const avatarUrl = clerkUser.imageUrl || ''
+
       if (email) {
         localStorage.setItem('nexus_user_email', email)
+        localStorage.setItem('nexus_user_name', fullName)
+        localStorage.setItem('nexus_user_avatar', avatarUrl)
+
         const isSA = clerkUser.publicMetadata?.role === 'super_admin'
         if (isSA) {
           const userData = {
             id: 1,
             username: clerkUser.username || email.split('@')[0] || 'superadmin',
-            full_name: clerkUser.fullName || 'Platform Super Admin',
+            full_name: fullName,
+            email: email,
+            avatar_url: avatarUrl,
             role: 'super_admin'
           }
           login(userData)
@@ -53,22 +61,33 @@ export default function Login() {
         api.get('/staff?action=my-invites')
           .then(res => {
             if (res.admin_organizations?.length > 0) {
+              const org = res.admin_organizations[0]
+              const adminUsername = `${org.slug}_admin`
               const userData = {
                 id: 1,
-                username: clerkUser.username || email.split('@')[0] || 'owner',
-                full_name: clerkUser.fullName || 'Cafe Administrator',
-                role: 'admin'
+                username: adminUsername,
+                full_name: fullName,
+                email: email,
+                avatar_url: avatarUrl,
+                role: 'admin',
+                org_slug: org.slug,
+                org_name: org.name
               }
               setRedirectMsg('Loading admin console...')
               login(userData)
               navigate('/')
             } else if (res.staff_invites?.some(s => s.membership_status === 'active')) {
               const activeS = res.staff_invites.find(s => s.membership_status === 'active')
+              const operatorUsername = `${activeS.tenant_slug || 'org'}_operator`
               const userData = {
                 id: activeS.invite_id || 1,
-                username: clerkUser.username || email.split('@')[0] || 'operator',
-                full_name: clerkUser.fullName || activeS.staff_name || 'Counter Operator',
-                role: 'operator'
+                username: operatorUsername,
+                full_name: fullName || activeS.staff_name || 'Counter Operator',
+                email: email,
+                avatar_url: avatarUrl,
+                role: 'operator',
+                org_slug: activeS.tenant_slug,
+                org_name: activeS.tenant_name
               }
               setRedirectMsg('Entering operator console...')
               login(userData)

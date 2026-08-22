@@ -4,6 +4,7 @@ import { api } from '../../lib/api'
 import { formatDate, formatTime, formatRupees } from '../../lib/helpers'
 import { PageLoader, ErrorMsg, Field, Modal, TrialWarningModal, Spinner } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
+import { useUser } from '@clerk/clerk-react'
 import { toast } from 'react-toastify'
 import {
   Trash2, Shield, Settings as SettingsIcon, Users, PlusCircle,
@@ -33,6 +34,7 @@ function PendingBadge({ count }) {
 
 export default function Settings() {
   const { user, isAdmin, isTrial } = useAuth()
+  const { user: clerkUser } = useUser()
   const navigate = useNavigate()
 
   const [activeTab, setActiveTab] = useState('staff')
@@ -487,12 +489,19 @@ export default function Settings() {
           {/* Staff Cards */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
             {staffUsers.map(st => {
-              const isCurrentUser = st.username === user?.username
+              const isCurrentUser = st.username === user?.username || (st.email && st.email === user?.email) || (st.role === 'admin' && isAdmin)
               const isPinRevealed = revealedPins[st.id]
               const isAdminUser = st.role === 'admin'
               const roleLabel = st.role === 'admin' ? 'Cafe Admin' : 'Counter Operator'
               const avatarColor = isAdminUser ? 'linear-gradient(135deg, var(--accent) 0%, rgba(59,130,246,0.6) 100%)' : 'var(--bg-input)'
               const avatarTextColor = isAdminUser ? '#fff' : 'var(--text)'
+
+              const displayName = isCurrentUser
+                ? (clerkUser?.fullName || user?.full_name || st.full_name || 'Cafe Admin')
+                : (st.full_name || st.username)
+              const avatarUrl = isCurrentUser
+                ? (clerkUser?.imageUrl || user?.avatar_url || st.avatar_url)
+                : (st.avatar_url || '')
 
               return (
                 <div key={st.id} className="card" style={{
@@ -512,21 +521,33 @@ export default function Settings() {
                   )}
 
                   {/* Avatar */}
-                  <div style={{
-                    width: '44px', height: '44px', borderRadius: '12px',
-                    background: avatarColor,
-                    border: '1.5px solid var(--border)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '1rem', fontWeight: 900, color: avatarTextColor,
-                    flexShrink: 0, boxShadow: 'var(--shadow)'
-                  }}>
-                    {st.full_name?.[0]?.toUpperCase() || '?'}
-                  </div>
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={displayName}
+                      style={{
+                        width: '44px', height: '44px', borderRadius: '12px',
+                        objectFit: 'cover', border: '1.5px solid var(--border)',
+                        flexShrink: 0, boxShadow: 'var(--shadow)'
+                      }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: '44px', height: '44px', borderRadius: '12px',
+                      background: avatarColor,
+                      border: '1.5px solid var(--border)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '1rem', fontWeight: 900, color: avatarTextColor,
+                      flexShrink: 0, boxShadow: 'var(--shadow)'
+                    }}>
+                      {displayName?.[0]?.toUpperCase() || '?'}
+                    </div>
+                  )}
 
                   {/* Identity */}
                   <div style={{ flex: 1, minWidth: '140px' }}>
                     <p style={{ margin: 0, fontWeight: 800, fontSize: '0.925rem', color: 'var(--text)' }}>
-                      {st.full_name}
+                      {displayName}
                     </p>
                     <p style={{ margin: '0.1rem 0 0', fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'center' }}>
                       <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>@{st.username}</span>

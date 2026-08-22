@@ -15,9 +15,14 @@ async function request(path, options = {}) {
   const userEmail = localStorage.getItem('nexus_user_email')
   const clerkToken = localStorage.getItem('nexus_clerk_token')
 
+  const userName = localStorage.getItem('nexus_user_name') || user?.full_name
+  const userAvatar = localStorage.getItem('nexus_user_avatar') || user?.avatar_url
+
   const headers = {
     'Content-Type': 'application/json',
     ...(user ? { 'x-user-id': String(user.id), 'x-username': user.username, 'x-role': user.role || 'operator' } : {}),
+    ...(userName ? { 'x-user-fullname': userName } : {}),
+    ...(userAvatar ? { 'x-user-avatar': userAvatar } : {}),
     ...(tenantSchema ? { 'x-tenant-schema': tenantSchema } : {}),
     ...(orgId ? { 'x-org-id': orgId } : {}),
     ...(userEmail ? { 'x-user-email': userEmail } : {}),

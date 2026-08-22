@@ -91,34 +91,100 @@ export default async function handler(req, res) {
 
     // GET /api/staff - List all staff accounts (strictly excluding platform superadmin)
     if (req.method === 'GET') {
+      try {
+        await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT")
+      } catch {}
+
       // Purge any accidental superadmin from tenant users
       try {
         await client.query("DELETE FROM users WHERE role = 'super_admin' OR username = 'superadmin'")
       } catch {}
 
-      // Auto-sync real admin name from public.tenants if needed
+      // Auto-sync real admin name, correct handle (<slug>_admin), and avatar from Clerk/Google
       try {
-        const tenantR = await pool.query('SELECT name, admin_name, admin_email FROM public.tenants WHERE schema_name = $1', [schemaName])
+        const tenantR = await pool.query('SELECT name, slug, admin_name, admin_email FROM public.tenants WHERE schema_name = $1', [schemaName])
         if (tenantR.rows.length > 0 && tenantR.rows[0].admin_email) {
           const t = tenantR.rows[0]
-          // Sync real admin name if: name is placeholder, name is email prefix, or name is missing
+          const targetAdminUsername = `${t.slug}_admin`
+          const targetOperatorUsername = `${t.slug}_operator`
+          const incomingFullName = req.headers['x-user-fullname'] || req.headers['x-user-name']
+          const incomingAvatar = req.headers['x-user-avatar']
           const emailPrefix = t.admin_email.split('@')[0].replace(/[^a-z0-9_]/gi, '')
+
+          let realFullName = incomingFullName
+          if (!realFullName || realFullName === 'Cafe Administrator' || realFullName.toLowerCase() === emailPrefix.toLowerCase()) {
+            realFullName = t.admin_name && t.admin_name !== 'Cafe Administrator' && t.admin_name.toLowerCase() !== emailPrefix.toLowerCase()
+              ? t.admin_name
+              : (incomingFullName || t.admin_name || 'Cafe Administrator')
+          }
+
+          // Update public.tenants if real name is now known
+          if (realFullName && realFullName !== 'Cafe Administrator' && realFullName !== t.admin_name) {
+            await pool.query('UPDATE public.tenants SET admin_name = $1 WHERE schema_name = $2', [realFullName, schemaName])
+          }
+
+          // Check for existing admin rows in tenant schema
+          const curAdminR = await client.query("SELECT id, username, full_name, email FROM users WHERE role = 'admin' ORDER BY id ASC")
+          if (curAdminR.rows.length > 0) {
+            const primaryAdmin = curAdminR.rows[0]
+            await client.query(`
+              UPDATE users
+              SET username = $1,
+                  full_name = $2,
+                  email = $3,
+                  avatar_url = COALESCE($4, avatar_url),
+                  status = 'active'
+              WHERE id = $5
+            `, [targetAdminUsername, realFullName, t.admin_email, incomingAvatar || null, primaryAdmin.id])
+
+            // If any duplicate admin rows were created with legacy usernames (e.g. 'imanriyaj' or 'admin'), delete them
+            if (curAdminR.rows.length > 1) {
+              const extraIds = curAdminR.rows.slice(1).map(r => r.id)
+              await client.query(`DELETE FROM users WHERE id = ANY($1::int[])`, [extraIds])
+            }
+          } else {
+            // Also check if an account with matching email exists as non-admin
+            const matchEmailR = await client.query("SELECT id FROM users WHERE email ILIKE $1", [t.admin_email])
+            if (matchEmailR.rows.length > 0) {
+              await client.query(`
+                UPDATE users
+                SET username = $1,
+                    full_name = $2,
+                    role = 'admin',
+                    avatar_url = COALESCE($3, avatar_url),
+                    status = 'active'
+                WHERE id = $4
+              `, [targetAdminUsername, realFullName, incomingAvatar || null, matchEmailR.rows[0].id])
+            } else {
+              // Insert standard admin account
+              await client.query(`
+                INSERT INTO users (full_name, username, pin, role, email, status, avatar_url)
+                VALUES ($1, $2, '1234', 'admin', $3, 'active', $4)
+                ON CONFLICT (username) DO UPDATE
+                SET full_name = EXCLUDED.full_name, email = EXCLUDED.email, avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url)
+              `, [realFullName, targetAdminUsername, t.admin_email, incomingAvatar || null])
+            }
+          }
+
+          // Ensure standard operator account exists
           await client.query(`
-            UPDATE users
-            SET full_name = COALESCE(NULLIF($1, ''), full_name),
-                email = $2
-            WHERE role = 'admin' AND (
-              email IS NULL OR
-              full_name = 'Cafe Administrator' OR
-              LOWER(full_name) = LOWER($3) OR
-              full_name = ''
-            )
-          `, [t.admin_name || t.admin_email.split('@')[0], t.admin_email, emailPrefix])
+            INSERT INTO users (full_name, username, pin, role, email, status)
+            VALUES ('Counter Operator', $1, '1234', 'operator', NULL, 'active')
+            ON CONFLICT (username) DO NOTHING;
+          `, [targetOperatorUsername])
+
+          // Clean up legacy placeholder accounts like 'staff' or '<slug>_staff'
+          await client.query(`
+            DELETE FROM users 
+            WHERE username = 'staff' OR username = '${t.slug}_staff'
+          `)
         }
-      } catch {}
+      } catch (e) {
+        console.error('Error syncing admin user:', e)
+      }
 
       const usersR = await client.query(
-        "SELECT id, full_name, username, pin, role, email, status, created_at FROM users WHERE role != 'super_admin' AND username != 'superadmin' ORDER BY id ASC"
+        "SELECT id, full_name, username, pin, role, email, status, avatar_url, created_at FROM users WHERE role != 'super_admin' AND username != 'superadmin' ORDER BY id ASC"
       )
       const staffRegistryR = await pool.query(
         'SELECT * FROM public.organization_staff WHERE schema_name = $1',
