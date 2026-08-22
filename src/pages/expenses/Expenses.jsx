@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatRupees, formatDate, todayISO } from '../../lib/helpers'
-import { PageLoader, EmptyState, ErrorMsg, FilterBar } from '../../components/UI'
+import { PageLoader, EmptyState, ErrorMsg, FilterBar, DateInput } from '../../components/UI'
 import { TrendingDown, Plus } from 'lucide-react'
 
 export default function Expenses() {
@@ -25,7 +25,7 @@ export default function Expenses() {
     }
   }
   
-  const total = items.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+  const total = items.reduce((s, i) => s + (Number(i.amount) || 0), 0)
 
   return (
     <div>
@@ -42,9 +42,14 @@ export default function Expenses() {
       <ErrorMsg error={error} />
       
       <FilterBar style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <label className="label" style={{ marginBottom: 0 }}>Filter Date</label>
-          <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="input" style={{ width: 'auto', padding: '0.45rem 0.75rem' }} />
+          <DateInput
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value)}
+            showSteppers={true}
+            showTodayButton={true}
+          />
         </div>
         
         {!loading && items.length > 0 && (

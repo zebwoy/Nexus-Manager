@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatRupees, formatDate, formatTime, todayISO, showUndoToast } from '../../lib/helpers'
-import { PageLoader, EmptyState, ErrorMsg, Field, Modal, TrialWarningModal, ConfirmModal, Spinner, Tabs, FilterBar } from '../../components/UI'
+import { PageLoader, EmptyState, ErrorMsg, Field, Modal, TrialWarningModal, ConfirmModal, Spinner, Tabs, FilterBar, DateInput } from '../../components/UI'
 import { ShoppingBag, Edit3, Trash2, Plus, Package, Settings } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { toast } from 'react-toastify'
@@ -389,12 +389,18 @@ export default function Inventory() {
       {tab === 'sales' && (
         <div>
           <FilterBar style={{ marginBottom: '1.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
               <label className="label" style={{ marginBottom: 0 }}>Filter Date</label>
-              <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="input" style={{ width: 'auto', padding: '0.45rem 0.75rem' }} />
+              <DateInput
+                value={dateFilter}
+                onChange={e => setDateFilter(e.target.value)}
+                showSteppers={true}
+                showTodayButton={true}
+              />
             </div>
             <button onClick={() => setDateFilter('')} className="btn-secondary btn-sm" style={{ padding: '0.45rem 0.75rem' }}>Show All Dates</button>
           </FilterBar>
+
 
           {loading ? <PageLoader /> : sales.length === 0 ? (
             <EmptyState icon={<ShoppingBag size={32} />} title="No Walk-in Sales" description="No foreign cafeteria sales logged for the selected period."

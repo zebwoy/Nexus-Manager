@@ -32,7 +32,7 @@ export default function Reports() {
         </div>
         <FilterBar style={{ marginBottom: 0, padding: '0.45rem 0.85rem' }}>
           <label className="label" style={{ marginBottom: 0 }}>Report Period</label>
-          <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="input" style={{ width: 'auto', padding: '0.35rem 0.65rem' }} />
+          <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="input" style={{ width: 'auto', padding: '0.35rem 0.75rem' }} />
         </FilterBar>
       </div>
       
@@ -115,28 +115,48 @@ export default function Reports() {
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
                 {data.device_stats.map(d => {
-                  const percent = Math.min(100, (d.session_count / (data.max_sessions || 1)) * 100)
+                  const percent = Math.min(100, Math.round((d.session_count / (data.max_sessions || 1)) * 100))
+                  const devType = d.device_label?.toLowerCase().includes('pc') ? 'PC' : d.device_label?.toLowerCase().includes('xbox') ? 'XBOX' : 'PS'
+                  const badgeClass = devType === 'PC' ? 'badge-accent' : devType === 'XBOX' ? 'badge-warning' : 'badge-success'
+
                   return (
-                    <div key={d.device_label} style={{ display: 'flex', alignItems: 'center', gap: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.65rem' }}>
-                      <span className="badge badge-accent" style={{ width: '5.5rem', justifyContent: 'center' }}>{d.device_label}</span>
+                    <div key={d.device_label} style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(110px, 140px) 1fr auto auto',
+                      alignItems: 'center',
+                      gap: '1.25rem',
+                      borderBottom: '1px solid var(--border)',
+                      paddingBottom: '0.75rem'
+                    }}>
+                      <span className={`badge ${badgeClass}`} style={{ width: '100%', justifyContent: 'flex-start', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {d.device_label}
+                      </span>
                       
                       {/* Skeuomorphic progress slider track */}
                       <div style={{
-                        flex: 1, height: '0.85rem', background: 'var(--bg-input)',
+                        height: '0.85rem', background: 'var(--bg-input)',
                         borderRadius: '99px', border: '1px solid var(--border)',
-                        boxShadow: 'var(--shadow-inset)', overflow: 'hidden', padding: '2px'
+                        boxShadow: 'var(--shadow-inset)', overflow: 'hidden', padding: '2px', minWidth: '80px'
                       }}>
                         <div style={{
-                          height: '100%', width: `${percent}%`,
-                          background: 'linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 100%)',
-                          borderRadius: '99px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15)'
+                          height: '100%', width: `${Math.max(3, percent)}%`,
+                          background: percent > 0
+                            ? devType === 'PC'
+                              ? 'linear-gradient(90deg, #38bdf8 0%, #0284c7 100%)'
+                              : devType === 'XBOX'
+                              ? 'linear-gradient(90deg, #fbbf24 0%, #d97706 100%)'
+                              : 'linear-gradient(90deg, #4ade80 0%, #16a34a 100%)'
+                            : 'transparent',
+                          borderRadius: '99px',
+                          boxShadow: percent > 0 ? 'inset 0 1px 0 rgba(255,255,255,0.2), 0 0 6px rgba(56, 189, 248, 0.35)' : 'none',
+                          transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
                         }} />
                       </div>
                       
-                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem', color: 'var(--text-muted)', minWidth: '6.5rem', textAlign: 'right' }}>
-                        {d.session_count} sessions
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem', color: 'var(--text-muted)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {d.session_count} {d.session_count === 1 ? 'session' : 'sessions'}
                       </span>
-                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.875rem', color: 'var(--accent-text)', fontWeight: 700, minWidth: '6.5rem', textAlign: 'right' }}>
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.875rem', color: 'var(--accent-text)', fontWeight: 700, textAlign: 'right', minWidth: '5.5rem', whiteSpace: 'nowrap' }}>
                         {formatRupees(d.total_revenue)}
                       </span>
                     </div>
@@ -150,3 +170,4 @@ export default function Reports() {
     </div>
   )
 }
+

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatRupees, formatDate, todayISO } from '../../lib/helpers'
-import { PageLoader, EmptyState, ErrorMsg, Field, Modal, ConfirmModal, Spinner, FilterBar } from '../../components/UI'
+import { PageLoader, EmptyState, ErrorMsg, Field, Modal, ConfirmModal, Spinner, FilterBar, DateInput } from '../../components/UI'
 import { Edit3, Trash2, Zap, Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { toast } from 'react-toastify'
@@ -151,10 +151,16 @@ export default function Recharges() {
       <ErrorMsg error={error} />
       
       <FilterBar style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <label className="label" style={{ marginBottom: 0 }}>Filter Date</label>
-          <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="input" style={{ width: 'auto', padding: '0.45rem 0.75rem' }} />
+          <DateInput
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value)}
+            showSteppers={true}
+            showTodayButton={true}
+          />
         </div>
+
         {!loading && items.length > 0 && (
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <div className="lcd-screen" style={{ padding: '0.4rem 0.85rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>

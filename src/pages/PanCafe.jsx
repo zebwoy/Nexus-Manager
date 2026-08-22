@@ -4,10 +4,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatRupees, formatTime, formatDate, todayISO, validateName, validateMobile } from '../lib/helpers'
 import { useAuth } from '../context/AuthContext'
-import { PageLoader, EmptyState, ErrorMsg, Field, Modal, Spinner, TrialWarningModal } from '../components/UI'
+import { PageLoader, EmptyState, ErrorMsg, Field, Modal, Spinner, TrialWarningModal, DateInput } from '../components/UI'
 import LogSessionModal from '../components/LogSessionModal'
 import { Coffee, Calendar } from 'lucide-react'
 import { toast } from 'react-toastify'
+
 
 export function PanCafe() {
   const { user } = useAuth()
@@ -22,7 +23,6 @@ export function PanCafe() {
   const [showLogModal, setShowLogModal] = useState(false)
   const [trialModal, setTrialModal] = useState({ isOpen: false, action: '' })
   const navigate = useNavigate()
-
 
   useEffect(() => { load() }, [dateFilter])
 
@@ -111,11 +111,19 @@ export function PanCafe() {
       <ErrorMsg error={error} />
 
       {/* Filter strip */}
-      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.85rem 1.25rem', marginBottom: '1.5rem' }}>
-        <label className="label" style={{ marginBottom: 0 }}>Filter Date</label>
-        <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="input" style={{ width: 'auto', padding: '0.45rem 0.75rem' }} />
+      <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.25rem', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <label className="label" style={{ marginBottom: 0 }}>Filter Date</label>
+          <DateInput
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value)}
+            showSteppers={true}
+            showTodayButton={true}
+          />
+        </div>
         <span className="badge badge-accent">{sessions.filter(s => !s.time_out).length} Active</span>
       </div>
+
 
       {loading ? <PageLoader /> : sessions.length === 0 ? (
         <EmptyState icon={<img src="/assets/favicon_PanCafe.ico" alt="PanCafe" style={{ width: '36px', height: '36px', objectFit: 'contain', opacity: 0.85 }} />} title="No PanCafe Logs" description={`No membership sessions recorded for ${formatDate(dateFilter)}`}

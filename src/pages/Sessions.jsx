@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatRupees, formatTime, formatDate, formatDuration, todayISO } from '../lib/helpers'
-import { PageLoader, EmptyState, ErrorMsg, FilterBar } from '../components/UI'
+import { PageLoader, EmptyState, ErrorMsg, FilterBar, DateInput } from '../components/UI'
 import { LayoutGrid, List, Plus } from 'lucide-react'
 import LogSessionModal from '../components/LogSessionModal'
 import StationGrid from '../components/StationGrid'
@@ -88,12 +88,11 @@ export default function Sessions() {
           {/* Date Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <label className="label" style={{ marginBottom: 0 }}>Date</label>
-            <input
-              type="date"
+            <DateInput
               value={dateFilter}
               onChange={e => setDateFilter(e.target.value)}
-              className="input"
-              style={{ width: 'auto', padding: '0.4rem 0.65rem' }}
+              showSteppers={true}
+              showTodayButton={true}
             />
           </div>
         </div>

@@ -409,3 +409,6 @@ export function FilterBar({ children, style, className = '' }) {
   )
 }
 export const ActionBar = FilterBar
+
+export { default as DateInput } from './DateInput'
+

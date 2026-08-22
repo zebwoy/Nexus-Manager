@@ -178,6 +178,76 @@
     cursor: pointer;
   }
 
+  /* ── Native Date / Time / Month Inputs (Futuristic & Styled) ── */
+  input[type="date"].input,
+  input[type="time"].input,
+  input[type="datetime-local"].input,
+  input[type="month"].input {
+    font-family: 'JetBrains Mono', 'Inter', monospace;
+    font-size: 0.825rem;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    color-scheme: light dark;
+  }
+
+  [data-theme="dark"] input[type="date"].input,
+  [data-theme="dark"] input[type="time"].input,
+  [data-theme="dark"] input[type="datetime-local"].input,
+  [data-theme="dark"] input[type="month"].input {
+    color-scheme: dark;
+  }
+
+  [data-theme="light"] input[type="date"].input,
+  [data-theme="light"] input[type="time"].input,
+  [data-theme="light"] input[type="datetime-local"].input,
+  [data-theme="light"] input[type="month"].input {
+    color-scheme: light;
+  }
+
+  /* Custom WebKit Picker Indicators (Chrome, Edge, Safari) */
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    border-radius: 6px;
+    padding: 3px;
+    opacity: 0.75;
+    transition: opacity 0.15s ease, transform 0.15s ease, filter 0.15s ease;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator:hover,
+  input[type="time"]::-webkit-calendar-picker-indicator:hover,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+  input[type="month"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+    transform: scale(1.12);
+    filter: drop-shadow(0 0 4px var(--accent));
+  }
+
+  /* Inner field highlights */
+  input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+  input[type="time"]::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+  }
+  input[type="date"]::-webkit-datetime-edit-text,
+  input[type="time"]::-webkit-datetime-edit-text {
+    color: var(--text-faint);
+    padding: 0 0.15rem;
+  }
+  input[type="date"]::-webkit-datetime-edit-month-field:focus,
+  input[type="date"]::-webkit-datetime-edit-day-field:focus,
+  input[type="date"]::-webkit-datetime-edit-year-field:focus,
+  input[type="time"]::-webkit-datetime-edit-hour-field:focus,
+  input[type="time"]::-webkit-datetime-edit-minute-field:focus,
+  input[type="time"]::-webkit-datetime-edit-ampm-field:focus {
+    background-color: var(--accent-dim);
+    color: var(--accent-text);
+    border-radius: 4px;
+  }
+
+
   /* ── Labels (Engraved Text labels) ── */
   .label {
     display: block;
