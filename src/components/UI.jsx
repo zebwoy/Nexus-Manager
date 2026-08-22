@@ -1,3 +1,4 @@
+import { isValidElement } from 'react'
 import { AlertCircle, CheckCircle, Loader2, Inbox, X, AlertTriangle, Minus, Plus, Sparkles } from 'lucide-react'
 
 export function Spinner({ size = 'md' }) {
@@ -16,16 +17,13 @@ export function PageLoader() {
 export function EmptyState({ icon: iconProp, title, description, action }) {
   const renderIcon = () => {
     if (!iconProp) return <Inbox size={28} />
-    if (typeof iconProp === 'function') {
-      const Icon = iconProp
-      return <Icon size={28} />
-    }
-    // If it's already a React element (e.g. <ShoppingBag /> or <img />)
-    if (typeof iconProp === 'object') {
+    if (isValidElement(iconProp)) {
       return iconProp
     }
-    return <Inbox size={28} />
+    const Icon = iconProp
+    return <Icon size={28} />
   }
+
 
   return (
     <div className="card" style={{

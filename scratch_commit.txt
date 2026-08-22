@@ -1,0 +1,4 @@
+fix(ui): use React.isValidElement in EmptyState to support forwardRef/Lucide icon components
+
+- Replaced brittle typeof checks with React.isValidElement to properly distinguish between JSX elements and forwardRef icon component definitions
+- Resolved Minified React error #31 across all EmptyState views (Expenses, Recharges, Audit, PanCafe, Inventory)
