@@ -142,18 +142,24 @@ export default function SessionDetail() {
 
   const handleSaveEdit = async () => {
     const s = data?.session
+    if (!s) return
+    if (editForm.name) {
+      const nameErr = validateName(editForm.name)
+      if (nameErr) { setError(nameErr); return }
+    }
     const mobileErr = validateMobile(editForm.mobile, false)
     if (mobileErr) { setError(mobileErr); return }
 
     setEditSaving(true)
     setError('')
     try {
-      const timeInISO = toISO(s.date, editForm.time_in)
-      const timeOutISO = addMinutes(timeInISO, s.duration_mins).toISOString()
+      const cleanDate = typeof s.date === 'string' ? s.date.slice(0, 10) : todayISO()
+      const timeInISO = toISO(cleanDate, editForm.time_in)
+      const timeOutISO = addMinutes(timeInISO, Number(s.duration_mins || 60)).toISOString()
 
       await api.patch(`/sessions/${id}`, {
-        name: editForm.name,
-        mobile: editForm.mobile,
+        name: editForm.name.trim(),
+        mobile: editForm.mobile ? editForm.mobile.trim() : null,
         time_in: timeInISO,
         time_out: timeOutISO,
         remark: editForm.remark,

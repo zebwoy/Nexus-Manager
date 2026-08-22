@@ -305,7 +305,43 @@ export default async function handler(req, res) {
           }
           const cur = currentR.rows[0]
 
+          let customerId = cur.customer_id
+          if (b.name !== undefined || b.mobile !== undefined) {
+            const newName = b.name !== undefined ? (b.name ? b.name.trim() : null) : null
+            const newMobile = b.mobile !== undefined ? (b.mobile ? b.mobile.trim() : null) : null
+
+            if (customerId) {
+              if (newName || newMobile) {
+                await client.query(
+                  `UPDATE customers SET
+                     name = COALESCE($1, name),
+                     mobile = COALESCE($2, mobile)
+                   WHERE id = $3`,
+                  [newName, newMobile, customerId]
+                )
+              }
+            } else if (newName) {
+              const existing = await client.query(
+                'SELECT id FROM customers WHERE name ILIKE $1 AND (mobile = $2 OR mobile IS NULL)',
+                [newName, newMobile]
+              )
+              if (existing.rows.length > 0) {
+                customerId = existing.rows[0].id
+                if (newMobile) {
+                  await client.query('UPDATE customers SET mobile = COALESCE(mobile, $1) WHERE id = $2', [newMobile, customerId])
+                }
+              } else {
+                const newC = await client.query(
+                  'INSERT INTO customers (name, mobile) VALUES ($1,$2) RETURNING id',
+                  [newName, newMobile]
+                )
+                customerId = newC.rows[0].id
+              }
+            }
+          }
+
           const duration_mins = b.duration_mins !== undefined ? Number(b.duration_mins) : cur.duration_mins
+          const time_in       = b.time_in       !== undefined ? b.time_in                 : cur.time_in
           const time_out      = b.time_out      !== undefined ? b.time_out                : cur.time_out
           const charge        = b.charge        !== undefined ? Number(b.charge)          : cur.charge
           const total         = b.total         !== undefined ? Number(b.total)           : cur.total
@@ -315,11 +351,11 @@ export default async function handler(req, res) {
 
           const updated = await client.query(
             `UPDATE sessions SET
-               duration_mins = $1, time_out = $2, charge = $3, total = $4,
-               payment_received = $5, credit = $6, remark = $7
-             WHERE id = $8
+               customer_id = $1, duration_mins = $2, time_in = $3, time_out = $4,
+               charge = $5, total = $6, payment_received = $7, credit = $8, remark = $9
+             WHERE id = $10
              RETURNING *`,
-            [duration_mins, time_out, charge, total, payment_rcvd, credit, remark, sessionId]
+            [customerId, duration_mins, time_in, time_out, charge, total, payment_rcvd, credit, remark, sessionId]
           )
 
           await client.query('COMMIT')
@@ -329,6 +365,7 @@ export default async function handler(req, res) {
           throw e
         }
       }
+
 
       if (req.method === 'DELETE') {
         await client.query('BEGIN')

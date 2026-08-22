@@ -1,0 +1,6 @@
+fix(validation): resolve name validator inversion and session detail edit time parsing bug
+
+- Fixed inverted logic in NewSession.jsx where valid names/mobiles triggered validation errors
+- Fixed RangeError 'Invalid time value' in SessionDetail.jsx when constructing ISO timestamps from date strings
+- Enhanced PATCH /api/sessions/:id to support updating customer name, mobile, and time_in
+- Updated validateName and toISO in helpers.js to be fully resilient against formatting differences

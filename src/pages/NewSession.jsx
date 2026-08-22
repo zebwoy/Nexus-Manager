@@ -154,8 +154,14 @@ export default function NewSession() {
     if (e?.preventDefault) e.preventDefault()
     setError('')
     if (!form.device_id) return setError('Device is required')
-    if (form.name && !validateName(form.name)) return setError('Name: 2-60 chars, letters only')
-    if (form.mobile && !validateMobile(form.mobile)) return setError('Mobile: must be 10 digits')
+    if (form.name) {
+      const nameErr = validateName(form.name)
+      if (nameErr) return setError(nameErr)
+    }
+    if (form.mobile) {
+      const mobileErr = validateMobile(form.mobile, false)
+      if (mobileErr) return setError(mobileErr)
+    }
 
     const hasSplit = cashAmount !== '' || onlineAmount !== ''
     if (hasSplit) {

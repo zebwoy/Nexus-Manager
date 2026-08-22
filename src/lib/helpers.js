@@ -68,7 +68,9 @@ export function formatDate(dateStr) {
 }
 
 export function addMinutes(date, mins) {
-  return new Date(new Date(date).getTime() + mins * 60000)
+  const dt = typeof date === 'string' ? new Date(date) : (date || new Date())
+  if (isNaN(dt.getTime())) return new Date()
+  return new Date(dt.getTime() + Number(mins || 0) * 60000)
 }
 
 // Today's date as YYYY-MM-DD (local timezone, not UTC)
@@ -87,16 +89,20 @@ export function nowTimeInput() {
 }
 
 /**
- * Combine a date string (YYYY-MM-DD) and a time string (HH:MM or HH:MM:SS)
+ * Combine a date string (YYYY-MM-DD or ISO) and a time string (HH:MM or HH:MM:SS)
  * into an ISO string. If the resulting datetime is *before* a reference datetime
  * (e.g., time_in), the date is auto-advanced by 1 day (post-midnight sessions).
  *
- * @param {string} dateStr  — e.g. "2025-01-15"
+ * @param {string} dateStr  — e.g. "2025-01-15" or "2025-01-15T00:00:00.000Z"
  * @param {string} timeStr  — e.g. "23:45" or "00:15"
- * @param {Date|null} reference — if provided and result < reference, adds 1 day
+ * @param {Date|string|null} reference — if provided and result < reference, adds 1 day
  */
 export function toISO(dateStr, timeStr, reference = null) {
-  const dt = new Date(`${dateStr}T${timeStr}`)
+  if (!dateStr) return new Date().toISOString()
+  const cleanDate = typeof dateStr === 'string' ? dateStr.slice(0, 10) : todayISO()
+  const cleanTime = typeof timeStr === 'string' ? timeStr.slice(0, 5) : '00:00'
+  const dt = new Date(`${cleanDate}T${cleanTime}`)
+  if (isNaN(dt.getTime())) return new Date().toISOString()
   if (reference && dt < new Date(reference)) {
     // Crossed midnight — advance by one day
     dt.setDate(dt.getDate() + 1)
@@ -107,12 +113,14 @@ export function toISO(dateStr, timeStr, reference = null) {
 // ─── Validation ───────────────────────────────────────────────
 
 /**
- * Validate a full name (First + Last required).
- * Used for customer lookups in sessions.
+ * Validate customer name.
+ * Allows 2-60 chars (letters, spaces, dots, hyphens, apostrophes).
  */
 export function validateName(name) {
-  if (!name || !name.trim()) return 'Full Name is required'
-  // We now allow single-word names (e.g., anonymous clients)
+  if (!name || !name.trim()) return null
+  const trimmed = name.trim()
+  if (trimmed.length < 2 || trimmed.length > 60) return 'Name: 2-60 chars required'
+  if (!/^[a-zA-Z\s.'-]+$/.test(trimmed)) return 'Name: letters and spaces only'
   return null
 }
 
@@ -138,6 +146,7 @@ export function validateMobile(mobile, required = false) {
   if (!/^\d{10}$/.test(clean)) return 'Mobile number must be exactly 10 numeric digits'
   return null
 }
+
 
 // ─── Toasts & Notifications ───────────────────────────────────
 export { showUndoToast } from './undoToast'
