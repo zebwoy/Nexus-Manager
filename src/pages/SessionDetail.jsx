@@ -102,30 +102,35 @@ export default function SessionDetail() {
   const [recalcBill, setRecalcBill] = useState(true)
   const [endEarlySaving, setEndEarlySaving] = useState(false)
 
-  // Switch station modal
-  const [showSwitchModal, setShowSwitchModal] = useState(false)
-  const [targetDevice, setTargetDevice] = useState('')
-  const [switchSaving, setSwitchSaving] = useState(false)
-
   // Thermal Receipt modal
   const [showReceiptModal, setShowReceiptModal] = useState(false)
+
+  // Dynamic Cafe / Organization Name
+  const [cafeName, setCafeName] = useState(() => localStorage.getItem('nexus_tenant_name') || 'Headshot Gaming Lounge')
 
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const [detail, inv, devR] = await Promise.all([
+      const [detail, inv, devR, setR] = await Promise.all([
         api.get(`/sessions/${id}`),
         api.get('/inventory'),
         api.get('/devices'),
+        api.get('/settings').catch(() => ({ settings: [] })),
       ])
       setData(detail)
       setInventory(inv.items || [])
       setDevices(devR.devices || [])
+      const nameSetting = setR.settings?.find(s => s.key === 'cafe_name')?.value
+      if (nameSetting) {
+        setCafeName(nameSetting)
+        localStorage.setItem('nexus_tenant_name', nameSetting)
+      }
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }, [id])
 
   useEffect(() => { load() }, [load])
+
 
   const openEditModal = () => {
     if (!data?.session) return
@@ -322,14 +327,19 @@ export default function SessionDetail() {
   }
 
   const handleWhatsAppReceipt = () => {
-    const phone = s.mobile ? `91${s.mobile.replace(/\D/g, '')}` : ''
+    const cleanMobile = (s.mobile || '').replace(/\D/g, '')
+    const phone = cleanMobile.length === 10 ? `91${cleanMobile}` : cleanMobile
     const snackLines = (data.sales || []).flatMap(sa => (sa.items || []).map(it => `• ${it.name} x${it.qty} = ₹${it.unit_price * it.qty}`)).join('%0A')
-    const text = `*Nexus Gaming Cafe - Session Invoice*%0A--------------------------%0A*Session:* %23${s.id}%0A*Station:* ${s.device_label}%0A*Client:* ${s.name || 'Gamer'}%0A*Duration:* ${formatDuration(s.duration_mins)} (${formatTime(s.time_in)} - ${formatTime(s.time_out)})%0A*Gaming Charge:* ₹${s.charge}%0A${Number(s.controller_total) > 0 ? `*Controllers:* ₹${s.controller_total}%0A` : ''}${snackLines ? `*Cafeteria Items:*%0A${snackLines}%0A` : ''}--------------------------%0A*TOTAL BILL:* ₹${grandTotal}%0A*Total Paid:* ₹${totalPaid}%0A${creditRemaining > 0 ? `*Due Balance:* ₹${creditRemaining}%0A` : '*Status:* Fully Paid (Complete)%0A'}Thank you for playing at Nexus!`
+    const orgTitle = encodeURIComponent(cafeName.toUpperCase())
+    const orgFoot = encodeURIComponent(cafeName)
+    const text = `*${orgTitle} - Session Invoice*%0A--------------------------%0A*Session:* %23${s.id}%0A*Station:* ${s.device_label}%0A*Client:* ${s.name || 'Gamer'}%0A*Duration:* ${formatDuration(s.duration_mins)} (${formatTime(s.time_in)} - ${formatTime(s.time_out)})%0A*Gaming Charge:* ₹${s.charge}%0A${Number(s.controller_total) > 0 ? `*Controllers:* ₹${s.controller_total}%0A` : ''}${snackLines ? `*Cafeteria Items:*%0A${snackLines}%0A` : ''}--------------------------%0A*TOTAL BILL:* ₹${grandTotal}%0A*Total Paid:* ₹${totalPaid}%0A${creditRemaining > 0 ? `*Due Balance:* ₹${creditRemaining}%0A` : '*Status:* Fully Paid (Complete)%0A'}Thank you for playing at ${orgFoot}!`
     
-    window.open(`https://wa.me/${phone}?text=${text}`, '_blank')
+    if (phone) {
+      window.open(`https://wa.me/${phone}?text=${text}`, '_blank')
+    } else {
+      window.open(`https://wa.me/?text=${text}`, '_blank')
+    }
   }
-
-  const availableDevicesForSwitch = devices.filter(d => d.is_active && d.id !== s.device_id)
 
   const sectionCard = (title, icon, children) => (
     <div className="card" style={{ padding: '1.25rem' }}>
@@ -409,29 +419,6 @@ export default function SessionDetail() {
         </div>
       </Modal>
 
-      {/* Switch Station Modal */}
-      <Modal open={showSwitchModal} onClose={() => setShowSwitchModal(false)} title="Transfer Gamer to Another Station">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Moving <strong>{s.name || 'Client'}</strong> from <strong>{s.device_label}</strong>
-          </p>
-          <Field label="Select Free Target Station" required>
-            <select className="input" value={targetDevice} onChange={e => setTargetDevice(e.target.value)}>
-              <option value="">-- Choose Target Station --</option>
-              {availableDevicesForSwitch.map(d => (
-                <option key={d.id} value={d.id}>{d.label} ({d.type})</option>
-              ))}
-            </select>
-          </Field>
-          <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
-            <button onClick={handleSwitchStation} disabled={switchSaving || !targetDevice} className="btn-primary" style={{ flex: 1 }}>
-              {switchSaving ? <><Spinner size="sm" /> Switching...</> : 'Confirm Transfer'}
-            </button>
-            <button onClick={() => setShowSwitchModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
-          </div>
-        </div>
-      </Modal>
-
       {/* Printable Thermal Receipt Modal */}
       <Modal open={showReceiptModal} onClose={() => setShowReceiptModal(false)} title="Thermal POS Receipt Slip">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -440,10 +427,11 @@ export default function SessionDetail() {
             padding: '1.25rem', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem'
           }}>
             <div style={{ textAlign: 'center', borderBottom: '1px dashed var(--border)', paddingBottom: '0.75rem', marginBottom: '0.75rem' }}>
-              <p style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text)' }}>NEXUS GAMING LOUNGE</p>
+              <p style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{cafeName}</p>
               <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Gaming Console &amp; Cyber Cafe</p>
               <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Date: {formatDate(s.date)}</p>
             </div>
+
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
               <span>Invoice #</span>
@@ -625,9 +613,6 @@ export default function SessionDetail() {
               <>
                 <button onClick={() => setPanelOpen(true)} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <Clock size={13} /> Extend Time
-                </button>
-                <button onClick={() => setShowSwitchModal(true)} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <ArrowRightLeft size={13} /> Switch Station
                 </button>
                 <button onClick={() => setShowEndEarlyModal(true)} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--warning)' }}>
                   <PowerOff size={13} /> End Early

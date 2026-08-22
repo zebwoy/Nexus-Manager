@@ -46,10 +46,19 @@ export default function WalkInSale() {
 
   // Receipt modal for existing sale reprint
   const [reprintSale, setReprintSale] = useState(null)
+  const [cafeName, setCafeName] = useState(() => localStorage.getItem('nexus_tenant_name') || 'Headshot Gaming Lounge')
 
   useEffect(() => {
     loadInventory()
+    api.get('/settings').then(res => {
+      const nameSetting = res.settings?.find(s => s.key === 'cafe_name')?.value
+      if (nameSetting) {
+        setCafeName(nameSetting)
+        localStorage.setItem('nexus_tenant_name', nameSetting)
+      }
+    }).catch(() => {})
   }, [])
+
 
   useEffect(() => {
     if (tab === 'sales') {
@@ -185,12 +194,19 @@ export default function WalkInSale() {
   const handleWhatsAppShare = (saleData) => {
     const s = saleData || completedSale
     if (!s) return
-    const phone = s.customerMobile || s.customer_mobile ? `91${(s.customerMobile || s.customer_mobile).replace(/\D/g, '')}` : ''
+    const cleanMobile = (s.customerMobile || s.customer_mobile || '').replace(/\D/g, '')
+    const phone = cleanMobile.length === 10 ? `91${cleanMobile}` : cleanMobile
     const sItems = s.items || []
     const itemLines = sItems.filter(i => i.name).map(i => `• ${i.name} x${i.qty} = ₹${(i.sell_price || i.unit_price) * i.qty}`).join('%0A')
-    const text = `*Nexus Gaming Cafe - Cafeteria Receipt*%0A--------------------------%0A*Customer:* ${s.customerName || s.customer_name}${s.shopName || s.shop_name ? ` (${s.shopName || s.shop_name})` : ''}%0A*Date:* ${s.date || todayISO()}%0A*Items:*%0A${itemLines}%0A--------------------------%0A*Total:* ₹${s.total}%0A*Paid:* ₹${s.paid || s.payment_received} (${s.method || s.payment_method})%0A${Number(s.total) > Number(s.paid || s.payment_received) ? `*Due Balance:* ₹${Number(s.total) - Number(s.paid || s.payment_received)}%0A` : ''}Thank you for your business!`
+    const orgTitle = encodeURIComponent(cafeName.toUpperCase())
+    const orgFoot = encodeURIComponent(cafeName)
+    const text = `*${orgTitle} - Cafeteria Receipt*%0A--------------------------%0A*Customer:* ${s.customerName || s.customer_name}${s.shopName || s.shop_name ? ` (${s.shopName || s.shop_name})` : ''}%0A*Date:* ${s.date || todayISO()}%0A*Items:*%0A${itemLines}%0A--------------------------%0A*Total:* ₹${s.total}%0A*Paid:* ₹${s.paid || s.payment_received} (${s.method || s.payment_method})%0A${Number(s.total) > Number(s.paid || s.payment_received) ? `*Due Balance:* ₹${Number(s.total) - Number(s.paid || s.payment_received)}%0A` : ''}Thank you for your business at ${orgFoot}!`
     
-    window.open(`https://wa.me/${phone}?text=${text}`, '_blank')
+    if (phone) {
+      window.open(`https://wa.me/${phone}?text=${text}`, '_blank')
+    } else {
+      window.open(`https://wa.me/?text=${text}`, '_blank')
+    }
   }
 
   const handlePrint = () => {
