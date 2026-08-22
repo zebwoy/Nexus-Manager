@@ -13,7 +13,20 @@ export function PageLoader() {
   )
 }
 
-export function EmptyState({ icon: IconComponent, title, description, action }) {
+export function EmptyState({ icon: iconProp, title, description, action }) {
+  const renderIcon = () => {
+    if (!iconProp) return <Inbox size={28} />
+    if (typeof iconProp === 'function') {
+      const Icon = iconProp
+      return <Icon size={28} />
+    }
+    // If it's already a React element (e.g. <ShoppingBag /> or <img />)
+    if (typeof iconProp === 'object') {
+      return iconProp
+    }
+    return <Inbox size={28} />
+  }
+
   return (
     <div className="card" style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -25,7 +38,7 @@ export function EmptyState({ icon: IconComponent, title, description, action }) 
         boxShadow: 'var(--shadow-inset)', display: 'flex', alignItems: 'center',
         justifyContent: 'center', fontSize: '1.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem'
       }}>
-        {IconComponent ? (typeof IconComponent === 'function' || typeof IconComponent === 'object' ? <IconComponent size={28} /> : IconComponent) : <Inbox size={28} />}
+        {renderIcon()}
       </div>
 
       <p style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text)', marginBottom: '0.375rem' }}>{title}</p>
@@ -34,6 +47,7 @@ export function EmptyState({ icon: IconComponent, title, description, action }) 
     </div>
   )
 }
+
 
 export function Modal({ open, onClose, title, children, width = '480px' }) {
   if (!open) return null

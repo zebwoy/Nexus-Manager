@@ -403,9 +403,10 @@ export default function Inventory() {
 
 
           {loading ? <PageLoader /> : sales.length === 0 ? (
-            <EmptyState icon={<ShoppingBag size={32} />} title="No Walk-in Sales" description="No foreign cafeteria sales logged for the selected period."
+            <EmptyState icon={ShoppingBag} title="No Walk-in Sales" description="No foreign cafeteria sales logged for the selected period."
               action={<Link to="/inventory/sell" className="btn-primary">New Foreign Sale</Link>} />
           ) : (
+
             <div className="card-flush" style={{ overflowX: 'auto' }}>
               <table className="tbl">
                 <thead>
