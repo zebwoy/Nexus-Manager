@@ -1,6 +1,0 @@
-feat(ui): refine broken device terminal utilization layout and introduce complimentary DateInput component
-
-- Fixed broken 'Device Terminal Utilization' layout in Reports by replacing fixed badge widths with responsive grid and platform-themed gradients
-- Created premium native DateInput component featuring neon calendar icon, day steppers (◀ ▶), and quick 'Today' jump
-- Added global CSS rules for native date, time, and month pickers with customized webkit indicators, theme-adaptive color-scheme, and JetBrains Mono typography
-- Applied DateInput across Sessions, PanCafe, Expenses, Recharges, and Inventory sales logs
