@@ -155,6 +155,12 @@ export default async function handler(req, res) {
         return ok(res, { devices: r.rows })
       }
       if (req.method === 'POST') {
+        if (req.query.action === 'restore') {
+          const id = Number(req.query.id || req.body?.id)
+          if (!id) return err(res, 'Device ID required', 400)
+          await client.query('UPDATE devices SET is_active = TRUE WHERE id = $1', [id])
+          return ok(res, { success: true })
+        }
         const b = req.body || {}
         if (!b.label || !b.type) return err(res, 'Label and type are required', 400)
         const r = await client.query(
@@ -162,6 +168,19 @@ export default async function handler(req, res) {
           [b.label.trim(), b.type]
         )
         return ok(res, { device: r.rows[0] }, 201)
+      }
+      if (req.method === 'PATCH' || req.method === 'PUT') {
+        const b = req.body || {}
+        const id = Number(b.id || req.query.id)
+        if (!id) return err(res, 'Device ID required', 400)
+        const cols = []; const vals = []; let i = 1
+        if (b.label !== undefined)     { cols.push(`label = $${i++}`);     vals.push(b.label.trim()) }
+        if (b.type !== undefined)      { cols.push(`type = $${i++}`);      vals.push(b.type) }
+        if (b.is_active !== undefined) { cols.push(`is_active = $${i++}`); vals.push(!!b.is_active) }
+        if (cols.length === 0) return err(res, 'Nothing to update', 400)
+        vals.push(id)
+        const r = await client.query(`UPDATE devices SET ${cols.join(', ')} WHERE id = $${i} RETURNING *`, vals)
+        return ok(res, { device: r.rows[0] })
       }
       if (req.method === 'DELETE') {
         const id = Number(req.query.id)

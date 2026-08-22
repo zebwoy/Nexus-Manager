@@ -28,11 +28,11 @@ export default async function handler(req, res) {
       }
 
       const planIdMatch = rawUrl.match(/\/pancafe-plans\/(\d+)/) || (req.query.id ? [null, req.query.id] : null)
-      if (planIdMatch && req.method === 'PATCH') {
+      if (planIdMatch && (req.method === 'PATCH' || req.method === 'PUT')) {
         const id = Number(planIdMatch[1])
         const b = req.body || {}
         const cols = []; const vals = []; let i = 1
-        if (b.label !== undefined)          { cols.push(`label = $${i++}`);          vals.push(b.label) }
+        if (b.label !== undefined)          { cols.push(`label = $${i++}`);          vals.push(b.label.trim()) }
         if (b.hours !== undefined)          { cols.push(`hours = $${i++}`);          vals.push(Number(b.hours)) }
         if (b.price !== undefined)          { cols.push(`price = $${i++}`);          vals.push(Number(b.price)) }
         if (b.is_active !== undefined)      { cols.push(`is_active = $${i++}`);      vals.push(!!b.is_active) }
@@ -41,6 +41,20 @@ export default async function handler(req, res) {
         vals.push(id)
         const r = await client.query(`UPDATE pancafe_plans SET ${cols.join(', ')} WHERE id = $${i} RETURNING *`, vals)
         return ok(res, { plan: r.rows[0] })
+      }
+
+      if (req.method === 'DELETE') {
+        const id = Number(req.query.id || planIdMatch?.[1])
+        if (!id) return err(res, 'Plan ID required', 400)
+        await client.query('UPDATE pancafe_plans SET is_active = FALSE WHERE id = $1', [id])
+        return ok(res, { success: true })
+      }
+
+      if (req.query.action === 'restore' && req.method === 'POST') {
+        const id = Number(req.query.id || req.body?.id)
+        if (!id) return err(res, 'Plan ID required', 400)
+        await client.query('UPDATE pancafe_plans SET is_active = TRUE WHERE id = $1', [id])
+        return ok(res, { success: true })
       }
 
       return err(res, 'Method not allowed', 405)

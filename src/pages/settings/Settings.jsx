@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
-import { formatDate, formatTime, formatRupees, calculateDynamicTariff, formatDuration } from '../../lib/helpers'
+import { formatDate, formatTime, formatRupees, calculateDynamicTariff, formatDuration, showUndoToast } from '../../lib/helpers'
 import { PageLoader, ErrorMsg, Field, Modal, TrialWarningModal, Spinner } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
 import { useUser } from '@clerk/clerk-react'
@@ -13,7 +13,8 @@ import {
   Activity, CheckCircle2, AlertCircle, RefreshCw, X, Eye, EyeOff,
   Gamepad2, Coffee, Zap, TrendingDown, DollarSign, FileCheck, Layers,
   AlertTriangle, Building2, Phone, Sparkles, Monitor, ChevronRight,
-  Upload, ImageIcon, Lock, Info, ClockIcon, CheckCheck, XCircle
+  Upload, ImageIcon, Lock, Info, ClockIcon, CheckCheck, XCircle,
+  Check, Edit3
 } from 'lucide-react'
 
 const TABS = [
@@ -23,6 +24,8 @@ const TABS = [
 ]
 
 const DURATIONS = [30, 60, 90, 120, 150, 180, 240, 300]
+const ALL_DURATION_PAIRS = [30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 450, 480]
+
 const DEVICE_TYPES = [
   { type: 'PC', label: 'PC Stations', icon: Monitor },
   { type: 'XBOX', label: 'Xbox Consoles', icon: Gamepad2 },
@@ -82,6 +85,18 @@ export default function Settings() {
   const [showAddDevice, setShowAddDevice] = useState(false)
   const [newDevice, setNewDevice] = useState({ label: '', type: 'PC' })
   const [deviceSaving, setDeviceSaving] = useState(false)
+  const [editingDeviceId, setEditingDeviceId] = useState(null)
+  const [editingDeviceForm, setEditingDeviceForm] = useState({ label: '', type: 'PC' })
+  const [deviceUpdating, setDeviceUpdating] = useState(false)
+
+  // PanCafe Membership Plans
+  const [pancafePlans, setPancafePlans] = useState([])
+  const [showAddPlan, setShowAddPlan] = useState(false)
+  const [newPlan, setNewPlan] = useState({ label: '', hours: 5, price: 200, is_signup_plan: false })
+  const [planSaving, setPlanSaving] = useState(false)
+  const [editingPlanId, setEditingPlanId] = useState(null)
+  const [editingPlanForm, setEditingPlanForm] = useState({ label: '', hours: 5, price: 200, is_signup_plan: false })
+  const [planUpdating, setPlanUpdating] = useState(false)
 
   // Dynamic 1-Hour Tariffs (PC, Xbox, PS)
   const [hourlyRates, setHourlyRates] = useState({ PC: 70, XBOX: 100, PS: 120 })
@@ -116,12 +131,13 @@ export default function Settings() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [staffRes, settRes, platRes, devRes, pricRes] = await Promise.all([
+      const [staffRes, settRes, platRes, devRes, pricRes, pancafeRes] = await Promise.all([
         api.get('/staff'),
         api.get('/settings'),
         api.get('/platforms'),
         api.get('/devices'),
         api.get('/pricing'),
+        api.get('/pancafe-plans').catch(() => ({ plans: [] })),
       ])
       setStaffUsers(staffRes.users || [])
       setStaffInvites(staffRes.invites || [])
@@ -134,6 +150,7 @@ export default function Settings() {
       setPlatforms(platRes.platforms || [])
       setDevices(devRes.devices || [])
       setPricing(pricRes.pricing || [])
+      setPancafePlans(pancafeRes.plans || [])
 
       // Derive hourly rates from 60min entries in pricing
       const rates = { PC: 70, XBOX: 100, PS: 120 }
@@ -283,14 +300,131 @@ export default function Settings() {
     }
   }
 
-  const handleRemoveDevice = async (dId) => {
-    if (!window.confirm('Deactivate this device? Sessions on it will still be retained.')) return
+  const startEditingDevice = (device) => {
+    setEditingDeviceId(device.id)
+    setEditingDeviceForm({ label: device.label, type: device.type })
+  }
+
+  const cancelEditingDevice = () => {
+    setEditingDeviceId(null)
+  }
+
+  const saveEditingDevice = async (dId) => {
+    if (!editingDeviceForm.label?.trim()) {
+      toast.error('Device label cannot be empty')
+      return
+    }
+    setDeviceUpdating(true)
     try {
-      await api.delete(`/devices?id=${dId}`)
-      toast.success('Device deactivated')
+      await api.patch('/devices', { id: dId, label: editingDeviceForm.label.trim(), type: editingDeviceForm.type })
+      toast.success('Device updated')
+      setEditingDeviceId(null)
       loadData()
     } catch (e) {
+      toast.error(e.message || 'Failed to update device')
+    } finally {
+      setDeviceUpdating(false)
+    }
+  }
+
+  const handleRemoveDevice = async (device) => {
+    try {
+      await api.delete(`/devices?id=${device.id}`)
+      loadData()
+      showUndoToast({
+        message: `Deleted device "${device.label}"`,
+        onUndo: async () => {
+          try {
+            await api.post(`/devices?action=restore&id=${device.id}`)
+            toast.success(`Restored device "${device.label}"`)
+            loadData()
+          } catch (err) {
+            toast.error('Failed to restore device: ' + err.message)
+          }
+        }
+      })
+    } catch (e) {
       setError(e.message)
+    }
+  }
+
+  // ─── PanCafe Membership Plans Handlers ───
+  const handleAddPlan = async () => {
+    if (!newPlan.label?.trim()) return toast.error('Plan label is required')
+    if (!newPlan.hours || Number(newPlan.hours) <= 0) return toast.error('Valid plan hours required')
+    if (!newPlan.price || Number(newPlan.price) <= 0) return toast.error('Valid plan price required')
+
+    setPlanSaving(true)
+    try {
+      await api.post('/pancafe-plans', {
+        label: newPlan.label.trim(),
+        hours: Number(newPlan.hours),
+        price: Number(newPlan.price),
+        is_signup_plan: !!newPlan.is_signup_plan
+      })
+      toast.success('PanCafe membership plan created')
+      setShowAddPlan(false)
+      setNewPlan({ label: '', hours: 5, price: 200, is_signup_plan: false })
+      loadData()
+    } catch (e) {
+      toast.error(e.message || 'Failed to create plan')
+    } finally {
+      setPlanSaving(false)
+    }
+  }
+
+  const startEditingPlan = (plan) => {
+    setEditingPlanId(plan.id)
+    setEditingPlanForm({
+      label: plan.label,
+      hours: plan.hours,
+      price: plan.price,
+      is_signup_plan: plan.is_signup_plan
+    })
+  }
+
+  const cancelEditingPlan = () => {
+    setEditingPlanId(null)
+  }
+
+  const saveEditingPlan = async (planId) => {
+    if (!editingPlanForm.label?.trim()) return toast.error('Plan label cannot be empty')
+    setPlanUpdating(true)
+    try {
+      await api.patch(`/pancafe-plans/${planId}`, {
+        label: editingPlanForm.label.trim(),
+        hours: Number(editingPlanForm.hours),
+        price: Number(editingPlanForm.price),
+        is_signup_plan: !!editingPlanForm.is_signup_plan
+      })
+      toast.success('Membership plan updated')
+      setEditingPlanId(null)
+      loadData()
+    } catch (e) {
+      toast.error(e.message || 'Failed to update plan')
+    } finally {
+      setPlanUpdating(false)
+    }
+  }
+
+  const handleRemovePlan = async (plan) => {
+    try {
+      await api.delete(`/pancafe-plans/${plan.id}`)
+      loadData()
+      showUndoToast({
+        message: `Deleted plan "${plan.label}"`,
+        onUndo: async () => {
+          try {
+            await api.post(`/pancafe-plans?action=restore&id=${plan.id}`)
+            toast.success(`Restored plan "${plan.label}"`)
+            loadData()
+          } catch (err) {
+            toast.error('Failed to restore plan: ' + err.message)
+          }
+        }
+      })
+    } catch (e) {
+      toast.error(e.message || 'Failed to delete plan')
     }
   }
 
@@ -894,7 +1028,7 @@ export default function Settings() {
                 Dynamic Schedule for {DEVICE_TYPES.find(d => d.type === simulatedType)?.label} (₹{hourlyRates[simulatedType] || 70}/hr):
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(105px, 1fr))', gap: '0.5rem' }}>
-                {[30, 60, 90, 120, 150, 180, 210, 240, 300, 360, 480].map(d => {
+                {ALL_DURATION_PAIRS.map(d => {
                   const p = calculateDynamicTariff(Number(hourlyRates[simulatedType]) || 70, d)
                   const isSelected = simulatedDuration === d
                   return (
@@ -925,7 +1059,7 @@ export default function Settings() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Device Fleet</h3>
-                <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>Manage PC stations, consoles, and all playable devices</p>
+                <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>Manage PC stations, consoles, and all playable devices. Click any name or type to edit inline.</p>
               </div>
               {isAdmin && (
                 <button onClick={() => setShowAddDevice(true)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.85rem', fontSize: '0.8rem' }}>
@@ -933,33 +1067,257 @@ export default function Settings() {
                 </button>
               )}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.75rem' }}>
               {DEVICE_TYPES.map(({ type, label, icon: DIcon }) => {
                 const typeDevices = devices.filter(d => d.type === type)
-                return typeDevices.length > 0 ? typeDevices.map(d => (
-                  <div key={d.id} className="card" style={{ padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <DIcon size={14} style={{ color: 'var(--accent-text)' }} />
+                return typeDevices.length > 0 ? typeDevices.map(d => {
+                  const isEditing = editingDeviceId === d.id
+
+                  if (isEditing) {
+                    return (
+                      <div key={d.id} className="card" style={{ padding: '0.65rem 0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', border: '1.5px solid var(--accent)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flex: 1 }}>
+                          <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <DIcon size={13} style={{ color: 'var(--accent-text)' }} />
+                          </div>
+                          <input
+                            className="input"
+                            value={editingDeviceForm.label}
+                            onChange={e => setEditingDeviceForm(f => ({ ...f, label: e.target.value }))}
+                            placeholder="Device name"
+                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', minWidth: '95px', flex: 1 }}
+                            autoFocus
+                          />
+                          <select
+                            className="input"
+                            value={editingDeviceForm.type}
+                            onChange={e => setEditingDeviceForm(f => ({ ...f, type: e.target.value }))}
+                            style={{ padding: '0.3rem 0.35rem', fontSize: '0.75rem', width: '70px', flexShrink: 0 }}
+                          >
+                            <option value="PC">PC</option>
+                            <option value="XBOX">XBOX</option>
+                            <option value="PS">PS</option>
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', flexShrink: 0 }}>
+                          <button
+                            type="button"
+                            onClick={() => saveEditingDevice(d.id)}
+                            disabled={deviceUpdating}
+                            className="btn-primary btn-sm"
+                            style={{ padding: '0.3rem 0.5rem', display: 'flex', alignItems: 'center' }}
+                            title="Save device"
+                          >
+                            <Check size={13} strokeWidth={2.5} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditingDevice}
+                            disabled={deviceUpdating}
+                            className="btn-secondary btn-sm"
+                            style={{ padding: '0.3rem 0.5rem', display: 'flex', alignItems: 'center' }}
+                            title="Cancel"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
                       </div>
-                      <div>
-                        <p style={{ margin: 0, fontSize: '0.825rem', fontWeight: 800, color: 'var(--text)' }}>{d.label}</p>
-                        <p style={{ margin: 0, fontSize: '0.68rem', color: 'var(--text-muted)' }}>{type}</p>
+                    )
+                  }
+
+                  return (
+                    <div key={d.id} className="card" style={{ padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div
+                        onClick={() => isAdmin && startEditingDevice(d)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: isAdmin ? 'pointer' : 'default', flex: 1 }}
+                        title={isAdmin ? "Click to edit device name or type inline" : undefined}
+                      >
+                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <DIcon size={14} style={{ color: 'var(--accent-text)' }} />
+                        </div>
+                        <div>
+                          <p style={{ margin: 0, fontSize: '0.825rem', fontWeight: 800, color: 'var(--text)' }}>{d.label}</p>
+                          <p style={{ margin: 0, fontSize: '0.68rem', color: 'var(--text-muted)' }}>{type}</p>
+                        </div>
                       </div>
+                      {isAdmin && (
+                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => startEditingDevice(d)}
+                            className="btn-secondary btn-sm"
+                            style={{ padding: '0.35rem', color: 'var(--text-muted)' }}
+                            title="Edit device"
+                          >
+                            <Edit3 size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDevice(d)}
+                            className="btn-secondary btn-sm"
+                            style={{ color: 'var(--danger)', padding: '0.35rem' }}
+                            title="Delete device"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {isAdmin && (
-                      <button onClick={() => handleRemoveDevice(d.id)} className="btn-secondary btn-sm" style={{ color: 'var(--danger)', padding: '0.3rem' }}>
-                        <Trash2 size={12} />
-                      </button>
-                    )}
-                  </div>
-                )) : null
+                  )
+                }) : null
               })}
               {devices.length === 0 && (
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', padding: '1rem 0' }}>No devices configured yet.</p>
               )}
             </div>
           </div>
+
+          <hr style={{ border: 'none', borderTop: '1.5px solid var(--border)' }} />
+
+          {/* PanCafe Membership Plans */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <Coffee size={18} style={{ color: 'var(--accent-text)' }} />
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
+                    PanCafe Membership Plans
+                  </h3>
+                </div>
+                <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Configure prepaid hours and pricing packages for PanCafe desktop members. Click any card to edit.
+                </p>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowAddPlan(true)}
+                  className="btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.85rem', fontSize: '0.8rem' }}
+                >
+                  <PlusCircle size={14} /> Add Membership Plan
+                </button>
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.75rem' }}>
+              {pancafePlans.filter(p => p.is_active !== false).map(plan => {
+                const isEditing = editingPlanId === plan.id
+                if (isEditing) {
+                  return (
+                    <div key={plan.id} className="card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', border: '1.5px solid var(--accent)' }}>
+                      <input
+                        className="input"
+                        value={editingPlanForm.label}
+                        onChange={e => setEditingPlanForm(f => ({ ...f, label: e.target.value }))}
+                        placeholder="Plan label (e.g. 5-Hour Pass)"
+                        style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
+                      />
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <input
+                          type="number"
+                          className="input"
+                          value={editingPlanForm.hours}
+                          onChange={e => setEditingPlanForm(f => ({ ...f, hours: e.target.value }))}
+                          placeholder="Hours"
+                          style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '50%' }}
+                        />
+                        <input
+                          type="number"
+                          className="input"
+                          value={editingPlanForm.price}
+                          onChange={e => setEditingPlanForm(f => ({ ...f, price: e.target.value }))}
+                          placeholder="Price (₹)"
+                          style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '50%' }}
+                        />
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={editingPlanForm.is_signup_plan}
+                          onChange={e => setEditingPlanForm(f => ({ ...f, is_signup_plan: e.target.checked }))}
+                        />
+                        Default signup package
+                      </label>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.35rem', marginTop: '0.25rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => saveEditingPlan(plan.id)}
+                          disabled={planUpdating}
+                          className="btn-primary btn-sm"
+                          style={{ padding: '0.3rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                        >
+                          <Check size={13} /> Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEditingPlan}
+                          disabled={planUpdating}
+                          className="btn-secondary btn-sm"
+                          style={{ padding: '0.3rem 0.6rem' }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div key={plan.id} className="card" style={{ padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div
+                      onClick={() => isAdmin && startEditingPlan(plan)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: isAdmin ? 'pointer' : 'default', flex: 1 }}
+                      title={isAdmin ? "Click to edit plan" : undefined}
+                    >
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Coffee size={14} style={{ color: 'var(--accent-text)' }} />
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <p style={{ margin: 0, fontSize: '0.825rem', fontWeight: 800, color: 'var(--text)' }}>{plan.label}</p>
+                          {plan.is_signup_plan && (
+                            <span className="badge badge-accent" style={{ fontSize: '0.6rem', padding: '0.1rem 0.35rem' }}>Default</span>
+                          )}
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          <strong>{plan.hours} hrs</strong> · <span style={{ color: 'var(--accent-text)', fontWeight: 800 }}>{formatRupees(plan.price)}</span>
+                        </p>
+                      </div>
+                    </div>
+                    {isAdmin && (
+                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => startEditingPlan(plan)}
+                          className="btn-secondary btn-sm"
+                          style={{ padding: '0.35rem', color: 'var(--text-muted)' }}
+                          title="Edit plan"
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePlan(plan)}
+                          className="btn-secondary btn-sm"
+                          style={{ color: 'var(--danger)', padding: '0.35rem' }}
+                          title="Delete plan"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              {pancafePlans.filter(p => p.is_active !== false).length === 0 && (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', padding: '0.75rem 0' }}>
+                  No membership plans configured yet. Click &quot;Add Membership Plan&quot; to create one.
+                </p>
+              )}
+            </div>
+          </div>
+
 
           <hr style={{ border: 'none', borderTop: '1.5px solid var(--border)' }} />
 
@@ -1472,6 +1830,54 @@ export default function Settings() {
               {deviceSaving ? <><Spinner size="sm" /> Adding...</> : 'Add Device'}
             </button>
             <button onClick={() => setShowAddDevice(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ─── MODAL 5: ADD PANCAFE PLAN ─── */}
+      <Modal open={showAddPlan} onClose={() => setShowAddPlan(false)} title="Add PanCafe Membership Plan">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <Field label="Plan Label *" required>
+            <input
+              className="input"
+              placeholder="e.g. 5-Hour Member Pass"
+              value={newPlan.label}
+              onChange={e => setNewPlan(p => ({ ...p, label: e.target.value }))}
+            />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <Field label="Allotted Hours *" required>
+              <input
+                type="number"
+                className="input"
+                placeholder="5"
+                value={newPlan.hours}
+                onChange={e => setNewPlan(p => ({ ...p, hours: e.target.value }))}
+              />
+            </Field>
+            <Field label="Package Price (₹) *" required>
+              <input
+                type="number"
+                className="input"
+                placeholder="200"
+                value={newPlan.price}
+                onChange={e => setNewPlan(p => ({ ...p, price: e.target.value }))}
+              />
+            </Field>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={newPlan.is_signup_plan}
+              onChange={e => setNewPlan(p => ({ ...p, is_signup_plan: e.target.checked }))}
+            />
+            Set as default signup package for new members
+          </label>
+          <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+            <button onClick={handleAddPlan} disabled={planSaving} className="btn-primary" style={{ flex: 1 }}>
+              {planSaving ? <><Spinner size="sm" /> Creating...</> : 'Create Membership Plan'}
+            </button>
+            <button onClick={() => setShowAddPlan(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
           </div>
         </div>
       </Modal>

@@ -1,0 +1,6 @@
+feat: device fleet inline editing, delete undo, 16-pair tariff schedule, high-contrast DurationSelector, dynamic invoice calculation, and PanCafe membership plans config
+
+- Device Fleet: added inline editing for device name and type with Check/Cancel controls; integrated showUndoToast on device deletion with restore backend endpoint
+- DurationSelector: upgraded [-] and [+] button contrast, tactile feedback, and high-visibility stroke styling
+- Dynamic Tariffs & Schedule: added all 16 half-hour pairs (30m to 8h) to mini time card grid; synced dynamic tariff formula across NewSession invoice calculations and sessions backend
+- PanCafe Membership Plans: added full configuration section in Settings Tariffs tab for creating, editing, and deleting plans with undo toast

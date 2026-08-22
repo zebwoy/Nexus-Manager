@@ -1,6 +1,21 @@
 import { getPool, ok, err } from './_db.js'
 import { withTenantClient } from './_tenant.js'
 
+function calculateDynamicTariff(hourlyRate, durationMins) {
+  const rate = Number(hourlyRate) || 0
+  const mins = Number(durationMins) || 0
+  if (rate <= 0 || mins <= 0) return 0
+  const halfHourRate = Math.round((rate * 0.65) / 5) * 5
+  const fullHours = Math.floor(mins / 60)
+  const remainderMins = mins % 60
+  let total = fullHours * rate
+  if (remainderMins > 0) {
+    if (remainderMins <= 30) total += halfHourRate
+    else total += rate
+  }
+  return total
+}
+
 export default async function handler(req, res) {
   const pool = getPool()
   const userId = req.headers['x-user-id']
@@ -77,15 +92,14 @@ export default async function handler(req, res) {
         if (priceR.rowCount > 0) {
           newCharge = Number(priceR.rows[0].price)
         } else {
-          const rateR = await client.query(
-            `SELECT price, duration_mins FROM pricing
-             WHERE device_type = $1 ORDER BY duration_mins DESC LIMIT 1`,
+          const oneHrR = await client.query(
+            `SELECT price FROM pricing WHERE device_type = $1 AND duration_mins = 60`,
             [sess.device_type]
           )
-          const rate = rateR.rowCount > 0
-            ? (Number(rateR.rows[0].price) / Number(rateR.rows[0].duration_mins)) * 30
-            : 0
-          newCharge = Number(sess.charge) + (rate * packets)
+          const hRate = oneHrR.rowCount > 0
+            ? Number(oneHrR.rows[0].price)
+            : (sess.device_type === 'PC' ? 70 : sess.device_type === 'XBOX' ? 100 : 120)
+          newCharge = calculateDynamicTariff(hRate, newDuration)
         }
 
         const newTotal = newCharge + Number(sess.controller_total) + Number(sess.extra_person_total)
@@ -155,6 +169,15 @@ export default async function handler(req, res) {
           )
           if (priceR.rowCount > 0) {
             newCharge = Number(priceR.rows[0].price)
+          } else {
+            const oneHrR = await client.query(
+              `SELECT price FROM pricing WHERE device_type = $1 AND duration_mins = 60`,
+              [sess.device_type]
+            )
+            const hRate = oneHrR.rowCount > 0
+              ? Number(oneHrR.rows[0].price)
+              : (sess.device_type === 'PC' ? 70 : sess.device_type === 'XBOX' ? 100 : 120)
+            newCharge = calculateDynamicTariff(hRate, newDuration)
           }
           newTotal = newCharge + Number(sess.controller_total || 0) + Number(sess.extra_person_total || 0)
           newCredit = Math.max(0, newTotal - Number(sess.payment_received || 0))

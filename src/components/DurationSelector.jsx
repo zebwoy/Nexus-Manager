@@ -1,4 +1,4 @@
-import { Minus, Plus, Clock, Sparkles } from 'lucide-react'
+import { Minus, Plus, Clock } from 'lucide-react'
 import { formatDuration, formatRupees, calculateDynamicTariff } from '../lib/helpers'
 
 /**
@@ -43,19 +43,23 @@ export default function DurationSelector({
 
   if (compact) {
     return (
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
         <button
           type="button"
           onClick={handleDecrement}
           disabled={isMin}
-          className="btn-secondary btn-icon"
           style={{
-            width: '2rem', height: '2rem', borderRadius: '8px',
-            opacity: isMin ? 0.35 : 1, cursor: isMin ? 'not-allowed' : 'pointer'
+            width: '2.1rem', height: '2.1rem', borderRadius: '8px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: isMin ? 'var(--bg-input)' : 'var(--accent-dim)',
+            border: isMin ? '1px solid var(--border)' : '1.5px solid var(--accent-border)',
+            color: isMin ? 'var(--text-faint)' : 'var(--accent-text)',
+            opacity: isMin ? 0.35 : 1, cursor: isMin ? 'not-allowed' : 'pointer',
+            transition: 'all 0.15s ease'
           }}
           aria-label="Decrease duration by 30 mins"
         >
-          <Minus size={13} />
+          <Minus size={15} strokeWidth={3} />
         </button>
 
         <div style={{
@@ -77,14 +81,18 @@ export default function DurationSelector({
           type="button"
           onClick={handleIncrement}
           disabled={isMax}
-          className="btn-secondary btn-icon"
           style={{
-            width: '2rem', height: '2rem', borderRadius: '8px',
-            opacity: isMax ? 0.35 : 1, cursor: isMax ? 'not-allowed' : 'pointer'
+            width: '2.1rem', height: '2.1rem', borderRadius: '8px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: isMax ? 'var(--bg-input)' : 'var(--accent-dim)',
+            border: isMax ? '1px solid var(--border)' : '1.5px solid var(--accent-border)',
+            color: isMax ? 'var(--text-faint)' : 'var(--accent-text)',
+            opacity: isMax ? 0.35 : 1, cursor: isMax ? 'not-allowed' : 'pointer',
+            transition: 'all 0.15s ease'
           }}
           aria-label="Increase duration by 30 mins"
         >
-          <Plus size={13} />
+          <Plus size={15} strokeWidth={3} />
         </button>
       </div>
     )
@@ -114,17 +122,19 @@ export default function DurationSelector({
           type="button"
           onClick={handleDecrement}
           disabled={isMin}
-          className="btn-secondary"
           style={{
-            width: '2.5rem', height: '2.5rem', borderRadius: '10px',
+            width: '2.6rem', height: '2.6rem', borderRadius: '10px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             opacity: isMin ? 0.3 : 1, cursor: isMin ? 'not-allowed' : 'pointer',
-            border: '1px solid var(--border)', background: 'var(--bg-card)',
-            boxShadow: 'var(--shadow-outset)', transition: 'all 0.15s ease'
+            border: isMin ? '1.5px solid var(--border)' : '1.5px solid var(--accent)',
+            background: isMin ? 'var(--bg-card)' : 'var(--accent-dim)',
+            boxShadow: isMin ? 'none' : '0 2px 8px rgba(0,0,0,0.2)',
+            transition: 'all 0.15s ease'
           }}
           title="Decrease by 30 minutes"
+          aria-label="Decrease duration"
         >
-          <Minus size={16} style={{ color: 'var(--text)' }} />
+          <Minus size={18} strokeWidth={3} style={{ color: isMin ? 'var(--text-faint)' : 'var(--accent-text)' }} />
         </button>
 
         {/* Center Display */}
@@ -153,17 +163,19 @@ export default function DurationSelector({
           type="button"
           onClick={handleIncrement}
           disabled={isMax}
-          className="btn-secondary"
           style={{
-            width: '2.5rem', height: '2.5rem', borderRadius: '10px',
+            width: '2.6rem', height: '2.6rem', borderRadius: '10px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             opacity: isMax ? 0.3 : 1, cursor: isMax ? 'not-allowed' : 'pointer',
-            border: '1px solid var(--border)', background: 'var(--bg-card)',
-            boxShadow: 'var(--shadow-outset)', transition: 'all 0.15s ease'
+            border: isMax ? '1.5px solid var(--border)' : '1.5px solid var(--accent)',
+            background: isMax ? 'var(--bg-card)' : 'var(--accent-dim)',
+            boxShadow: isMax ? 'none' : '0 2px 8px rgba(0,0,0,0.2)',
+            transition: 'all 0.15s ease'
           }}
           title="Increase by 30 minutes"
+          aria-label="Increase duration"
         >
-          <Plus size={16} style={{ color: 'var(--text)' }} />
+          <Plus size={18} strokeWidth={3} style={{ color: isMax ? 'var(--text-faint)' : 'var(--accent-text)' }} />
         </button>
       </div>
     </div>

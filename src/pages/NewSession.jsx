@@ -84,10 +84,8 @@ export default function NewSession() {
 
   // Recompute charge and time_out whenever relevant fields change
   useEffect(() => {
-    const hourlyRate = pricing[form.device_type]?.[60] || (form.device_type === 'PC' ? 70 : form.device_type === 'XBOX' ? 100 : 120)
-    const base = pricing[form.device_type]?.[form.duration_mins] !== undefined
-      ? Number(pricing[form.device_type][form.duration_mins])
-      : calculateDynamicTariff(hourlyRate, form.duration_mins)
+    const hourlyRate = Number(pricing[form.device_type]?.[60]) || (form.device_type === 'PC' ? 70 : form.device_type === 'XBOX' ? 100 : 120)
+    const base = calculateDynamicTariff(hourlyRate, form.duration_mins)
     setCharge(base)
 
     if (form.time_in && form.duration_mins) {
