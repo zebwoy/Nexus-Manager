@@ -471,8 +471,35 @@ export default async function handler(req, res) {
       return ok(res, { sessions: result.rows })
     }
 
+    // ─── POST /api/sessions?action=restore&id=X ─────────────────────
+    if (req.method === 'POST' && (req.query.action === 'restore' || req.body?.action === 'restore')) {
+      const restoreId = Number(req.query.id || req.body?.id)
+      if (!restoreId) return err(res, 'Session ID required', 400)
+
+      await client.query('BEGIN')
+      try {
+        await client.query(`UPDATE sessions SET is_deleted = FALSE WHERE id = $1`, [restoreId])
+        await client.query(`UPDATE sales SET is_deleted = FALSE WHERE session_id = $1`, [restoreId]).catch(() => {})
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'SESSION_RESTORE','sessions',$3,$4)`,
+          [
+            Number(userId || 0),
+            req.headers['x-username'] || 'system',
+            `Restored session #${restoreId}`,
+            JSON.stringify({ restoreId })
+          ]
+        )
+        await client.query('COMMIT')
+        return ok(res, { success: true })
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      }
+    }
+
     if (req.method === 'POST') {
       const body = req.body || {}
+
       const {
         customer_id, name, mobile, shop_name, device_id, duration_mins,
         time_in, time_out, date, charge, controller_total,
@@ -600,31 +627,6 @@ export default async function handler(req, res) {
 
         await client.query('COMMIT')
         return ok(res, { id: sessionId, is_predated: isPredated }, 201)
-      } catch (e) {
-        await client.query('ROLLBACK')
-        throw e
-      }
-    }
-
-    // ─── POST /api/sessions?action=restore&id=X ─────────────────────
-    if (req.method === 'POST' && req.query.action === 'restore') {
-      const restoreId = Number(req.query.id)
-      if (!restoreId) return err(res, 'Session ID required', 400)
-
-      await client.query('BEGIN')
-      try {
-        await client.query(`UPDATE sessions SET is_deleted = FALSE WHERE id = $1`, [restoreId])
-        await client.query(
-          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'SESSION_RESTORE','sessions',$3,$4)`,
-          [
-            Number(userId || 0),
-            req.headers['x-username'] || 'system',
-            `Restored session #${restoreId}`,
-            JSON.stringify({ restoreId })
-          ]
-        )
-        await client.query('COMMIT')
-        return ok(res, { success: true })
       } catch (e) {
         await client.query('ROLLBACK')
         throw e
