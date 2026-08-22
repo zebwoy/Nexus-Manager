@@ -179,6 +179,8 @@ CREATE TABLE IF NOT EXISTS expenses (
     amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     vendor_name VARCHAR(200),
     note TEXT,
+    item_id INT,
+    units INT DEFAULT 0,
     payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed')),
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -191,6 +193,7 @@ CREATE TABLE IF NOT EXISTS inventory_items (
     category VARCHAR(50) NOT NULL CHECK (category IN ('Drinks', 'Snacks', 'Other')),
     buy_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     sell_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    initial_stock INT NOT NULL DEFAULT 0,
     stock_qty INT NOT NULL DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
     created_by INT REFERENCES users(id)
@@ -567,6 +570,11 @@ export async function getTenantClient(pool, req) {
     await client.query(`
       ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE sales ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS item_id INT;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS units INT DEFAULT 0;
+      ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS initial_stock INT NOT NULL DEFAULT 0;
+      UPDATE inventory_items SET initial_stock = 20 WHERE name ILIKE '%lahori%' AND initial_stock = 0;
+      UPDATE inventory_items SET initial_stock = stock_qty WHERE initial_stock = 0;
     `).catch(() => {})
     return { client, schemaName }
   } catch (err) {

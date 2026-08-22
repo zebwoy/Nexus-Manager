@@ -144,6 +144,9 @@ export default async function handler(req, res) {
         try {
           let finalNote = note || ''
 
+          let linkedItemId = item_id ? Number(item_id) : null
+          let linkedUnits = units ? Number(units) : 0
+
           if (category === 'Cafeteria') {
             if (item_id && units) {
               const itemR = await client.query(
@@ -155,37 +158,45 @@ export default async function handler(req, res) {
               )
               const item = itemR.rows[0]
               finalNote = `Restocked ${units} units of ${item?.name || 'item'}. ` + finalNote
+              linkedItemId = Number(item_id)
+              linkedUnits = Number(units)
             } else if (new_item && units) {
               const calculatedBuyPrice = Number((Number(amount) / Number(units)).toFixed(2))
               const newRes = await client.query(
-                `INSERT INTO inventory_items (name, category, buy_price, sell_price, stock_qty, created_by)
-                 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name`,
+                `INSERT INTO inventory_items (name, category, buy_price, sell_price, initial_stock, stock_qty, created_by)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name`,
                 [
                   new_item.name,
                   new_item.category || 'Drinks',
                   calculatedBuyPrice,
                   Number(new_item.sell_price),
                   Number(units),
+                  Number(units),
                   userId
                 ]
               )
+              linkedItemId = newRes.rows[0]?.id || null
+              linkedUnits = Number(units)
               finalNote = `Added and stocked ${units} units of ${newRes.rows[0]?.name || 'new product'}. ` + finalNote
             }
           }
 
           const r = await client.query(
-            `INSERT INTO expenses (category, amount, vendor_name, note, date, payment_method, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+            `INSERT INTO expenses (category, amount, vendor_name, note, item_id, units, date, payment_method, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
             [
               category || 'Other',
               amount,
               vendor_name || null,
               finalNote.trim() || null,
+              linkedItemId,
+              linkedUnits,
               date || new Date().toISOString().slice(0, 10),
               payment_method || 'cash',
               userId
             ]
           )
+
 
           await client.query(
             `INSERT INTO audit_logs (user_id, username, action, module, details, metadata)
@@ -372,7 +383,34 @@ export default async function handler(req, res) {
 
     // ─── INVENTORY ITEMS CRUD (Default) ──────────────────────────
     if (req.method === 'GET') {
-      const r = await client.query('SELECT * FROM inventory_items WHERE is_active = TRUE ORDER BY name')
+      const r = await client.query(`
+        SELECT
+          i.id,
+          i.name,
+          i.category,
+          i.buy_price,
+          i.sell_price,
+          i.is_active,
+          i.created_by,
+          COALESCE(i.initial_stock, 0) AS initial_stock,
+          GREATEST(
+            0,
+            COALESCE(i.initial_stock, 0)
+            + COALESCE((SELECT SUM(e.units) FROM expenses e WHERE e.item_id = i.id AND e.category = 'Cafeteria'), 0)
+            - COALESCE((
+                SELECT SUM(si.qty)
+                FROM sale_items si
+                JOIN sales s ON s.id = si.sale_id
+                LEFT JOIN sessions sess ON sess.id = s.session_id
+                WHERE si.item_id = i.id
+                  AND (s.is_deleted IS NULL OR s.is_deleted = FALSE)
+                  AND (sess.id IS NULL OR sess.is_deleted IS NULL OR sess.is_deleted = FALSE)
+              ), 0)
+          ) AS stock_qty
+        FROM inventory_items i
+        WHERE i.is_active = TRUE
+        ORDER BY i.name
+      `)
       return ok(res, { items: r.rows })
     }
 
@@ -388,10 +426,12 @@ export default async function handler(req, res) {
       const { name, category, buy_price, sell_price, stock_qty } = b
       if (!name || !sell_price) return err(res, 'Name and sell price are required')
 
+      const qty = Number(stock_qty || 0)
+      const bPrice = Number(buy_price || 0)
       const r = await client.query(
-        `INSERT INTO inventory_items (name, category, buy_price, sell_price, stock_qty, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [name, category || 'Drinks', buy_price || 0, sell_price, stock_qty || 0, userId ? Number(userId) : null]
+        `INSERT INTO inventory_items (name, category, buy_price, sell_price, initial_stock, stock_qty, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [name, category || 'Drinks', bPrice, Number(sell_price), qty, qty, userId ? Number(userId) : null]
       )
       return ok(res, { item: r.rows[0] }, 201)
     }
@@ -402,11 +442,14 @@ export default async function handler(req, res) {
       const b = req.body || {}
       const { name, category, buy_price, sell_price, stock_qty } = b
 
+      const qty = stock_qty !== undefined ? Number(stock_qty) : null
       const r = await client.query(
         `UPDATE inventory_items
-         SET name = $1, category = $2, buy_price = $3, sell_price = $4, stock_qty = $5
+         SET name = $1, category = $2, buy_price = $3, sell_price = $4,
+             initial_stock = COALESCE($5, initial_stock),
+             stock_qty = COALESCE($5, stock_qty)
          WHERE id = $6 RETURNING *`,
-        [name, category, buy_price, sell_price, stock_qty, id]
+        [name, category, buy_price, sell_price, qty, id]
       )
       return ok(res, { item: r.rows[0] })
     }
