@@ -1,5 +1,0 @@
-fix(dashboard): fix midnight timezone offset issue in KPI revenue snapshot
-
-- Updated /dashboard-snapshot endpoint to accept client local target date ($1) instead of database UTC CURRENT_DATE
-- Standardized created_at date conversions to Asia/Kolkata timezone to avoid 5.5-hour UTC lag across midnight
-- Passed local todayISO() date explicitly from Dashboard.jsx
