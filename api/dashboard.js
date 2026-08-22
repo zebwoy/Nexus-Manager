@@ -22,8 +22,8 @@ export default async function handler(req, res) {
       const r = await client.query(`
         SELECT
           (SELECT COALESCE(SUM(total), 0.00) FROM sessions WHERE date = $1 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS gaming_revenue,
-          (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'walkin' AND date = $1) AS walkin_revenue,
-          (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'session' AND date = $1) AS session_sales_revenue,
+          (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'walkin' AND date = $1 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS walkin_revenue,
+          (SELECT COALESCE(SUM(s.total), 0.00) FROM sales s LEFT JOIN sessions sess ON sess.id = s.session_id WHERE s.sale_type = 'session' AND s.date = $1 AND (s.is_deleted IS NULL OR s.is_deleted = FALSE) AND (sess.id IS NULL OR sess.is_deleted IS NULL OR sess.is_deleted = FALSE)) AS session_sales_revenue,
           (SELECT COALESCE(SUM(charge_price), 0.00) FROM recharges WHERE date = $1) AS rc_revenue,
           (SELECT COALESCE(SUM(amount_received), 0.00) FROM pancafe_sessions WHERE date = $1) AS pancafe_revenue,
           (SELECT COALESCE(SUM(credit), 0.00) FROM sessions WHERE credit > 0 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS total_outstanding_credit,
@@ -31,9 +31,9 @@ export default async function handler(req, res) {
           (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'cash' AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1) AS cash_gaming,
           (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'online' AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1) AS online_gaming,
           (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN payment_received ELSE 0 END), 0.00)
-           FROM sales WHERE sale_type = 'walkin' AND date = $1) AS cash_sales,
+           FROM sales WHERE sale_type = 'walkin' AND date = $1 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS cash_sales,
           (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN payment_received ELSE 0 END), 0.00)
-           FROM sales WHERE sale_type = 'walkin' AND date = $1) AS online_sales,
+           FROM sales WHERE sale_type = 'walkin' AND date = $1 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS online_sales,
           (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount_received ELSE 0 END), 0.00)
            FROM pancafe_sessions WHERE date = $1) AS cash_pancafe,
           (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN amount_received ELSE 0 END), 0.00)

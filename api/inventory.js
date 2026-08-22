@@ -264,6 +264,7 @@ export default async function handler(req, res) {
       if (req.method === 'GET') {
         const date = req.query.date
         const sessionId = req.query.session_id
+        const saleType = req.query.sale_type
         let q = `
           SELECT s.*, c.name AS customer_name, c.shop_name, c.mobile AS customer_mobile,
                  u.username AS created_by_username,
@@ -283,7 +284,15 @@ export default async function handler(req, res) {
         if (sessionId) {
           clauses.push(`s.session_id = $${vals.length + 1}`)
           vals.push(sessionId)
+        } else if (saleType) {
+          clauses.push(`s.sale_type = $${vals.length + 1}`)
+          vals.push(saleType)
+        } else {
+          // Only return standalone walk-in sales unless querying a specific session
+          clauses.push(`s.sale_type = 'walkin'`)
         }
+        clauses.push(`(s.is_deleted IS NULL OR s.is_deleted = FALSE)`)
+
         if (clauses.length > 0) q += ` WHERE ` + clauses.join(' AND ')
         q += ` GROUP BY s.id, c.id, u.id ORDER BY s.created_at DESC`
         const result = await client.query(q, vals)

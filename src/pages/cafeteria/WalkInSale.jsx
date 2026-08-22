@@ -78,7 +78,7 @@ export default function WalkInSale() {
   const loadSales = async () => {
     try {
       setSalesLoading(true)
-      const d = await api.get(`/sales${dateFilter ? `?date=${dateFilter}` : ''}`)
+      const d = await api.get(`/sales?sale_type=walkin${dateFilter ? `&date=${dateFilter}` : ''}`)
       setSales(d.sales || [])
     } catch (e) {
       setError(e.message)

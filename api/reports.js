@@ -14,8 +14,8 @@ export default async function handler(req, res) {
     const revenueRes = await client.query(`
       SELECT
         (SELECT COALESCE(SUM(total), 0) FROM sessions WHERE date >= $1 AND date < $2 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS gaming_revenue,
-        (SELECT COALESCE(SUM(total), 0) FROM sales WHERE sale_type = 'walkin' AND date >= $1 AND date < $2) AS walkin_revenue,
-        (SELECT COALESCE(SUM(total), 0) FROM sales WHERE sale_type = 'session' AND date >= $1 AND date < $2) AS session_sales_revenue,
+        (SELECT COALESCE(SUM(total), 0) FROM sales WHERE sale_type = 'walkin' AND date >= $1 AND date < $2 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS walkin_revenue,
+        (SELECT COALESCE(SUM(s.total), 0) FROM sales s LEFT JOIN sessions sess ON sess.id = s.session_id WHERE s.sale_type = 'session' AND s.date >= $1 AND s.date < $2 AND (s.is_deleted IS NULL OR s.is_deleted = FALSE) AND (sess.id IS NULL OR sess.is_deleted IS NULL OR sess.is_deleted = FALSE)) AS session_sales_revenue,
         (SELECT COALESCE(SUM(amount_received), 0) FROM pancafe_sessions WHERE date >= $1 AND date < $2) AS pancafe_revenue,
         (SELECT COALESCE(SUM(charge_price), 0) FROM recharges WHERE date >= $1 AND date < $2) AS rc_revenue,
         (SELECT COALESCE(SUM(credit), 0) FROM sessions WHERE date >= $1 AND date < $2 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS outstanding_credit,
@@ -23,7 +23,8 @@ export default async function handler(req, res) {
         (SELECT COALESCE(SUM(si.qty * ii.buy_price), 0)
          FROM sales s JOIN sale_items si ON si.sale_id = s.id
          JOIN inventory_items ii ON ii.id = si.item_id
-         WHERE s.date >= $1 AND s.date < $2) AS inventory_cogs,
+         LEFT JOIN sessions sess ON sess.id = s.session_id
+         WHERE s.date >= $1 AND s.date < $2 AND (s.is_deleted IS NULL OR s.is_deleted = FALSE) AND (sess.id IS NULL OR sess.is_deleted IS NULL OR sess.is_deleted = FALSE)) AS inventory_cogs,
         (SELECT COALESCE(SUM(cost_price), 0) FROM recharges WHERE date >= $1 AND date < $2) AS recharges_cogs,
         (SELECT COALESCE(SUM(amount_spent), 0) FROM pancafe_sessions WHERE date >= $1 AND date < $2) AS pancafe_cogs
     `, [startDate, endDate])
