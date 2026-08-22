@@ -1,0 +1,6 @@
+fix(deployment): consolidate serverless functions for Vercel Hobby plan limit
+
+- Consolidated blob-upload and profile-changes into api/setup.js
+- Consolidated expenses and customers into api/inventory.js
+- Updated vercel.json rewrites for transparent endpoint routing
+- Reduced total functions from 14 to 10 (within 12-function limit)

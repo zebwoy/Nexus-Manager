@@ -1,11 +1,153 @@
 import { getPool, ok, err } from './_db.js'
-import { withTenantClient } from './_tenant.js'
+import { withTenantClient, ensureGlobalRegistry } from './_tenant.js'
 
 export default async function handler(req, res) {
   const pool = getPool()
-  const resource = req.query.resource
+  const rawUrl = req.url || ''
+  const resource = req.query.resource || (
+    rawUrl.includes('blob-upload') ? 'blob-upload' :
+    rawUrl.includes('profile-changes') ? 'profile-changes' :
+    rawUrl.includes('devices') ? 'devices' :
+    rawUrl.includes('platforms') ? 'platforms' :
+    rawUrl.includes('pricing') ? 'pricing' :
+    rawUrl.includes('settings') ? 'settings' :
+    rawUrl.includes('purge') ? 'purge' : null
+  )
 
-  return withTenantClient(pool, req, res, async (client) => {
+  return withTenantClient(pool, req, res, async (client, schemaName) => {
+    // ─── BLOB UPLOAD (Logo Storage) ───────────────────────────
+    if (resource === 'blob-upload') {
+      if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
+      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        return err(res, 'Vercel Blob is not configured. Please add BLOB_READ_WRITE_TOKEN to your environment variables.', 503)
+      }
+
+      const filename = req.headers['x-filename'] || 'logo.png'
+      const contentType = req.headers['x-content-type'] || 'image/png'
+      const orgSchema = req.headers['x-schema-name'] || schemaName || 'org'
+
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml']
+      if (!allowedTypes.includes(contentType)) {
+        return err(res, 'Only PNG, JPEG, WebP, and SVG files are allowed for logos.', 400)
+      }
+
+      try {
+        const { put } = await import('@vercel/blob')
+        const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '-').toLowerCase()
+        const blobPath = `logos/${orgSchema}/${Date.now()}-${safeName}`
+        const body = req.body
+        if (!body || (Buffer.isBuffer(body) && body.length === 0)) {
+          return err(res, 'No file data received', 400)
+        }
+
+        const blob = await put(blobPath, body, {
+          access: 'public',
+          contentType,
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+          addRandomSuffix: false,
+        })
+
+        return ok(res, { url: blob.url, downloadUrl: blob.downloadUrl, pathname: blob.pathname })
+      } catch (e) {
+        console.error('Blob upload error:', e)
+        return err(res, 'Upload failed: ' + (e.message || 'Unknown error'), 500)
+      }
+    }
+
+    // ─── PROFILE CHANGES (Admin Requests) ─────────────────────
+    if (resource === 'profile-changes') {
+      try {
+        await ensureGlobalRegistry(pool)
+      } catch (e) {}
+
+      const callerUsername = req.headers['x-username'] || 'admin'
+      const callerEmail = req.headers['x-user-email'] || ''
+
+      if (req.method === 'GET') {
+        const statusFilter = req.query.status || 'all'
+        const changesR = await pool.query(`
+          SELECT * FROM public.tenant_profile_changes
+          WHERE schema_name = $1
+          ${statusFilter !== 'all' ? 'AND status = $2' : ''}
+          ORDER BY requested_at DESC
+          LIMIT 30
+        `, statusFilter !== 'all' ? [schemaName, statusFilter] : [schemaName])
+        return ok(res, { changes: changesR.rows })
+      }
+
+      if (req.method === 'POST') {
+        const { field, new_value } = req.body || {}
+        const ALLOWED_FIELDS = ['cafe_name', 'counter_phone', 'cafe_logo']
+        if (!field || !ALLOWED_FIELDS.includes(field)) {
+          return err(res, 'Invalid field. Must be one of: cafe_name, counter_phone, cafe_logo', 400)
+        }
+        if (!new_value?.toString().trim()) {
+          return err(res, 'New value is required', 400)
+        }
+        if (field === 'cafe_name' && new_value.trim().length < 2) {
+          return err(res, 'Cafe name must be at least 2 characters', 400)
+        }
+        if (field === 'counter_phone' && new_value.trim().length < 7) {
+          return err(res, 'Phone number must be at least 7 characters', 400)
+        }
+        if (field === 'cafe_logo' && !new_value.startsWith('https://')) {
+          return err(res, 'Logo must be a valid HTTPS URL (upload via the logo uploader first)', 400)
+        }
+
+        let oldValue = ''
+        try {
+          const curR = await client.query('SELECT value FROM settings WHERE key = $1', [field])
+          oldValue = curR.rows[0]?.value || ''
+        } catch {}
+
+        const existingR = await pool.query(
+          `SELECT id FROM public.tenant_profile_changes
+           WHERE schema_name = $1 AND field = $2 AND status = 'pending'`,
+          [schemaName, field]
+        )
+        if (existingR.rows.length > 0) {
+          return err(res, `A pending change request for "${field}" already exists. Please wait for Super Admin review.`, 409)
+        }
+
+        const insertR = await pool.query(
+          `INSERT INTO public.tenant_profile_changes
+             (schema_name, field, old_value, new_value, requested_by, status)
+           VALUES ($1, $2, $3, $4, $5, 'pending')
+           RETURNING *`,
+          [schemaName, field, oldValue, new_value.toString().trim(), callerUsername || callerEmail]
+        )
+
+        try {
+          await client.query(
+            `INSERT INTO audit_logs (username, action, module, details, metadata)
+             VALUES ($1, 'REQUEST_PROFILE_CHANGE', 'staff', $2, $3)`,
+            [
+              callerUsername,
+              `Submitted profile change request: "${field}" → "${new_value}" (pending Super Admin approval)`,
+              JSON.stringify({ field, old_value: oldValue, new_value, schema_name: schemaName })
+            ]
+          )
+        } catch {}
+
+        return ok(res, { success: true, change: insertR.rows[0] }, 201)
+      }
+
+      if (req.method === 'DELETE') {
+        const id = Number(req.query.id)
+        if (!id) return err(res, 'Change request ID is required', 400)
+
+        const existing = await pool.query(
+          `SELECT * FROM public.tenant_profile_changes WHERE id = $1 AND schema_name = $2`,
+          [id, schemaName]
+        )
+        if (existing.rows.length === 0) return err(res, 'Change request not found', 404)
+        if (existing.rows[0].status !== 'pending') return err(res, 'Only pending requests can be cancelled', 400)
+
+        await pool.query('DELETE FROM public.tenant_profile_changes WHERE id = $1', [id])
+        return ok(res, { success: true, message: 'Change request cancelled' })
+      }
+    }
+
     // ─── DEVICES ───────────────────────────────────────────────
     if (resource === 'devices') {
       if (req.method === 'GET') {

@@ -7,21 +7,25 @@
     { "source": "/api/auth-audit",            "destination": "/api/auth?action=audit" },
     { "source": "/api/users",                 "destination": "/api/auth?action=users" },
     { "source": "/api/users/(.*)",            "destination": "/api/auth?action=users&id=$1" },
+
     { "source": "/api/devices",               "destination": "/api/setup?resource=devices" },
     { "source": "/api/pricing",               "destination": "/api/setup?resource=pricing" },
     { "source": "/api/settings",              "destination": "/api/setup?resource=settings" },
     { "source": "/api/purge",                 "destination": "/api/setup?resource=purge" },
     { "source": "/api/platforms",             "destination": "/api/setup?resource=platforms" },
+    { "source": "/api/blob-upload",           "destination": "/api/setup?resource=blob-upload" },
+    { "source": "/api/profile-changes",       "destination": "/api/setup?resource=profile-changes" },
+    { "source": "/api/profile-changes/(.*)",  "destination": "/api/setup?resource=profile-changes&id=$1" },
 
-    { "source": "/api/blob-upload",           "destination": "/api/blob-upload" },
-    { "source": "/api/profile-changes",       "destination": "/api/profile-changes" },
-    { "source": "/api/profile-changes/(.*)",  "destination": "/api/profile-changes?id=$1" },
+    { "source": "/api/customers",             "destination": "/api/inventory?resource=customers" },
+    { "source": "/api/customers/(.*)",        "destination": "/api/inventory?resource=customers&id=$1" },
+    { "source": "/api/expenses",              "destination": "/api/inventory?resource=expenses" },
+    { "source": "/api/expenses/(.*)",         "destination": "/api/inventory?resource=expenses&id=$1" },
+    { "source": "/api/sales",                 "destination": "/api/inventory?resource=sales" },
+    { "source": "/api/sales/(.*)",            "destination": "/api/inventory?resource=sales&sale_id=$1" },
 
     { "source": "/api/pancafe-plans",         "destination": "/api/pancafe?resource=plans" },
     { "source": "/api/pancafe-plans/(.*)",    "destination": "/api/pancafe?resource=plans&id=$1" },
-
-    { "source": "/api/sales",                 "destination": "/api/inventory?resource=sales" },
-    { "source": "/api/sales/(.*)",            "destination": "/api/inventory?resource=sales&sale_id=$1" },
 
     { "source": "/api/recharges/(.*)",        "destination": "/api/recharges?path=$1" },
 
