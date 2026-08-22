@@ -71,10 +71,10 @@ export default function Reports() {
                   { label: 'Gaming Station Sessions', value: data.gaming_revenue },
                   { label: 'Shop Retail Sales (Walk-in)', value: data.walkin_revenue },
                   { label: 'Shop Retail Sales (Seat Tables)', value: data.session_sales_revenue },
-                  { label: 'PanCafe Sub-sessions', value: data.pancafe_revenue },
+                  { label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><img src="/assets/favicon_PanCafe.ico" alt="PanCafe" style={{ width: '15px', height: '15px', objectFit: 'contain' }} />PanCafe Sub-sessions</span>, value: data.pancafe_revenue },
                   { label: 'Console Platform Recharges', value: data.rc_revenue },
-                ].map(r => (
-                  <div key={r.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px dashed var(--border)', paddingBottom: '0.45rem' }}>
+                ].map((r, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px dashed var(--border)', paddingBottom: '0.45rem' }}>
                     <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 650 }}>{r.label}</span>
                     <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--text)' }}>{formatRupees(r.value)}</span>
                   </div>
@@ -92,9 +92,9 @@ export default function Reports() {
                   { label: 'Operating Expenses (Ledger)', value: data.operating_expenses, badge: 'badge-warning' },
                   { label: 'Inventory Cost of Sales (COGS)', value: data.inventory_cogs, badge: 'badge-neutral' },
                   { label: 'Recharge Purchase Costs (COGS)', value: data.recharges_cogs, badge: 'badge-accent' },
-                  { label: 'PanCafe System Top-up Costs (COGS)', value: data.pancafe_cogs, badge: 'badge-accent' },
-                ].map(r => (
-                  <div key={r.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px dashed var(--border)', paddingBottom: '0.45rem' }}>
+                  { label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><img src="/assets/favicon_PanCafe.ico" alt="PanCafe" style={{ width: '15px', height: '15px', objectFit: 'contain' }} />PanCafe System Top-up Costs (COGS)</span>, value: data.pancafe_cogs, badge: 'badge-accent' },
+                ].map((r, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px dashed var(--border)', paddingBottom: '0.45rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                       <span className={`badge ${r.badge}`} style={{ fontSize: '0.625rem', padding: '0.15rem 0.35rem' }} />
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 650 }}>{r.label}</span>

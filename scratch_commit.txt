@@ -1,0 +1,5 @@
+feat(branding): integrate PanCafe favicon across settings, sessions, dashboard, reports, and EOD reconciliation
+
+- Integrated /assets/favicon_PanCafe.ico across Settings Tariffs (section header, plan cards, add plan modal)
+- Added PanCafe favicon to PanCafe page headers, empty state, and session close modal
+- Integrated PanCafe favicon badge in Dashboard KPI cards, Reports revenue & COGS breakdowns, and EOD inflow rows

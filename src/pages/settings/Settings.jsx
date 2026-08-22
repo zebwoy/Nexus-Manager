@@ -1227,8 +1227,8 @@ export default function Settings() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Coffee size={18} style={{ color: 'var(--accent-text)' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                  <img src="/assets/favicon_PanCafe.ico" alt="PanCafe Icon" style={{ width: '22px', height: '22px', objectFit: 'contain' }} />
                   <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--text)' }}>
                     PanCafe Membership Plans
                   </h3>
@@ -1354,7 +1354,7 @@ export default function Settings() {
                         background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
                       }}>
-                        <Coffee size={16} style={{ color: 'var(--accent-text)' }} />
+                        <img src="/assets/favicon_PanCafe.ico" alt="PanCafe Icon" style={{ width: '22px', height: '22px', objectFit: 'contain' }} />
                       </div>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'nowrap' }}>
@@ -1932,7 +1932,12 @@ export default function Settings() {
       </Modal>
 
       {/* ─── MODAL 5: ADD PANCAFE PLAN ─── */}
-      <Modal open={showAddPlan} onClose={() => setShowAddPlan(false)} title="Add PanCafe Membership Plan">
+      <Modal open={showAddPlan} onClose={() => setShowAddPlan(false)} title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+          <img src="/assets/favicon_PanCafe.ico" alt="PanCafe" style={{ width: '18px', height: '18px', objectFit: 'contain' }} />
+          <span>Add PanCafe Membership Plan</span>
+        </div>
+      }>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <Field label="Plan Label *" required>
             <input

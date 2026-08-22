@@ -218,7 +218,7 @@ export default function EODReconciliation() {
             {snapshot && <>
               <Row label="Gaming Sessions" cash={snapshot.cash_gaming} online={snapshot.online_gaming} />
               <Row label="Shop Sales" cash={snapshot.cash_sales} online={snapshot.online_sales} />
-              <Row label="PanCafe" cash={snapshot.cash_pancafe} online={snapshot.online_pancafe} />
+              <Row label={<span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}><img src="/assets/favicon_PanCafe.ico" alt="PanCafe" style={{ width: '14px', height: '14px', objectFit: 'contain' }} />PanCafe</span>} cash={snapshot.cash_pancafe} online={snapshot.online_pancafe} />
               <Row label="Recharges" cash={rcData.cash} online={rcData.online} />
               <Row label="TOTAL INFLOWS" cash={cashInflows} online={onlineInflows} highlight />
             </>}

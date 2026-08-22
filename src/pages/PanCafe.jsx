@@ -55,38 +55,34 @@ export function PanCafe() {
     <div>
       <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => setTrialModal({ isOpen: false, action: '' })} />
       <LogSessionModal open={showLogModal} onClose={() => setShowLogModal(false)} />
-      {/* Close session modal */}
-      <Modal open={!!closing} onClose={() => setClosing(null)} title="Close PanCafe Session">
-
+      <Modal open={!!closing} onClose={() => setClosing(null)} title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+          <img src="/assets/favicon_PanCafe.ico" alt="PanCafe" style={{ width: '18px', height: '18px', objectFit: 'contain' }} />
+          <span>Close PanCafe Session</span>
+        </div>
+      }>
         {closing && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div style={{ background: 'var(--bg-input)', padding: '0.85rem 1rem', borderRadius: '10px', fontSize: '0.875rem' }}>
               Closing session for <strong>{closing.name || closing.pancafe_username}</strong> · {closing.device_label}
-            </p>
-            <Field label="Time Out">
-              <input type="time" className="input" value={closeForm.time_out}
-                onChange={e => setCloseForm(f => ({ ...f, time_out: e.target.value }))} />
-            </Field>
-            <Field label="Final Amount Received (₹)">
-              <input type="number" className="input" placeholder={closing.amount_received}
-                value={closeForm.amount_received}
-                onChange={e => setCloseForm(f => ({ ...f, amount_received: e.target.value }))} />
-            </Field>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="label" style={{ marginBottom: 0 }}>Payment Method</span>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                {['cash', 'online'].map(m => (
-                  <button key={m} onClick={() => setCloseForm(f => ({ ...f, payment_method: m }))}
-                    style={{
-                      padding: '0.35rem 0.75rem', borderRadius: '8px', cursor: 'pointer',
-                      border: `1.5px solid ${closeForm.payment_method === m ? 'var(--accent)' : 'var(--border)'}`,
-                      background: closeForm.payment_method === m ? 'var(--accent-dim)' : 'var(--bg-input)',
-                      color: closeForm.payment_method === m ? 'var(--accent-text)' : 'var(--text-muted)',
-                      fontWeight: 650, fontSize: '0.75rem'
-                    }}>{m}</button>
-                ))}
-              </div>
             </div>
+
+            <Field label="Time Out (Auto: Now)">
+              <input type="datetime-local" className="input" defaultValue={new Date().toISOString().slice(0, 16)} onChange={e => setClosing(c => ({ ...c, time_out: e.target.value }))} />
+            </Field>
+
+            <Field label="Amount Received (₹)">
+              <input type="number" className="input" value={closing.amount_received} onChange={e => setClosing(c => ({ ...c, amount_received: e.target.value }))} />
+            </Field>
+
+            <Field label="Payment Method">
+              <select className="input" value={closing.payment_method} onChange={e => setClosing(c => ({ ...c, payment_method: e.target.value }))}>
+                <option value="cash">Cash</option>
+                <option value="online">Online / UPI</option>
+                <option value="credit">Credit / Ledger</option>
+              </select>
+            </Field>
+
             <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '0.75rem' }}>
               <button onClick={handleCloseSession} disabled={closeSaving} className="btn-primary" style={{ flex: 1 }}>
                 {closeSaving ? <><Spinner size="sm" /> Closing...</> : 'Close Session'}
@@ -100,8 +96,11 @@ export function PanCafe() {
       {/* Page Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 className="page-title">PanCafe Sessions</h1>
-          <p className="page-sub">Membership plan session log · PC only</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <img src="/assets/favicon_PanCafe.ico" alt="PanCafe" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
+            <h1 className="page-title" style={{ margin: 0 }}>PanCafe Sessions</h1>
+          </div>
+          <p className="page-sub" style={{ marginTop: '0.25rem' }}>Membership plan session log · PC only</p>
         </div>
         <button onClick={() => setShowLogModal(true)} className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>+ Log Session</button>
       </div>
@@ -117,7 +116,7 @@ export function PanCafe() {
       </div>
 
       {loading ? <PageLoader /> : sessions.length === 0 ? (
-        <EmptyState icon={<Coffee size={32} />} title="No PanCafe Logs" description={`No membership sessions recorded for ${formatDate(dateFilter)}`}
+        <EmptyState icon={<img src="/assets/favicon_PanCafe.ico" alt="PanCafe" style={{ width: '36px', height: '36px', objectFit: 'contain', opacity: 0.85 }} />} title="No PanCafe Logs" description={`No membership sessions recorded for ${formatDate(dateFilter)}`}
           action={<Link to="/pancafe/new" className="btn-primary">Add PanCafe Log</Link>} />
       ) : (
         <div className="card-flush" style={{ overflowX: 'auto' }}>
@@ -249,8 +248,11 @@ export function NewPanCafe() {
     <div style={{ maxWidth: '600px', margin: '0 auto' }}>
       <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => { setTrialModal({ isOpen: false, action: '' }); navigate('/pancafe') }} />
       <div style={{ marginBottom: '2rem' }}>
-        <h1 className="page-title">Log PanCafe Session</h1>
-        <p className="page-sub">Record a membership plan session</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <img src="/assets/favicon_PanCafe.ico" alt="PanCafe" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
+          <h1 className="page-title" style={{ margin: 0 }}>Log PanCafe Session</h1>
+        </div>
+        <p className="page-sub" style={{ marginTop: '0.25rem' }}>Record a membership plan session</p>
       </div>
 
       <ErrorMsg error={error} />

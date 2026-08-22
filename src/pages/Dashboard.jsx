@@ -134,7 +134,7 @@ export default function Dashboard() {
           { label: "Today's Revenue", value: formatRupees(totalRevenue), sub: 'ALL COMBINED SOURCES', state: 'success' },
           { label: 'Gaming Stations', value: formatRupees(snapshot?.gaming_revenue), sub: `${activeSessions.length} ACTIVE NOW`, state: activeSessions.length > 0 ? 'success' : '' },
           { label: 'Cafeteria Sales', value: formatRupees(Number(snapshot?.walkin_revenue || 0) + Number(snapshot?.session_sales_revenue || 0)), sub: 'WALK-IN + TABLE SALES', state: '' },
-          { label: 'RC + PanCafe', value: formatRupees(Number(snapshot?.rc_revenue || 0) + Number(snapshot?.pancafe_revenue || 0)), sub: 'PLATFORM RECHARGES', state: 'warning' },
+          { label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>RC + <img src="/assets/favicon_PanCafe.ico" alt="PanCafe" style={{ width: '13px', height: '13px', objectFit: 'contain' }} /> PanCafe</span>, value: formatRupees(Number(snapshot?.rc_revenue || 0) + Number(snapshot?.pancafe_revenue || 0)), sub: 'PLATFORM RECHARGES', state: 'warning' },
         ].map((s, i) => (
           <div key={i} className={`lcd-screen ${s.state}`} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '110px' }}>
             <div>
