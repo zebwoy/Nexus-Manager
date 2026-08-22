@@ -1,4 +1,0 @@
-fix(ui): resolve Minified React error #130 in EmptyState icon renderer
-
-- Handled JSX element objects and component functions gracefully in EmptyState icon renderer
-- Fixed Walk-in Sales Log crash when displaying empty sales state
