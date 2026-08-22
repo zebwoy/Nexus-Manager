@@ -18,33 +18,35 @@ export default async function handler(req, res) {
 
     // ─── DASHBOARD SNAPSHOT ────────────────────────────────────────────
     if (target === 'snapshot' || url.includes('dashboard-snapshot')) {
+      const targetDate = req.query.date || (new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
       const r = await client.query(`
         SELECT
-          (SELECT COALESCE(SUM(total), 0.00) FROM sessions WHERE date = CURRENT_DATE AND (is_deleted IS NULL OR is_deleted = FALSE)) AS gaming_revenue,
-          (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE) AS walkin_revenue,
-          (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'session' AND date = CURRENT_DATE) AS session_sales_revenue,
-          (SELECT COALESCE(SUM(charge_price), 0.00) FROM recharges WHERE date = CURRENT_DATE) AS rc_revenue,
-          (SELECT COALESCE(SUM(amount_received), 0.00) FROM pancafe_sessions WHERE date = CURRENT_DATE) AS pancafe_revenue,
+          (SELECT COALESCE(SUM(total), 0.00) FROM sessions WHERE date = $1 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS gaming_revenue,
+          (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'walkin' AND date = $1) AS walkin_revenue,
+          (SELECT COALESCE(SUM(total), 0.00) FROM sales WHERE sale_type = 'session' AND date = $1) AS session_sales_revenue,
+          (SELECT COALESCE(SUM(charge_price), 0.00) FROM recharges WHERE date = $1) AS rc_revenue,
+          (SELECT COALESCE(SUM(amount_received), 0.00) FROM pancafe_sessions WHERE date = $1) AS pancafe_revenue,
           (SELECT COALESCE(SUM(credit), 0.00) FROM sessions WHERE credit > 0 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS total_outstanding_credit,
           -- Cash vs Online inflow breakdown
-          (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'cash' AND created_at::date = CURRENT_DATE) AS cash_gaming,
-          (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'online' AND created_at::date = CURRENT_DATE) AS online_gaming,
+          (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'cash' AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1) AS cash_gaming,
+          (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'online' AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1) AS online_gaming,
           (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN payment_received ELSE 0 END), 0.00)
-           FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE) AS cash_sales,
+           FROM sales WHERE sale_type = 'walkin' AND date = $1) AS cash_sales,
           (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN payment_received ELSE 0 END), 0.00)
-           FROM sales WHERE sale_type = 'walkin' AND date = CURRENT_DATE) AS online_sales,
+           FROM sales WHERE sale_type = 'walkin' AND date = $1) AS online_sales,
           (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount_received ELSE 0 END), 0.00)
-           FROM pancafe_sessions WHERE date = CURRENT_DATE) AS cash_pancafe,
+           FROM pancafe_sessions WHERE date = $1) AS cash_pancafe,
           (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN amount_received ELSE 0 END), 0.00)
-           FROM pancafe_sessions WHERE date = CURRENT_DATE) AS online_pancafe,
+           FROM pancafe_sessions WHERE date = $1) AS online_pancafe,
           (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount ELSE 0 END), 0.00)
-           FROM expenses WHERE date = CURRENT_DATE) AS cash_expenses,
+           FROM expenses WHERE date = $1) AS cash_expenses,
           -- Active session count
-          (SELECT COUNT(*) FROM sessions WHERE date = CURRENT_DATE AND time_out > NOW() AND (is_deleted IS NULL OR is_deleted = FALSE)) AS active_sessions,
-          (SELECT COUNT(*) FROM pancafe_sessions WHERE date = CURRENT_DATE AND time_out IS NULL) AS active_pancafe
-      `)
+          (SELECT COUNT(*) FROM sessions WHERE date = $1 AND time_out > NOW() AND (is_deleted IS NULL OR is_deleted = FALSE)) AS active_sessions,
+          (SELECT COUNT(*) FROM pancafe_sessions WHERE date = $1 AND time_out IS NULL) AS active_pancafe
+      `, [targetDate])
       return ok(res, r.rows[0] || {})
     }
+
 
     // ─── DASHBOARD CREDITS ──────────────────────────────────────
     if (target === 'credits' || url.includes('dashboard-credits')) {

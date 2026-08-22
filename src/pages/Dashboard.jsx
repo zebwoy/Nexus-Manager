@@ -31,11 +31,12 @@ export default function Dashboard() {
       setLoading(true)
       const today = todayISO()
       const [snap, cred, sess, openR] = await Promise.all([
-        api.get('/dashboard-snapshot'),
+        api.get('/dashboard-snapshot?date=' + today),
         api.get('/dashboard-credits'),
         api.get('/sessions?date=' + today),
         api.get('/day-openings?date=' + today),
       ])
+
       setSnapshot(snap)
       setCredits(cred.credits || [])
       const allSessions = sess.sessions || []

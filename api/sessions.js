@@ -440,9 +440,10 @@ export default async function handler(req, res) {
       let query = `
         SELECT s.*, c.name, c.mobile, c.shop_name, d.label AS device_label, d.type AS device_type,
                u.username AS created_by_username,
-               (s.time_out > NOW() AND s.date = CURRENT_DATE) AS is_active,
-               (s.date < s.created_at::date) AS is_predated
+               (s.time_out > NOW() AND s.date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date) AS is_active,
+               (s.date < (s.created_at AT TIME ZONE 'Asia/Kolkata')::date) AS is_predated
         FROM sessions s
+
         LEFT JOIN customers c ON c.id = s.customer_id
         JOIN devices d ON d.id = s.device_id
         LEFT JOIN users u ON u.id = s.created_by
