@@ -1,5 +1,0 @@
-feat: theme consistency for KPI cards, expenses ledger actions with undo, and split payments in recharges
-
-- Theme Consistency: Updated .lcd-screen and KPI stat cards to adapt gracefully to Light Mode, removing harsh black boxes and scanlines while matching tactile theme variables
-- Cafeteria & Expenses: Removed action buttons from cafeteria items catalog; implemented Edit modal and Delete with undo toast in Expenses Ledger
-- Recharges Split Payment: Implemented SplitPayment (cash, online/UPI, split) in New Recharge and updated backend schema and routes to track payment method
