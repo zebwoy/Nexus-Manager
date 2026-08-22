@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
-import { formatDate, formatTime, formatRupees } from '../../lib/helpers'
+import { formatDate, formatTime, formatRupees, calculateDynamicTariff, formatDuration } from '../../lib/helpers'
 import { PageLoader, ErrorMsg, Field, Modal, TrialWarningModal, Spinner } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
 import { useUser } from '@clerk/clerk-react'
@@ -20,6 +20,13 @@ const TABS = [
   { key: 'staff',   label: 'Staff Authorizations & PINs',     icon: Users },
   { key: 'tariffs', label: 'Tariff & Configurations',          icon: Gamepad2 },
   { key: 'system',  label: 'Organization Profile & Identity',  icon: Building2 },
+]
+
+const DURATIONS = [30, 60, 90, 120, 150, 180, 240, 300]
+const DEVICE_TYPES = [
+  { type: 'PC', label: 'PC Stations', icon: Monitor },
+  { type: 'XBOX', label: 'Xbox Consoles', icon: Gamepad2 },
+  { type: 'PS', label: 'PlayStation', icon: Gamepad2 },
 ]
 
 function PendingBadge({ count }) {
@@ -431,12 +438,6 @@ export default function Settings() {
   const canRevoke = (st) => isAdmin && st.username !== user?.username && !(st.role === 'admin')
 
   const pricingByType = (type) => pricing.filter(p => p.device_type === type).sort((a, b) => a.duration_mins - b.duration_mins)
-  const DURATIONS = [30, 60, 90, 120, 150, 180, 240, 300]
-  const DEVICE_TYPES = [
-    { type: 'PC', label: 'PC Stations', icon: Monitor },
-    { type: 'XBOX', label: 'Xbox Consoles', icon: Gamepad2 },
-    { type: 'PS', label: 'PlayStation', icon: Gamepad2 },
-  ]
 
   const pendingCount = profileChanges.filter(c => c.status === 'pending').length
 
