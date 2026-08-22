@@ -1058,16 +1058,23 @@ export default function Settings() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Device Fleet</h3>
-                <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>Manage PC stations, consoles, and all playable devices. Click any name or type to edit inline.</p>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--text)' }}>Device Fleet</h3>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Manage gaming terminals and console stations. Click any terminal to edit inline.
+                </p>
               </div>
               {isAdmin && (
-                <button onClick={() => setShowAddDevice(true)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.85rem', fontSize: '0.8rem' }}>
+                <button
+                  onClick={() => setShowAddDevice(true)}
+                  className="btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.9rem', fontSize: '0.8rem' }}
+                >
                   <PlusCircle size={14} /> Add Device
                 </button>
               )}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.75rem' }}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '0.85rem' }}>
               {DEVICE_TYPES.map(({ type, label, icon: DIcon }) => {
                 const typeDevices = devices.filter(d => d.type === type)
                 return typeDevices.length > 0 ? typeDevices.map(d => {
@@ -1075,50 +1082,59 @@ export default function Settings() {
 
                   if (isEditing) {
                     return (
-                      <div key={d.id} className="card" style={{ padding: '0.65rem 0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', border: '1.5px solid var(--accent)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flex: 1 }}>
-                          <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <DIcon size={13} style={{ color: 'var(--accent-text)' }} />
-                          </div>
+                      <div
+                        key={d.id}
+                        className="card"
+                        style={{
+                          padding: '0.85rem 1rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.65rem',
+                          border: '1.5px solid var(--accent)',
+                          background: 'var(--bg-card)',
+                          boxShadow: '0 0 16px rgba(56, 189, 248, 0.12)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <input
                             className="input"
                             value={editingDeviceForm.label}
                             onChange={e => setEditingDeviceForm(f => ({ ...f, label: e.target.value }))}
                             placeholder="Device name"
-                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', minWidth: '95px', flex: 1 }}
+                            style={{ flex: 1, minWidth: 0, height: '36px', fontSize: '0.85rem' }}
                             autoFocus
                           />
                           <select
                             className="input"
                             value={editingDeviceForm.type}
                             onChange={e => setEditingDeviceForm(f => ({ ...f, type: e.target.value }))}
-                            style={{ padding: '0.3rem 0.35rem', fontSize: '0.75rem', width: '70px', flexShrink: 0 }}
+                            style={{ width: '85px', height: '36px', fontSize: '0.8rem', flexShrink: 0 }}
                           >
                             <option value="PC">PC</option>
                             <option value="XBOX">XBOX</option>
                             <option value="PS">PS</option>
                           </select>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', flexShrink: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem' }}>
                           <button
                             type="button"
                             onClick={() => saveEditingDevice(d.id)}
                             disabled={deviceUpdating}
                             className="btn-primary btn-sm"
-                            style={{ padding: '0.3rem 0.5rem', display: 'flex', alignItems: 'center' }}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}
                             title="Save device"
                           >
-                            <Check size={13} strokeWidth={2.5} />
+                            <Check size={13} strokeWidth={2.5} /> Save
                           </button>
                           <button
                             type="button"
                             onClick={cancelEditingDevice}
                             disabled={deviceUpdating}
                             className="btn-secondary btn-sm"
-                            style={{ padding: '0.3rem 0.5rem', display: 'flex', alignItems: 'center' }}
+                            style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
                             title="Cancel"
                           >
-                            <X size={13} />
+                            <X size={13} /> Cancel
                           </button>
                         </div>
                       </div>
@@ -1126,39 +1142,72 @@ export default function Settings() {
                   }
 
                   return (
-                    <div key={d.id} className="card" style={{ padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div
+                      key={d.id}
+                      className="card"
+                      style={{
+                        padding: '0.9rem 1.1rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        minHeight: '76px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
                       <div
                         onClick={() => isAdmin && startEditingDevice(d)}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: isAdmin ? 'pointer' : 'default', flex: 1 }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: isAdmin ? 'pointer' : 'default', minWidth: 0, flex: 1 }}
                         title={isAdmin ? "Click to edit device name or type inline" : undefined}
                       >
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <DIcon size={14} style={{ color: 'var(--accent-text)' }} />
+                        <div style={{
+                          width: '38px', height: '38px', borderRadius: '10px',
+                          background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                        }}>
+                          <DIcon size={16} style={{ color: 'var(--accent-text)' }} />
                         </div>
-                        <div>
-                          <p style={{ margin: 0, fontSize: '0.825rem', fontWeight: 800, color: 'var(--text)' }}>{d.label}</p>
-                          <p style={{ margin: 0, fontSize: '0.68rem', color: 'var(--text-muted)' }}>{type}</p>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <p style={{
+                            margin: 0, fontSize: '0.875rem', fontWeight: 800, color: 'var(--text)',
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                          }}>
+                            {d.label}
+                          </p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.2rem' }}>
+                            <span style={{
+                              fontSize: '0.68rem', fontWeight: 800, padding: '0.1rem 0.45rem',
+                              borderRadius: '4px', background: 'var(--bg-input)', color: 'var(--text-muted)',
+                              border: '1px solid var(--border)'
+                            }}>
+                              {type}
+                            </span>
+                            {isAdmin && (
+                              <span style={{ fontSize: '0.65rem', color: 'var(--text-faint)' }}>· Click to edit</span>
+                            )}
+                          </div>
                         </div>
                       </div>
+
                       {isAdmin && (
-                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexShrink: 0 }}>
                           <button
                             type="button"
                             onClick={() => startEditingDevice(d)}
-                            className="btn-secondary btn-sm"
-                            style={{ padding: '0.35rem', color: 'var(--text-muted)' }}
+                            className="btn-secondary btn-icon"
+                            style={{ width: '32px', height: '32px', padding: 0, borderRadius: '8px', color: 'var(--text-muted)' }}
                             title="Edit device"
                           >
-                            <Edit3 size={13} />
+                            <Edit3 size={14} />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleRemoveDevice(d)}
-                            className="btn-secondary btn-sm"
-                            style={{ color: 'var(--danger)', padding: '0.35rem' }}
+                            className="btn-secondary btn-icon"
+                            style={{ width: '32px', height: '32px', padding: 0, borderRadius: '8px', color: 'var(--danger)' }}
                             title="Delete device"
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       )}
@@ -1178,59 +1227,78 @@ export default function Settings() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Coffee size={18} style={{ color: 'var(--accent-text)' }} />
-                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--text)' }}>
                     PanCafe Membership Plans
                   </h3>
                 </div>
-                <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  Configure prepaid hours and pricing packages for PanCafe desktop members. Click any card to edit.
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Prepaid hours and pricing packages for PanCafe desktop members. Click any card to edit.
                 </p>
               </div>
               {isAdmin && (
                 <button
                   onClick={() => setShowAddPlan(true)}
                   className="btn-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.85rem', fontSize: '0.8rem' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.9rem', fontSize: '0.8rem' }}
                 >
                   <PlusCircle size={14} /> Add Membership Plan
                 </button>
               )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '0.85rem' }}>
               {pancafePlans.filter(p => p.is_active !== false).map(plan => {
                 const isEditing = editingPlanId === plan.id
+
                 if (isEditing) {
                   return (
-                    <div key={plan.id} className="card" style={{ padding: '0.75rem 0.85rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', border: '1.5px solid var(--accent)' }}>
+                    <div
+                      key={plan.id}
+                      className="card"
+                      style={{
+                        padding: '0.9rem 1rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.65rem',
+                        border: '1.5px solid var(--accent)',
+                        background: 'var(--bg-card)',
+                        boxShadow: '0 0 16px rgba(56, 189, 248, 0.12)'
+                      }}
+                    >
                       <input
                         className="input"
                         value={editingPlanForm.label}
                         onChange={e => setEditingPlanForm(f => ({ ...f, label: e.target.value }))}
                         placeholder="Plan label (e.g. 5-Hour Pass)"
-                        style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
+                        style={{ height: '36px', fontSize: '0.85rem' }}
                       />
-                      <div style={{ display: 'flex', gap: '0.4rem' }}>
-                        <input
-                          type="number"
-                          className="input"
-                          value={editingPlanForm.hours}
-                          onChange={e => setEditingPlanForm(f => ({ ...f, hours: e.target.value }))}
-                          placeholder="Hours"
-                          style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '50%' }}
-                        />
-                        <input
-                          type="number"
-                          className="input"
-                          value={editingPlanForm.price}
-                          onChange={e => setEditingPlanForm(f => ({ ...f, price: e.target.value }))}
-                          placeholder="Price (₹)"
-                          style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '50%' }}
-                        />
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>HOURS</label>
+                          <input
+                            type="number"
+                            className="input"
+                            value={editingPlanForm.hours}
+                            onChange={e => setEditingPlanForm(f => ({ ...f, hours: e.target.value }))}
+                            placeholder="Hours"
+                            style={{ height: '34px', fontSize: '0.825rem' }}
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>PRICE (₹)</label>
+                          <input
+                            type="number"
+                            className="input"
+                            value={editingPlanForm.price}
+                            onChange={e => setEditingPlanForm(f => ({ ...f, price: e.target.value }))}
+                            placeholder="Price"
+                            style={{ height: '34px', fontSize: '0.825rem' }}
+                          />
+                        </div>
                       </div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.75rem', cursor: 'pointer', margin: '0.1rem 0' }}>
                         <input
                           type="checkbox"
                           checked={editingPlanForm.is_signup_plan}
@@ -1238,24 +1306,24 @@ export default function Settings() {
                         />
                         Default signup package
                       </label>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.35rem', marginTop: '0.25rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', borderTop: '1px solid var(--border)', paddingTop: '0.5rem' }}>
                         <button
                           type="button"
                           onClick={() => saveEditingPlan(plan.id)}
                           disabled={planUpdating}
                           className="btn-primary btn-sm"
-                          style={{ padding: '0.3rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}
                         >
-                          <Check size={13} /> Save
+                          <Check size={13} strokeWidth={2.5} /> Save
                         </button>
                         <button
                           type="button"
                           onClick={cancelEditingPlan}
                           disabled={planUpdating}
                           className="btn-secondary btn-sm"
-                          style={{ padding: '0.3rem 0.6rem' }}
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
                         >
-                          <X size={13} />
+                          <X size={13} /> Cancel
                         </button>
                       </div>
                     </div>
@@ -1263,46 +1331,74 @@ export default function Settings() {
                 }
 
                 return (
-                  <div key={plan.id} className="card" style={{ padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div
+                    key={plan.id}
+                    className="card"
+                    style={{
+                      padding: '0.9rem 1.1rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      minHeight: '76px',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
                     <div
                       onClick={() => isAdmin && startEditingPlan(plan)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: isAdmin ? 'pointer' : 'default', flex: 1 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: isAdmin ? 'pointer' : 'default', minWidth: 0, flex: 1 }}
                       title={isAdmin ? "Click to edit plan" : undefined}
                     >
-                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Coffee size={14} style={{ color: 'var(--accent-text)' }} />
+                      <div style={{
+                        width: '38px', height: '38px', borderRadius: '10px',
+                        background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                      }}>
+                        <Coffee size={16} style={{ color: 'var(--accent-text)' }} />
                       </div>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <p style={{ margin: 0, fontSize: '0.825rem', fontWeight: 800, color: 'var(--text)' }}>{plan.label}</p>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'nowrap' }}>
+                          <p style={{
+                            margin: 0, fontSize: '0.875rem', fontWeight: 800, color: 'var(--text)',
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                          }}>
+                            {plan.label}
+                          </p>
                           {plan.is_signup_plan && (
-                            <span className="badge badge-accent" style={{ fontSize: '0.6rem', padding: '0.1rem 0.35rem' }}>Default</span>
+                            <span style={{
+                              fontSize: '0.62rem', fontWeight: 900, padding: '0.1rem 0.45rem',
+                              borderRadius: '99px', background: 'var(--accent)', color: '#fff',
+                              flexShrink: 0, lineHeight: 1.2
+                            }}>
+                              Default
+                            </span>
                           )}
                         </div>
-                        <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                           <strong>{plan.hours} hrs</strong> · <span style={{ color: 'var(--accent-text)', fontWeight: 800 }}>{formatRupees(plan.price)}</span>
                         </p>
                       </div>
                     </div>
+
                     {isAdmin && (
-                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexShrink: 0 }}>
                         <button
                           type="button"
                           onClick={() => startEditingPlan(plan)}
-                          className="btn-secondary btn-sm"
-                          style={{ padding: '0.35rem', color: 'var(--text-muted)' }}
+                          className="btn-secondary btn-icon"
+                          style={{ width: '32px', height: '32px', padding: 0, borderRadius: '8px', color: 'var(--text-muted)' }}
                           title="Edit plan"
                         >
-                          <Edit3 size={13} />
+                          <Edit3 size={14} />
                         </button>
                         <button
                           type="button"
                           onClick={() => handleRemovePlan(plan)}
-                          className="btn-secondary btn-sm"
-                          style={{ color: 'var(--danger)', padding: '0.35rem' }}
+                          className="btn-secondary btn-icon"
+                          style={{ width: '32px', height: '32px', padding: 0, borderRadius: '8px', color: 'var(--danger)' }}
                           title="Delete plan"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     )}
@@ -1311,12 +1407,13 @@ export default function Settings() {
               })}
 
               {pancafePlans.filter(p => p.is_active !== false).length === 0 && (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', padding: '0.75rem 0' }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', padding: '1rem 0' }}>
                   No membership plans configured yet. Click &quot;Add Membership Plan&quot; to create one.
                 </p>
               )}
             </div>
           </div>
+
 
 
           <hr style={{ border: 'none', borderTop: '1.5px solid var(--border)' }} />
