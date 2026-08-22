@@ -574,6 +574,7 @@ export default async function handler(req, res) {
           [
             userId ? Number(userId) : null,
             req.headers['x-username'] || 'staff',
+            isPredated ? 'SESSION_CREATE_PREDATED' : 'SESSION_CREATE',
             isPredated
               ? `[BACKDATED ENTRY] Created past session #${sessionId} for ${date} (${duration_mins}m)`
               : `Created session #${sessionId} for ${date} (${duration_mins}m)`,
@@ -589,6 +590,7 @@ export default async function handler(req, res) {
             })
           ]
         )
+
 
         await client.query('COMMIT')
         return ok(res, { id: sessionId, is_predated: isPredated }, 201)
