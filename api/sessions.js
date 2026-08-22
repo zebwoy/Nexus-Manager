@@ -399,11 +399,11 @@ export default async function handler(req, res) {
           }
           const sess = sessR.rows[0]
 
-          // Return any unreturned cafeteria inventory stock
+          // Return any attached cafeteria inventory stock
           const salesR = await client.query(
             `SELECT si.item_id, si.qty FROM sales s
              JOIN sale_items si ON si.sale_id = s.id
-             WHERE s.session_id = $1 AND s.is_deleted = FALSE`,
+             WHERE s.session_id = $1`,
             [sessionId]
           )
           for (const item of salesR.rows) {
@@ -412,7 +412,10 @@ export default async function handler(req, res) {
               [item.qty, item.item_id]
             )
           }
-          await client.query(`UPDATE sales SET is_deleted = TRUE WHERE session_id = $1`, [sessionId])
+          await client.query(`UPDATE sales SET is_deleted = TRUE WHERE session_id = $1`, [sessionId]).catch(async () => {
+            await client.query(`DELETE FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE session_id = $1)`, [sessionId]).catch(() => {})
+            await client.query(`DELETE FROM sales WHERE session_id = $1`, [sessionId]).catch(() => {})
+          })
 
           await client.query(`UPDATE sessions SET is_deleted = TRUE WHERE id = $1`, [sessionId])
           await client.query(

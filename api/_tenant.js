@@ -564,6 +564,10 @@ export async function getTenantClient(pool, req) {
   const client = await pool.connect()
   try {
     await client.query(`SET search_path TO "${schemaName}", public`)
+    await client.query(`
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE sales ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+    `).catch(() => {})
     return { client, schemaName }
   } catch (err) {
     client.release()
