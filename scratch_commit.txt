@@ -1,0 +1,5 @@
+feat(cafeteria): integrate View Walk-in Sales inside Foreign Sale and enforce mandatory customer & shop name
+
+- Moved Walk-in Sales Log inside Foreign Sale page as 'View Walk-in Sales' tab with date filter, revenue stats, receipt reprint, edit, and deletion
+- Made Customer Name and Shop Name mandatory fields on both frontend and backend for Foreign / Walk-in sales
+- Streamlined Cafeteria Inventory page with category filter pills and quick links to Foreign Sale and View Walk-in Sales

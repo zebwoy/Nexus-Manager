@@ -251,7 +251,12 @@ export default async function handler(req, res) {
         const { session_id, customer_id, name, shop_name, mobile, sale_type, date, total, payment_received, payment_method, items } = b
 
         if (!items || !items.length) return err(res, 'At least one item is required')
+        if (sale_type === 'walkin' || !session_id) {
+          if (!name || !name.trim()) return err(res, 'Customer Name is required')
+          if (!shop_name || !shop_name.trim()) return err(res, 'Shop Name is required')
+        }
         const client_cid = customer_id || null
+
 
         await client.query('BEGIN')
         try {
