@@ -1,0 +1,4 @@
+feat(sessions): allow switching station within same device platform in Edit Info modal
+
+- Added station terminal selection in Edit Session Details modal filtered strictly to active terminals of the same device type (e.g. PC 01 -> PC 02, Xbox -> Xbox)
+- Protected fee matrix by validating that target terminal belongs to the exact same device type on the backend (api/sessions.js)

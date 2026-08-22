@@ -340,6 +340,21 @@ export default async function handler(req, res) {
             }
           }
 
+          let deviceId = cur.device_id
+          if (b.device_id !== undefined && Number(b.device_id) !== cur.device_id) {
+            const newDevId = Number(b.device_id)
+            const devCheck = await client.query(
+              `SELECT d1.type AS old_type, d2.type AS new_type
+               FROM devices d1, devices d2
+               WHERE d1.id = $1 AND d2.id = $2`,
+              [cur.device_id, newDevId]
+            )
+            // Only allow switching station if it belongs to the exact same device type (preserves tariff matrix)
+            if (devCheck.rows.length > 0 && devCheck.rows[0].old_type === devCheck.rows[0].new_type) {
+              deviceId = newDevId
+            }
+          }
+
           const duration_mins = b.duration_mins !== undefined ? Number(b.duration_mins) : cur.duration_mins
           const time_in       = b.time_in       !== undefined ? b.time_in                 : cur.time_in
           const time_out      = b.time_out      !== undefined ? b.time_out                : cur.time_out
@@ -351,11 +366,11 @@ export default async function handler(req, res) {
 
           const updated = await client.query(
             `UPDATE sessions SET
-               customer_id = $1, duration_mins = $2, time_in = $3, time_out = $4,
-               charge = $5, total = $6, payment_received = $7, credit = $8, remark = $9
-             WHERE id = $10
+               customer_id = $1, device_id = $2, duration_mins = $3, time_in = $4, time_out = $5,
+               charge = $6, total = $7, payment_received = $8, credit = $9, remark = $10
+             WHERE id = $11
              RETURNING *`,
-            [customerId, duration_mins, time_in, time_out, charge, total, payment_rcvd, credit, remark, sessionId]
+            [customerId, deviceId, duration_mins, time_in, time_out, charge, total, payment_rcvd, credit, remark, sessionId]
           )
 
           await client.query('COMMIT')
@@ -365,6 +380,7 @@ export default async function handler(req, res) {
           throw e
         }
       }
+
 
 
       if (req.method === 'DELETE') {

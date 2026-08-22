@@ -134,6 +134,7 @@ export default function SessionDetail() {
     setEditForm({
       name: s.name || '',
       mobile: s.mobile || '',
+      device_id: String(s.device_id || ''),
       time_in: timeInStr,
       remark: s.remark || '',
     })
@@ -160,6 +161,7 @@ export default function SessionDetail() {
       await api.patch(`/sessions/${id}`, {
         name: editForm.name.trim(),
         mobile: editForm.mobile ? editForm.mobile.trim() : null,
+        device_id: editForm.device_id ? Number(editForm.device_id) : s.device_id,
         time_in: timeInISO,
         time_out: timeOutISO,
         remark: editForm.remark,
@@ -170,6 +172,7 @@ export default function SessionDetail() {
     } catch (e) { setError(e.message) }
     finally { setEditSaving(false) }
   }
+
 
   const handleEndEarly = async () => {
     setEndEarlySaving(true)
@@ -351,6 +354,21 @@ export default function SessionDetail() {
           <Field label="Mobile Number (10 digits)">
             <input className="input" maxLength={10} value={editForm.mobile} onChange={e => setEditForm(f => ({ ...f, mobile: e.target.value.replace(/\D/g, '') }))} />
           </Field>
+          <Field label={`Station Terminal (${s.device_type || 'Platform'} Only)`}>
+            <select
+              className="input"
+              value={editForm.device_id}
+              onChange={e => setEditForm(f => ({ ...f, device_id: e.target.value }))}
+            >
+              {devices
+                .filter(d => d.type === s.device_type && d.is_active)
+                .map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.label} {d.id === s.device_id ? '(Current Station)' : ''}
+                  </option>
+                ))}
+            </select>
+          </Field>
           <Field label="Time In">
             <input type="time" className="input" value={editForm.time_in} onChange={e => setEditForm(f => ({ ...f, time_in: e.target.value }))} />
           </Field>
@@ -365,6 +383,7 @@ export default function SessionDetail() {
           </div>
         </div>
       </Modal>
+
 
       {/* End Early Modal */}
       <Modal open={showEndEarlyModal} onClose={() => setShowEndEarlyModal(false)} title="End Session &amp; Release Station">
