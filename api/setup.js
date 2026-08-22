@@ -203,15 +203,35 @@ export default async function handler(req, res) {
       }
       if (req.method === 'POST') {
         const b = req.body || {}
-        const rules = b.pricing || (Array.isArray(b) ? b : [b])
-        for (const rule of rules) {
-          if (!rule.device_type || !rule.duration_mins || rule.price === undefined) continue
-          await client.query(`
-            INSERT INTO pricing (device_type, duration_mins, price)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (device_type, duration_mins) DO UPDATE
-              SET price = EXCLUDED.price
-          `, [rule.device_type, Number(rule.duration_mins), Number(rule.price)])
+        if (b.hourly_rates) {
+          const DURATIONS = [30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 450, 480]
+          for (const [device_type, rate] of Object.entries(b.hourly_rates)) {
+            const hRate = Number(rate) || 0
+            if (hRate <= 0) continue
+            const halfHourRate = Math.round((hRate * 0.65) / 5) * 5
+            for (const d of DURATIONS) {
+              const fullHours = Math.floor(d / 60)
+              const hasHalfHour = (d % 60) === 30
+              const price = (fullHours * hRate) + (hasHalfHour ? halfHourRate : 0)
+              await client.query(`
+                INSERT INTO pricing (device_type, duration_mins, price)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (device_type, duration_mins) DO UPDATE
+                  SET price = EXCLUDED.price
+              `, [device_type, d, price])
+            }
+          }
+        } else {
+          const rules = b.pricing || (Array.isArray(b) ? b : [b])
+          for (const rule of rules) {
+            if (!rule.device_type || !rule.duration_mins || rule.price === undefined) continue
+            await client.query(`
+              INSERT INTO pricing (device_type, duration_mins, price)
+              VALUES ($1, $2, $3)
+              ON CONFLICT (device_type, duration_mins) DO UPDATE
+                SET price = EXCLUDED.price
+            `, [rule.device_type, Number(rule.duration_mins), Number(rule.price)])
+          }
         }
         const r = await client.query('SELECT * FROM pricing ORDER BY device_type, duration_mins')
         return ok(res, { pricing: r.rows })

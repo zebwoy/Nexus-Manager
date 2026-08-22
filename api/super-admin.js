@@ -303,19 +303,14 @@ export default async function handler(req, res) {
         // 3. Provision PostgreSQL schema & template tables
         await provisionTenantSchema(pool, schemaName)
 
-        // 4. Pre-seed fixed system operator accounts in format: <slug>_admin and <slug>_staff
+        // 4. Pre-seed only the genuine admin account
         const adminOpUser = `${finalSlug}_admin`
-        const staffOpUser = `${finalSlug}_staff`
 
         await client.query(`
           INSERT INTO "${schemaName}".users (full_name, username, pin, role, email, status)
           VALUES ($1, $2, '1234', 'admin', $3, 'active')
           ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, status = 'active';
-
-          INSERT INTO "${schemaName}".users (full_name, username, pin, role, email, status)
-          VALUES ('Counter Staff', $4, '1234', 'staff', NULL, 'active')
-          ON CONFLICT (username) DO NOTHING;
-        `, [admin_name || `${name} Admin`, adminOpUser, admin_email.trim().toLowerCase(), staffOpUser])
+        `, [admin_name || `${name} Admin`, adminOpUser, admin_email.trim().toLowerCase()])
 
         await client.query(`
           INSERT INTO "${schemaName}".settings (key, value)

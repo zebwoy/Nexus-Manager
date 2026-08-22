@@ -6,6 +6,7 @@ import { PageLoader, ErrorMsg, Field, Modal, TrialWarningModal, Spinner } from '
 import { useAuth } from '../../context/AuthContext'
 import { useUser } from '@clerk/clerk-react'
 import { toast } from 'react-toastify'
+import DurationSelector from '../../components/DurationSelector'
 import {
   Trash2, Shield, Settings as SettingsIcon, Users, PlusCircle,
   KeyRound, UserPlus, UserCheck, UserX, Clock, Database,
@@ -44,9 +45,16 @@ export default function Settings() {
   // Staff Management State
   const [staffUsers, setStaffUsers] = useState([])
   const [staffInvites, setStaffInvites] = useState([])
+  const [staffJoinRequests, setStaffJoinRequests] = useState([])
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteData, setInviteData] = useState({ full_name: '', email: '', pin: '1234', role: 'operator' })
   const [inviteSaving, setInviteSaving] = useState(false)
+
+  // Review Join Request State
+  const [reviewJoinModal, setReviewJoinModal] = useState(null)
+  const [joinPin, setJoinPin] = useState('1234')
+  const [joinRole, setJoinRole] = useState('operator')
+  const [reviewJoinSaving, setReviewJoinSaving] = useState(false)
 
   // Reset PIN State
   const [resettingUser, setResettingUser] = useState(null)
@@ -68,10 +76,13 @@ export default function Settings() {
   const [newDevice, setNewDevice] = useState({ label: '', type: 'PC' })
   const [deviceSaving, setDeviceSaving] = useState(false)
 
-  // Pricing
+  // Dynamic 1-Hour Tariffs (PC, Xbox, PS)
+  const [hourlyRates, setHourlyRates] = useState({ PC: 70, XBOX: 100, PS: 120 })
   const [pricing, setPricing] = useState([])
-  const [pricingEdits, setPricingEdits] = useState({})
   const [pricingSaving, setPricingSaving] = useState(false)
+  const [pricingChanged, setPricingChanged] = useState(false)
+  const [simulatedDuration, setSimulatedDuration] = useState(60)
+  const [simulatedType, setSimulatedType] = useState('PC')
 
   // Platform management state
   const [platforms, setPlatforms] = useState([])
@@ -107,6 +118,7 @@ export default function Settings() {
       ])
       setStaffUsers(staffRes.users || [])
       setStaffInvites(staffRes.invites || [])
+      setStaffJoinRequests(staffRes.join_requests || [])
       setSettings(settRes.settings || [])
       const cafeNameSetting = settRes.settings?.find(s => s.key === 'cafe_name')?.value
       if (cafeNameSetting) {
@@ -115,6 +127,14 @@ export default function Settings() {
       setPlatforms(platRes.platforms || [])
       setDevices(devRes.devices || [])
       setPricing(pricRes.pricing || [])
+
+      // Derive hourly rates from 60min entries in pricing
+      const rates = { PC: 70, XBOX: 100, PS: 120 }
+      DEVICE_TYPES.forEach(({ type }) => {
+        const oneHr = pricRes.pricing?.find(p => p.device_type === type && p.duration_mins === 60)
+        if (oneHr) rates[type] = Number(oneHr.price)
+      })
+      setHourlyRates(rates)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -267,18 +287,39 @@ export default function Settings() {
     }
   }
 
-  // ─── Pricing Handler ───
+  // ─── Review Join Request Handler ───
+  const handleReviewJoin = async (decision) => {
+    if (!reviewJoinModal) return
+    setReviewJoinSaving(true)
+    try {
+      await api.post('/staff?action=review-join-request', {
+        request_id: reviewJoinModal.id,
+        decision,
+        pin: joinPin,
+        role: joinRole
+      })
+      toast.success(decision === 'accept' ? `Accepted ${reviewJoinModal.staff_name || reviewJoinModal.staff_email} to staff team!` : 'Join request declined.')
+      setReviewJoinModal(null)
+      loadData()
+    } catch (e) {
+      toast.error(e.message || 'Failed to review join request')
+    } finally {
+      setReviewJoinSaving(false)
+    }
+  }
+
+  // ─── Dynamic 1-Hour Pricing Handler ───
+  const handleHourlyRateChange = (type, val) => {
+    setHourlyRates(prev => ({ ...prev, [type]: Number(val) || '' }))
+    setPricingChanged(true)
+  }
+
   const savePricing = async () => {
-    if (Object.keys(pricingEdits).length === 0) return
     setPricingSaving(true)
     try {
-      const updates = Object.entries(pricingEdits).map(([key, price]) => {
-        const [device_type, duration_mins] = key.split('_')
-        return { device_type, duration_mins: Number(duration_mins), price: Number(price) }
-      })
-      await api.post('/pricing', { pricing: updates })
-      setPricingEdits({})
-      toast.success('Pricing updated')
+      await api.post('/pricing', { hourly_rates: hourlyRates })
+      setPricingChanged(false)
+      toast.success('Dynamic tariffs updated and synced!')
       loadData()
     } catch (e) {
       setError(e.message)
@@ -486,6 +527,74 @@ export default function Settings() {
             )}
           </div>
 
+          {/* ─── PENDING STAFF JOIN REQUESTS BANNER ─── */}
+          {staffJoinRequests.length > 0 && (
+            <div style={{
+              padding: '1.15rem 1.25rem', borderRadius: '12px',
+              background: 'rgba(245,158,11,0.08)', border: '1.5px solid rgba(245,158,11,0.35)',
+              display: 'flex', flexDirection: 'column', gap: '0.85rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Clock size={16} style={{ color: '#f59e0b' }} />
+                  <strong style={{ fontSize: '0.9rem', color: 'var(--text)' }}>
+                    {staffJoinRequests.length} Pending Staff Join Request{staffJoinRequests.length > 1 ? 's' : ''}
+                  </strong>
+                </div>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Staff waiting for console authorization</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                {staffJoinRequests.map(req => (
+                  <div key={req.id} style={{
+                    padding: '0.85rem 1rem', borderRadius: '10px',
+                    background: 'var(--bg-card)', border: '1px solid var(--border)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      {req.avatar_url ? (
+                        <img src={req.avatar_url} alt={req.staff_name} style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--accent-text)' }}>
+                          {req.staff_name?.[0]?.toUpperCase() || 'S'}
+                        </div>
+                      )}
+                      <div>
+                        <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: 'var(--text)' }}>
+                          {req.staff_name || req.staff_email.split('@')[0]}
+                        </p>
+                        <p style={{ margin: '0.1rem 0 0', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          {req.staff_email} · Requested {formatDate(req.created_at)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        onClick={() => { setReviewJoinModal(req); setJoinPin('1234'); setJoinRole('operator') }}
+                        className="btn-primary"
+                        style={{ fontSize: '0.78rem', padding: '0.4rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                      >
+                        <UserCheck size={13} /> Authorize &amp; Accept
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Decline join request from ${req.staff_name || req.staff_email}?`)) {
+                            handleReviewJoin('decline')
+                          }
+                        }}
+                        className="btn-secondary"
+                        style={{ fontSize: '0.78rem', padding: '0.4rem 0.75rem', color: 'var(--danger)' }}
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Staff Cards */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
             {staffUsers.map(st => {
@@ -662,6 +771,154 @@ export default function Settings() {
       {activeTab === 'tariffs' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
+          {/* ─── 1-HOUR BASE TARIFF CONFIGURATION ─── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text)' }}>
+                  Dynamic Hourly Tariff Configuration
+                </h3>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '640px' }}>
+                  Stipulate only the <strong>1-Hour Base Price</strong> for each device category. All durations from 30 mins to 8 hours are automatically calculated dynamically with half-hour surcharges (65% of 1 hr, rounded to closest 5).
+                </p>
+              </div>
+
+              {isAdmin && pricingChanged && (
+                <button onClick={savePricing} disabled={pricingSaving} className="btn-primary" style={{ fontSize: '0.825rem', padding: '0.55rem 1.15rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  {pricingSaving ? <><Spinner size="sm" /> Syncing Tariffs...</> : <><CheckCircle2 size={15} /> Save &amp; Sync Tariffs</>}
+                </button>
+              )}
+            </div>
+
+            {/* Hourly Rate Inputs per Device Type */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+              {DEVICE_TYPES.map(({ type, label, icon: DIcon }) => {
+                const currentRate = hourlyRates[type] !== undefined ? hourlyRates[type] : (type === 'PC' ? 70 : type === 'XBOX' ? 100 : 120)
+                const derivedHalfHour = Math.round((Number(currentRate) * 0.65) / 5) * 5
+
+                return (
+                  <div key={type} className="card" style={{
+                    padding: '1.25rem',
+                    display: 'flex', flexDirection: 'column', gap: '1rem',
+                    border: simulatedType === type ? '1.5px solid var(--accent-border)' : '1px solid var(--border)',
+                    background: 'var(--bg-card)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <DIcon size={18} style={{ color: 'var(--accent-text)' }} />
+                        </div>
+                        <div>
+                          <p style={{ margin: 0, fontSize: '0.925rem', fontWeight: 800, color: 'var(--text)' }}>{label}</p>
+                          <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-muted)' }}>1-Hour Base Tariff</p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setSimulatedType(type)}
+                        className={`badge ${simulatedType === type ? 'badge-accent' : 'badge-neutral'}`}
+                        style={{ cursor: 'pointer', border: 'none', padding: '0.2rem 0.5rem', fontSize: '0.68rem', fontWeight: 800 }}
+                      >
+                        {simulatedType === type ? '★ Simulating' : 'Simulate'}
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', fontWeight: 800, color: 'var(--text-muted)', fontSize: '1rem' }}>₹</span>
+                        <input
+                          type="number"
+                          className="input"
+                          value={currentRate}
+                          onChange={e => handleHourlyRateChange(type, e.target.value)}
+                          disabled={!isAdmin}
+                          placeholder="e.g. 70"
+                          style={{ paddingLeft: '2rem', fontSize: '1.1rem', fontWeight: 900, letterSpacing: '-0.02em' }}
+                        />
+                      </div>
+                      <div style={{ textAlign: 'right', minWidth: '85px' }}>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block' }}>30 Min Rate</span>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--accent-text)' }}>₹{derivedHalfHour}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* ─── LIVE DYNAMIC TARIFF SIMULATOR ─── */}
+          <div className="card" style={{
+            padding: '1.35rem 1.5rem',
+            background: 'var(--bg-input)', border: '1.5px solid var(--border)',
+            boxShadow: 'var(--shadow-inset)', display: 'flex', flexDirection: 'column', gap: '1.25rem'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Sparkles size={16} style={{ color: 'var(--accent)' }} />
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--text)' }}>
+                  Interactive Duration &amp; Tariff Simulator
+                </h4>
+              </div>
+
+              {/* Device Selector for Simulator */}
+              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                {DEVICE_TYPES.map(({ type, label }) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setSimulatedType(type)}
+                    className={simulatedType === type ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
+                    style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ maxWidth: '440px', margin: '0 auto', width: '100%' }}>
+              <DurationSelector
+                value={simulatedDuration}
+                onChange={setSimulatedDuration}
+                hourlyRate={Number(hourlyRates[simulatedType]) || 70}
+                label={`Simulated ${DEVICE_TYPES.find(d => d.type === simulatedType)?.label} Duration`}
+              />
+            </div>
+
+            {/* Generated Rates Schedule Strip */}
+            <div>
+              <p style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>
+                Dynamic Schedule for {DEVICE_TYPES.find(d => d.type === simulatedType)?.label} (₹{hourlyRates[simulatedType] || 70}/hr):
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(105px, 1fr))', gap: '0.5rem' }}>
+                {[30, 60, 90, 120, 150, 180, 210, 240, 300, 360, 480].map(d => {
+                  const p = calculateDynamicTariff(Number(hourlyRates[simulatedType]) || 70, d)
+                  const isSelected = simulatedDuration === d
+                  return (
+                    <div
+                      key={d}
+                      onClick={() => setSimulatedDuration(d)}
+                      style={{
+                        padding: '0.5rem 0.65rem', borderRadius: '8px', cursor: 'pointer',
+                        background: isSelected ? 'var(--accent)' : 'var(--bg-card)',
+                        color: isSelected ? 'var(--btn-primary-text, #fff)' : 'var(--text)',
+                        border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border)',
+                        textAlign: 'center', transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <span style={{ fontSize: '0.72rem', opacity: 0.85, display: 'block' }}>{formatDuration(d)}</span>
+                      <strong style={{ fontSize: '0.9rem', fontWeight: 900 }}>₹{p}</strong>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          <hr style={{ border: 'none', borderTop: '1.5px solid var(--border)' }} />
+
           {/* Device Fleet */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -701,63 +958,6 @@ export default function Settings() {
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', padding: '1rem 0' }}>No devices configured yet.</p>
               )}
             </div>
-          </div>
-
-          <hr style={{ border: 'none', borderTop: '1.5px solid var(--border)' }} />
-
-          {/* Pricing Matrix */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Pricing Matrix</h3>
-                <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>Per device-type pricing per session duration</p>
-              </div>
-              {isAdmin && Object.keys(pricingEdits).length > 0 && (
-                <button onClick={savePricing} disabled={pricingSaving} className="btn-primary" style={{ fontSize: '0.8rem', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  {pricingSaving ? <><Spinner size="sm" /> Saving...</> : <><CheckCircle2 size={14} /> Save Pricing</>}
-                </button>
-              )}
-            </div>
-
-            {DEVICE_TYPES.map(({ type, label }) => (
-              <div key={type} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <p style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-text)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>{label}</p>
-                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                  <table className="tbl" style={{ width: '100%' }}>
-                    <thead>
-                      <tr>
-                        {DURATIONS.map(d => <th key={d} style={{ textAlign: 'center', fontSize: '0.7rem' }}>{d}m</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        {DURATIONS.map(d => {
-                          const key = `${type}_${d}`
-                          const existing = pricing.find(p => p.device_type === type && p.duration_mins === d)
-                          const val = pricingEdits[key] !== undefined ? pricingEdits[key] : (existing?.price || '')
-                          return (
-                            <td key={d} style={{ textAlign: 'center', padding: '0.4rem' }}>
-                              {isAdmin ? (
-                                <input
-                                  type="number"
-                                  className="input"
-                                  value={val}
-                                  onChange={e => setPricingEdits(prev => ({ ...prev, [key]: e.target.value }))}
-                                  style={{ width: '64px', textAlign: 'center', fontSize: '0.8rem', padding: '0.3rem 0.4rem' }}
-                                  placeholder="—"
-                                />
-                              ) : (
-                                <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>₹{val || '—'}</span>
-                              )}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ))}
           </div>
 
           <hr style={{ border: 'none', borderTop: '1.5px solid var(--border)' }} />
@@ -1053,6 +1253,76 @@ export default function Settings() {
           )}
         </div>
       )}
+
+      {/* ─── MODAL 0: REVIEW STAFF JOIN REQUEST ─── */}
+      <Modal open={!!reviewJoinModal} onClose={() => setReviewJoinModal(null)} title="Review Staff Join Request">
+        {reviewJoinModal && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div style={{
+              padding: '1rem', borderRadius: '10px',
+              background: 'var(--bg-input)', border: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', gap: '0.85rem'
+            }}>
+              {reviewJoinModal.avatar_url ? (
+                <img src={reviewJoinModal.avatar_url} alt={reviewJoinModal.staff_name} style={{ width: '46px', height: '46px', borderRadius: '12px', objectFit: 'cover' }} />
+              ) : (
+                <div style={{ width: '46px', height: '46px', borderRadius: '12px', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 900, color: 'var(--accent-text)' }}>
+                  {reviewJoinModal.staff_name?.[0]?.toUpperCase() || 'S'}
+                </div>
+              )}
+              <div>
+                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
+                  {reviewJoinModal.staff_name || reviewJoinModal.staff_email.split('@')[0]}
+                </h4>
+                <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  {reviewJoinModal.staff_email}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <Field label="Assign Desk PIN (4 Digits)" required>
+                <input
+                  type="text"
+                  maxLength={4}
+                  className="input"
+                  placeholder="1234"
+                  value={joinPin}
+                  onChange={e => setJoinPin(e.target.value.replace(/\D/g, ''))}
+                  style={{ letterSpacing: '0.2em', fontFamily: 'monospace', textAlign: 'center', fontWeight: 800 }}
+                />
+              </Field>
+
+              <Field label="Assigned Role" required>
+                <select className="input" value={joinRole} onChange={e => setJoinRole(e.target.value)}>
+                  <option value="operator">Counter Operator</option>
+                  <option value="admin">Cafe Administrator</option>
+                </select>
+              </Field>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+              <button
+                onClick={() => handleReviewJoin('accept')}
+                disabled={reviewJoinSaving || !joinPin || joinPin.length < 4}
+                className="btn-primary"
+                style={{ flex: 1 }}
+              >
+                {reviewJoinSaving ? <><Spinner size="sm" /> Authorizing...</> : <><UserCheck size={14} /> Authorize &amp; Accept</>}
+              </button>
+              <button
+                onClick={() => handleReviewJoin('decline')}
+                disabled={reviewJoinSaving}
+                className="btn-danger"
+                style={{ flex: 1 }}
+              >
+                <UserX size={14} /> Decline
+              </button>
+              <button onClick={() => setReviewJoinModal(null)} className="btn-secondary">Cancel</button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* ─── MODAL 1: AUTHORIZE STAFF MEMBER ─── */}
       <Modal open={showInviteModal} onClose={() => setShowInviteModal(false)} title="Authorize New Staff Member">

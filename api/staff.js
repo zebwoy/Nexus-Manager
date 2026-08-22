@@ -12,7 +12,79 @@ export default async function handler(req, res) {
     console.error('Error ensuring global registry:', e)
   }
 
-  // ─── 1. Staff Member checking pending invites for their Clerk email ───
+  // ─── 1. Staff Member checking pending invites & available organizations ───
+  if (action === 'available-orgs' && req.method === 'GET') {
+    const userEmail = req.headers['x-user-email'] || req.query?.email || ''
+    try {
+      const orgsR = await pool.query(`
+        SELECT id, org_id, name, slug, schema_name, logo_url, phone, status
+        FROM public.tenants
+        WHERE status = 'active'
+        ORDER BY name ASC
+      `)
+
+      let myRequests = []
+      if (userEmail) {
+        const reqsR = await pool.query(`
+          SELECT os.*, t.name as tenant_name, t.slug as tenant_slug, t.logo_url as tenant_logo
+          FROM public.organization_staff os
+          JOIN public.tenants t ON t.schema_name = os.schema_name
+          WHERE os.staff_email ILIKE $1
+          ORDER BY os.id DESC
+        `, [userEmail.trim()])
+        myRequests = reqsR.rows
+      }
+
+      return ok(res, { organizations: orgsR.rows, my_requests: myRequests })
+    } catch (e) {
+      console.error('Error fetching available orgs:', e)
+      return err(res, e, 500)
+    }
+  }
+
+  // ─── 2. Staff Member submitting a request to join an organization ───
+  if (action === 'request-join' && req.method === 'POST') {
+    const userEmail = req.headers['x-user-email']
+    const incomingFullName = req.headers['x-user-fullname'] || req.headers['x-user-name']
+    const incomingAvatar = req.headers['x-user-avatar']
+    const { schema_name } = req.body || {}
+
+    if (!userEmail || !schema_name) {
+      return err(res, 'User email and schema name are required', 400)
+    }
+
+    try {
+      // Check tenant exists
+      const tenantR = await pool.query('SELECT name, slug FROM public.tenants WHERE schema_name = $1 AND status = $2', [schema_name, 'active'])
+      if (tenantR.rows.length === 0) return err(res, 'Organization not found or inactive', 404)
+      const tenant = tenantR.rows[0]
+
+      // Check if already an admin or already member
+      const existingR = await pool.query(
+        'SELECT * FROM public.organization_staff WHERE schema_name = $1 AND staff_email ILIKE $2',
+        [schema_name, userEmail.trim()]
+      )
+      if (existingR.rows.length > 0 && existingR.rows[0].status === 'active') {
+        return err(res, 'You are already an active member of this organization', 400)
+      }
+
+      const cleanName = incomingFullName || userEmail.split('@')[0]
+      const insertR = await pool.query(`
+        INSERT INTO public.organization_staff (schema_name, staff_email, staff_name, role, avatar_url, status)
+        VALUES ($1, $2, $3, 'operator', $4, 'pending_approval')
+        ON CONFLICT (schema_name, staff_email) DO UPDATE
+        SET staff_name = EXCLUDED.staff_name, avatar_url = EXCLUDED.avatar_url, status = 'pending_approval', updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+      `, [schema_name, userEmail.trim().toLowerCase(), cleanName, incomingAvatar || null])
+
+      return ok(res, { success: true, message: `Join request submitted to ${tenant.name}! Awaiting admin approval.`, request: insertR.rows[0] }, 201)
+    } catch (e) {
+      console.error('Error submitting join request:', e)
+      return err(res, e, 500)
+    }
+  }
+
+  // ─── 3. Staff Member checking pending invites for their Clerk email ───
   if (action === 'my-invites' && req.method === 'GET') {
     const userEmail = req.headers['x-user-email'] || req.query?.email
     if (!userEmail) return err(res, 'User email is required', 400)
@@ -26,7 +98,7 @@ export default async function handler(req, res) {
 
       // Check for staff memberships / invites
       const staffR = await pool.query(
-        `SELECT os.id as invite_id, os.org_id, os.schema_name, os.staff_email, os.staff_name, os.status as membership_status, os.invited_by,
+        `SELECT os.id as invite_id, os.org_id, os.schema_name, os.staff_email, os.staff_name, os.status as membership_status, os.role, os.invited_by,
                 t.name as tenant_name, t.slug as tenant_slug, t.status as tenant_status
          FROM public.organization_staff os
          JOIN public.tenants t ON os.schema_name = t.schema_name
@@ -45,7 +117,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // ─── 2. Staff Member accepting an invite ───
+  // ─── 4. Staff Member accepting an invite ───
   if (action === 'accept-invite' && req.method === 'POST') {
     const userEmail = req.headers['x-user-email']
     const { schema_name } = req.body || {}
@@ -85,11 +157,79 @@ export default async function handler(req, res) {
     }
   }
 
-  // ─── 3. Tenant-Scoped Staff Management (Admin Only) ───
+  // ─── 5. Tenant-Scoped Staff Management (Admin Only) ───
   return withTenantClient(pool, req, res, async (client, schemaName) => {
     const callerUser = req.headers['x-username'] || 'admin'
+    const callerRole = req.headers['x-role'] || 'operator'
 
-    // GET /api/staff - List all staff accounts (strictly excluding platform superadmin)
+    // POST /api/staff?action=review-join-request - Admin accepts or declines join request
+    if (action === 'review-join-request' && req.method === 'POST') {
+      const { request_id, decision, pin, role } = req.body || {}
+      if (!request_id || !['accept', 'decline'].includes(decision)) {
+        return err(res, 'Request ID and valid decision (accept or decline) required', 400)
+      }
+
+      const reqR = await pool.query(
+        'SELECT * FROM public.organization_staff WHERE id = $1 AND schema_name = $2',
+        [Number(request_id), schemaName]
+      )
+      if (reqR.rows.length === 0) return err(res, 'Join request not found', 404)
+      const joinReq = reqR.rows[0]
+
+      if (decision === 'accept') {
+        const cleanPin = pin && /^\d{4}$/.test(pin) ? pin : '1234'
+        const assignedRole = role === 'admin' ? 'admin' : 'operator'
+        const username = joinReq.staff_email.split('@')[0].replace(/[^a-z0-9_]/gi, '').toLowerCase()
+
+        await pool.query(`
+          UPDATE public.organization_staff
+          SET status = 'active', pin = $1, role = $2, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $3
+        `, [cleanPin, assignedRole, joinReq.id])
+
+        // Insert / activate user in tenant users table
+        await client.query(`
+          INSERT INTO users (full_name, username, pin, role, email, status, avatar_url)
+          VALUES ($1, $2, $3, $4, $5, 'active', $6)
+          ON CONFLICT (username) DO UPDATE
+          SET full_name = EXCLUDED.full_name, pin = EXCLUDED.pin, role = EXCLUDED.role, email = EXCLUDED.email, status = 'active', avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url)
+        `, [joinReq.staff_name || username, username, cleanPin, assignedRole, joinReq.staff_email, joinReq.avatar_url || null])
+
+        try {
+          await client.query(`
+            INSERT INTO audit_logs (username, action, module, details, metadata)
+            VALUES ($1, 'ACCEPT_STAFF', 'staff', $2, $3)
+          `, [
+            callerUser,
+            `Accepted staff join request for ${joinReq.staff_name || joinReq.staff_email} as ${assignedRole}`,
+            JSON.stringify({ staff_email: joinReq.staff_email, role: assignedRole })
+          ])
+        } catch {}
+
+        return ok(res, { success: true, message: `Accepted ${joinReq.staff_name || joinReq.staff_email} to staff team!` })
+      } else {
+        await pool.query(`
+          UPDATE public.organization_staff
+          SET status = 'declined', updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+        `, [joinReq.id])
+
+        try {
+          await client.query(`
+            INSERT INTO audit_logs (username, action, module, details, metadata)
+            VALUES ($1, 'DECLINE_STAFF', 'staff', $2, $3)
+          `, [
+            callerUser,
+            `Declined staff join request for ${joinReq.staff_name || joinReq.staff_email}`,
+            JSON.stringify({ staff_email: joinReq.staff_email })
+          ])
+        } catch {}
+
+        return ok(res, { success: true, message: 'Join request declined.' })
+      }
+    }
+
+    // GET /api/staff - List all genuine staff accounts (strictly excluding platform superadmin)
     if (req.method === 'GET') {
       try {
         await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT")
@@ -106,7 +246,6 @@ export default async function handler(req, res) {
         if (tenantR.rows.length > 0 && tenantR.rows[0].admin_email) {
           const t = tenantR.rows[0]
           const targetAdminUsername = `${t.slug}_admin`
-          const targetOperatorUsername = `${t.slug}_operator`
           const incomingFullName = req.headers['x-user-fullname'] || req.headers['x-user-name']
           const incomingAvatar = req.headers['x-user-avatar']
           const emailPrefix = t.admin_email.split('@')[0].replace(/[^a-z0-9_]/gi, '')
@@ -118,12 +257,11 @@ export default async function handler(req, res) {
               : (incomingFullName || t.admin_name || 'Cafe Administrator')
           }
 
-          // Update public.tenants if real name is now known
           if (realFullName && realFullName !== 'Cafe Administrator' && realFullName !== t.admin_name) {
             await pool.query('UPDATE public.tenants SET admin_name = $1 WHERE schema_name = $2', [realFullName, schemaName])
           }
 
-          // Check for existing admin rows in tenant schema
+          // Sync the primary admin row
           const curAdminR = await client.query("SELECT id, username, full_name, email FROM users WHERE role = 'admin' ORDER BY id ASC")
           if (curAdminR.rows.length > 0) {
             const primaryAdmin = curAdminR.rows[0]
@@ -137,46 +275,27 @@ export default async function handler(req, res) {
               WHERE id = $5
             `, [targetAdminUsername, realFullName, t.admin_email, incomingAvatar || null, primaryAdmin.id])
 
-            // If any duplicate admin rows were created with legacy usernames (e.g. 'imanriyaj' or 'admin'), delete them
             if (curAdminR.rows.length > 1) {
               const extraIds = curAdminR.rows.slice(1).map(r => r.id)
               await client.query(`DELETE FROM users WHERE id = ANY($1::int[])`, [extraIds])
             }
           } else {
-            // Also check if an account with matching email exists as non-admin
-            const matchEmailR = await client.query("SELECT id FROM users WHERE email ILIKE $1", [t.admin_email])
-            if (matchEmailR.rows.length > 0) {
-              await client.query(`
-                UPDATE users
-                SET username = $1,
-                    full_name = $2,
-                    role = 'admin',
-                    avatar_url = COALESCE($3, avatar_url),
-                    status = 'active'
-                WHERE id = $4
-              `, [targetAdminUsername, realFullName, incomingAvatar || null, matchEmailR.rows[0].id])
-            } else {
-              // Insert standard admin account
-              await client.query(`
-                INSERT INTO users (full_name, username, pin, role, email, status, avatar_url)
-                VALUES ($1, $2, '1234', 'admin', $3, 'active', $4)
-                ON CONFLICT (username) DO UPDATE
-                SET full_name = EXCLUDED.full_name, email = EXCLUDED.email, avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url)
-              `, [realFullName, targetAdminUsername, t.admin_email, incomingAvatar || null])
-            }
+            await client.query(`
+              INSERT INTO users (full_name, username, pin, role, email, status, avatar_url)
+              VALUES ($1, $2, '1234', 'admin', $3, 'active', $4)
+              ON CONFLICT (username) DO UPDATE
+              SET full_name = EXCLUDED.full_name, email = EXCLUDED.email, avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url)
+            `, [realFullName, targetAdminUsername, t.admin_email, incomingAvatar || null])
           }
 
-          // Ensure standard operator account exists
-          await client.query(`
-            INSERT INTO users (full_name, username, pin, role, email, status)
-            VALUES ('Counter Operator', $1, '1234', 'operator', NULL, 'active')
-            ON CONFLICT (username) DO NOTHING;
-          `, [targetOperatorUsername])
-
-          // Clean up legacy placeholder accounts like 'staff' or '<slug>_staff'
+          // Clean up legacy placeholder/dummy accounts
           await client.query(`
             DELETE FROM users 
-            WHERE username = 'staff' OR username = '${t.slug}_staff'
+            WHERE (full_name = 'Counter Operator' AND email IS NULL)
+               OR (full_name = 'Counter Staff' AND email IS NULL)
+               OR username = 'staff'
+               OR username = '${t.slug}_staff'
+               OR username = '${t.slug}_operator' AND email IS NULL
           `)
         }
       } catch (e) {
@@ -187,13 +306,17 @@ export default async function handler(req, res) {
         "SELECT id, full_name, username, pin, role, email, status, avatar_url, created_at FROM users WHERE role != 'super_admin' AND username != 'superadmin' ORDER BY id ASC"
       )
       const staffRegistryR = await pool.query(
-        'SELECT * FROM public.organization_staff WHERE schema_name = $1',
+        'SELECT * FROM public.organization_staff WHERE schema_name = $1 ORDER BY id DESC',
         [schemaName]
       )
 
+      const joinRequests = staffRegistryR.rows.filter(r => r.status === 'pending_approval')
+      const invites = staffRegistryR.rows.filter(r => r.status === 'invited')
+
       return ok(res, {
         users: usersR.rows,
-        invites: staffRegistryR.rows,
+        invites,
+        join_requests: joinRequests,
         schemaName
       })
     }

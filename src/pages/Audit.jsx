@@ -6,16 +6,18 @@ import { Shield, Activity, Trash2, RefreshCw } from 'lucide-react'
 
 const TABS = [
   { key: 'audit',    label: 'Audit Log' },
+  { key: 'staff',    label: 'Staff Operations Audit' },
   { key: 'sessions', label: 'Operator Sessions' },
   { key: 'deletes',  label: 'Deletions' },
 ]
 
 // Action type → badge colour
 function actionBadge(action) {
-  const danger = ['SESSION_DELETE', 'RECHARGE_DELETE', 'SALE_DELETE', 'DELETE_INVENTORY']
-  const warn   = ['UPDATE_SETTINGS', 'PURGE_DATA', 'RECHARGE_EDIT', 'SALE_EDIT']
-  const cls = danger.includes(action) ? 'badge-danger' : warn.includes(action) ? 'badge-warning' : 'badge-accent'
-  return <span className={`badge ${cls}`} style={{ fontSize: '0.6rem' }}>{action}</span>
+  const danger = ['SESSION_DELETE', 'RECHARGE_DELETE', 'SALE_DELETE', 'DELETE_INVENTORY', 'REVOKE_STAFF', 'DECLINE_STAFF']
+  const warn   = ['UPDATE_SETTINGS', 'PURGE_DATA', 'RECHARGE_EDIT', 'SALE_EDIT', 'STATUS_CHANGE', 'PIN_CHANGE', 'REQUEST_PROFILE_CHANGE']
+  const success = ['ACCEPT_STAFF', 'INVITE_STAFF', 'LOGIN']
+  const cls = danger.includes(action) ? 'badge-danger' : warn.includes(action) ? 'badge-warning' : success.includes(action) ? 'badge-success' : 'badge-accent'
+  return <span className={`badge ${cls}`} style={{ fontSize: '0.6rem', fontWeight: 800 }}>{action}</span>
 }
 
 export default function Audit() {
@@ -51,6 +53,14 @@ export default function Audit() {
       l.action?.toLowerCase().includes(search.toLowerCase())
     return matchAction && matchSearch
   })
+
+  const staffLogs = filteredLogs.filter(l =>
+    l.module === 'staff' ||
+    ['INVITE_STAFF', 'ACCEPT_STAFF', 'DECLINE_STAFF', 'PIN_CHANGE', 'STATUS_CHANGE', 'REVOKE_STAFF', 'REQUEST_PROFILE_CHANGE', 'LOGIN', 'LOGOUT'].includes(l.action) ||
+    l.details?.toLowerCase().includes('staff') ||
+    l.details?.toLowerCase().includes('pin') ||
+    l.details?.toLowerCase().includes('operator')
+  )
 
   const deletionLogs = filteredLogs.filter(l =>
     ['SESSION_DELETE', 'RECHARGE_DELETE', 'SALE_DELETE', 'DELETE_INVENTORY'].includes(l.action)
@@ -117,6 +127,64 @@ export default function Audit() {
                         <td className="table-cell">{actionBadge(l.action)}</td>
                         <td className="table-cell" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '280px', wordBreak: 'break-word' }}>
                           {l.details || '—'}
+                        </td>
+                        <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.725rem', color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>
+                          {formatDate(l.created_at)} {formatTime(l.created_at)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+        </div>
+      )}
+
+      {/* ── STAFF OPERATIONS AUDIT ── */}
+      {tab === 'staff' && (
+        <div>
+          <div className="card" style={{ padding: '0.85rem 1.15rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Shield size={16} style={{ color: 'var(--accent-text)' }} />
+              <span style={{ fontSize: '0.85rem', fontWeight: 750, color: 'var(--text)' }}>
+                Staff Authorization &amp; Access Log
+              </span>
+            </div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace" }}>
+              {staffLogs.length} staff operation records
+            </span>
+          </div>
+
+          {staffLogs.length === 0
+            ? <EmptyState icon={Shield} title="No staff operations recorded" description="No staff invitation, PIN change, status modification, or desk authorization logs found." />
+            : (
+              <div className="card-flush">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      {['#', 'Actor', 'Operation', 'Details & Metadata', 'Timestamp'].map(h => <th key={h}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {staffLogs.map((l, idx) => (
+                      <tr key={l.id} style={{ background: idx % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent' }}>
+                        <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.725rem', color: 'var(--text-faint)' }}>{l.id}</td>
+                        <td className="table-cell" style={{ fontWeight: 750, color: 'var(--text)' }}>
+                          @{l.username || 'system'}
+                        </td>
+                        <td className="table-cell">{actionBadge(l.action)}</td>
+                        <td className="table-cell" style={{ fontSize: '0.82rem', color: 'var(--text)' }}>
+                          <p style={{ margin: 0, fontWeight: 600 }}>{l.details || '—'}</p>
+                          {l.metadata && (
+                            <pre style={{
+                              margin: '0.35rem 0 0', padding: '0.3rem 0.5rem',
+                              background: 'var(--bg-input)', border: '1px solid var(--border)',
+                              borderRadius: '6px', fontSize: '0.7rem', color: 'var(--text-muted)',
+                              whiteSpace: 'pre-wrap', wordBreak: 'break-all'
+                            }}>
+                              {typeof l.metadata === 'string' ? l.metadata : JSON.stringify(l.metadata)}
+                            </pre>
+                          )}
                         </td>
                         <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.725rem', color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>
                           {formatDate(l.created_at)} {formatTime(l.created_at)}

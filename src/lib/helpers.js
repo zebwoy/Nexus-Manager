@@ -10,8 +10,40 @@ export function formatDuration(mins) {
   const h = Math.floor(mins / 60)
   const m = mins % 60
   if (h === 0) return `${m} mins`
-  if (m === 0) return `${h} hr`
-  return `${h} hr ${m} mins`
+  if (m === 0) return `${h} ${h === 1 ? 'hr' : 'hrs'}`
+  return `${h} ${h === 1 ? 'hr' : 'hrs'} ${m} mins`
+}
+
+/**
+ * Calculate dynamic tariff based solely on 1-hour rate.
+ * - Whole hours (N hrs): N * hourlyRate
+ * - 30 mins: 65% of 1-hour rate, rounded to closest multiple of 5
+ * - N hrs + 30 mins: (N * hourlyRate) + roundTo5(0.65 * hourlyRate)
+ *
+ * @param {number} hourlyRate - The configured 1-hour rate (e.g. 70, 100)
+ * @param {number} durationMins - Duration in minutes (e.g. 30, 60, 90, 120...)
+ * @returns {number} Calculated price
+ */
+export function calculateDynamicTariff(hourlyRate, durationMins) {
+  const rate = Number(hourlyRate) || 0
+  const mins = Number(durationMins) || 0
+  if (rate <= 0 || mins <= 0) return 0
+
+  const halfHourRate = Math.round((rate * 0.65) / 5) * 5
+  const fullHours = Math.floor(mins / 60)
+  const remainderMins = mins % 60
+
+  let total = fullHours * rate
+
+  if (remainderMins > 0) {
+    if (remainderMins <= 30) {
+      total += halfHourRate
+    } else {
+      total += rate
+    }
+  }
+
+  return total
 }
 
 // Duration options for dropdowns (30 min steps, 30min to 8hr)

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
-import { DURATION_OPTIONS, formatRupees, todayISO, nowTimeInput, toISO, addMinutes, formatDuration, validateName, validateMobile } from '../lib/helpers'
+import { DURATION_OPTIONS, formatRupees, todayISO, nowTimeInput, toISO, addMinutes, formatDuration, validateName, validateMobile, calculateDynamicTariff } from '../lib/helpers'
 import { Field, ErrorMsg, Spinner } from '../components/UI'
+import DurationSelector from '../components/DurationSelector'
 import {
   Banknote, CreditCard, Smartphone, Moon,
   Gamepad2, Users, Plus, X, Receipt, CheckCircle2
@@ -83,7 +84,10 @@ export default function NewSession() {
 
   // Recompute charge and time_out whenever relevant fields change
   useEffect(() => {
-    const base = pricing[form.device_type]?.[form.duration_mins] || 0
+    const hourlyRate = pricing[form.device_type]?.[60] || (form.device_type === 'PC' ? 70 : form.device_type === 'XBOX' ? 100 : 120)
+    const base = pricing[form.device_type]?.[form.duration_mins] !== undefined
+      ? Number(pricing[form.device_type][form.duration_mins])
+      : calculateDynamicTariff(hourlyRate, form.duration_mins)
     setCharge(base)
 
     if (form.time_in && form.duration_mins) {
@@ -145,41 +149,31 @@ export default function NewSession() {
     idx === i ? { ...pl, own_controller: !pl.own_controller } : pl
   ))
 
-  const handleSubmit = async () => {
-    const nameErr = validateName(form.name)
-    if (nameErr) { setError(nameErr); return }
+  const handleSubmit = async (e) => {
+    if (e?.preventDefault) e.preventDefault()
+    setError('')
+    if (!form.device_id) return setError('Device is required')
+    if (form.name && !validateName(form.name)) return setError('Name: 2-60 chars, letters only')
+    if (form.mobile && !validateMobile(form.mobile)) return setError('Mobile: must be 10 digits')
 
-    const mobileErr = validateMobile(form.mobile, false) // optional
-    if (mobileErr) { setError(mobileErr); return }
-
-    if (!form.device_id || !form.duration_mins) {
-      setError('Please select a station seat and duration')
-      return
+    const hasSplit = cashAmount !== '' || onlineAmount !== ''
+    if (hasSplit) {
+      if (cash < 0 || online < 0) return setError('Payment amounts cannot be negative')
+      if (totalPaid > total) return setError(`Total paid (₹${totalPaid}) cannot exceed total charge (₹${total})`)
     }
 
-    setLoading(true)
-    setError('')
     try {
+      setLoading(true)
       const timeInISO = toISO(form.date, form.time_in)
-      // Post-midnight: if time_out hour < time_in hour, advance date by 1 day
-      const timeOutISO = toISO(form.date, timeOut, timeInISO)
-
-      const playersPayload = form.device_type === 'PC'
-        ? Array.from({ length: pcControllers }, (_, i) => ({
-            player_number: i + 1,
-            own_controller: false,
-            controller_fee: settings.controller_fee,
-            extra_person_fee: 0,
-          }))
-        : players.map((p, i) => ({
+      const timeOutISO = toISO(form.date, timeOut)
+      const playersPayload = isConsole
+        ? players.map((p, i) => ({
             player_number: i + 1,
             own_controller: p.own_controller,
-            controller_fee: p.own_controller ? 0 : settings.controller_fee,
-            extra_person_fee: i + 1 >= (settings.extra_person_from || 3) ? settings.extra_person_fee : 0,
+            extra_fee: i + 1 >= (settings.extra_person_from || 3) ? settings.extra_person_fee : 0,
           }))
+        : []
 
-      // Determine payment payload
-      const hasSplit = cashAmount !== '' || onlineAmount !== ''
       const payload = {
         customer_id: form.customer_id,
         name: form.name || null,
@@ -259,8 +253,8 @@ export default function NewSession() {
                         fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between',
                         borderRadius: 0, borderBottom: '1px solid var(--border)'
                       }}>
-                      <span style={{ color: 'var(--text)', fontWeight: 600 }}>{c.name}</span>
-                      {c.mobile && <span style={{ color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem' }}>{c.mobile}</span>}
+                      <span>{c.name}</span>
+                      {c.mobile && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{c.mobile}</span>}
                     </button>
                   ))}
                 </div>
@@ -274,7 +268,7 @@ export default function NewSession() {
         </div>
 
         {/* Row 2: Device Station & Duration */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', alignItems: 'flex-start' }}>
           <Field label="Station allocation" required>
             <select className="input" value={form.device_id} onChange={e => handleDeviceChange(e.target.value)}>
               <option value="">Choose device terminal</option>
@@ -283,14 +277,14 @@ export default function NewSession() {
               ))}
             </select>
           </Field>
-          <Field label="Allotted Duration" required>
-            <select className="input" value={form.duration_mins}
-              onChange={e => setForm(f => ({ ...f, duration_mins: Number(e.target.value) }))}>
-              {DURATION_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </Field>
+          <div>
+            <DurationSelector
+              value={form.duration_mins}
+              onChange={mins => setForm(f => ({ ...f, duration_mins: mins }))}
+              hourlyRate={pricing[form.device_type]?.[60] || (form.device_type === 'PC' ? 70 : form.device_type === 'XBOX' ? 100 : 120)}
+              label="Allotted Session Duration"
+            />
+          </div>
         </div>
 
         {/* Row 3: Date & Access Times */}

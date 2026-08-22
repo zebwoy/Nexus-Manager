@@ -1,0 +1,6 @@
+feat: dynamic 1-hr tariff engine, DurationSelector component, staff join approval workflow, and restored staff audit tab
+
+- Staff Joining Flow: removed automatic dummy staff pre-seeding; implemented self-service join request flow (/join-organization) and admin review modal in Settings (Staff Authorizations)
+- Dynamic Tariffs: replaced static pricing matrix with clean 1-hour rate configuration (PC, Xbox, PS); dynamically calculated half-hour surcharges (65% of 1 hr rounded to nearest 5)
+- DurationSelector: created reusable React component cycling 30m to 8h in 30-min steps with [-] and [+] controls and integrated into NewSession and Settings
+- Audit Trails: restored dedicated Staff Operations Audit tab in Audit.jsx displaying authorizations, PIN resets, status updates, and join decisions

@@ -335,13 +335,20 @@ export async function ensureGlobalRegistry(pool) {
         schema_name VARCHAR(100) NOT NULL,
         staff_email VARCHAR(255) NOT NULL,
         staff_name VARCHAR(100),
+        role VARCHAR(20) DEFAULT 'operator',
+        avatar_url TEXT,
         pin CHAR(4) DEFAULT '1234',
-        status VARCHAR(20) DEFAULT 'invited' CHECK (status IN ('invited', 'active', 'suspended')),
+        status VARCHAR(30) DEFAULT 'invited' CHECK (status IN ('invited', 'active', 'suspended', 'pending_approval', 'declined')),
         invited_by VARCHAR(255),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (schema_name, staff_email)
     );
+
+    ALTER TABLE public.organization_staff ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'operator';
+    ALTER TABLE public.organization_staff ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+    ALTER TABLE public.organization_staff DROP CONSTRAINT IF EXISTS organization_staff_status_check;
+    ALTER TABLE public.organization_staff ADD CONSTRAINT organization_staff_status_check CHECK (status IN ('invited', 'active', 'suspended', 'pending_approval', 'declined'));
 
     CREATE TABLE IF NOT EXISTS public.super_admin_audit_logs (
         id SERIAL PRIMARY KEY,
