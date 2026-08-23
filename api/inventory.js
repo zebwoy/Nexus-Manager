@@ -21,13 +21,28 @@ export default async function handler(req, res) {
 
         if (search) {
           const clientType = req.query.type
-          let whereClause = `(name ILIKE $1 OR mobile ILIKE $1 OR shop_name ILIKE $1 OR pancafe_username ILIKE $1 OR address ILIKE $1)`
-          if (clientType === 'session') whereClause += ` AND (client_type IS NULL OR client_type NOT IN ('vendor'))` 
-          else if (clientType === 'vendor') whereClause += ` AND client_type = 'vendor'`
+          // Strict per-module isolation: each type only sees its own records.
+          // Legacy rows with NULL / 'customer' default are treated as 'session' for backward compat.
+          let typeFilter = ''
+          if (clientType === 'session') {
+            typeFilter = `AND (client_type IS NULL OR client_type = 'customer' OR client_type = 'session')`
+          } else if (clientType === 'recharge') {
+            typeFilter = `AND (client_type IS NULL OR client_type = 'customer' OR client_type = 'recharge')`
+          } else if (clientType === 'vendor') {
+            typeFilter = `AND client_type = 'vendor'`
+          } else if (clientType === 'walkin') {
+            typeFilter = `AND (client_type = 'walkin' OR client_type = 'cafeteria')`
+          } else if (clientType === 'pancafe') {
+            typeFilter = `AND client_type = 'pancafe'`
+          } else {
+            // No recognised type → return nothing (fail-safe: prevents accidental leakage)
+            return ok(res, { customers: [] })
+          }
           const r = await client.query(
             `SELECT id, name, mobile, shop_name, pancafe_username, address, client_type
              FROM customers
-             WHERE ${whereClause}
+             WHERE (name ILIKE $1 OR mobile ILIKE $1 OR shop_name ILIKE $1 OR pancafe_username ILIKE $1 OR address ILIKE $1)
+             ${typeFilter}
              ORDER BY name LIMIT 15`,
             [`%${search.trim()}%`]
           )
@@ -432,7 +447,7 @@ export default async function handler(req, res) {
               }
             } else {
               const newC = await client.query(
-                'INSERT INTO customers (name, mobile, shop_name) VALUES ($1,$2,$3) RETURNING id',
+                'INSERT INTO customers (name, mobile, shop_name, client_type) VALUES ($1,$2,$3,\'walkin\') RETURNING id',
                 [name.trim(), mobile || null, shop_name || null]
               )
               cid = newC.rows[0].id

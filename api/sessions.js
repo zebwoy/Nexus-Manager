@@ -342,7 +342,7 @@ export default async function handler(req, res) {
                 }
               } else {
                 const newC = await client.query(
-                  'INSERT INTO customers (name, mobile) VALUES ($1,$2) RETURNING id',
+                  'INSERT INTO customers (name, mobile, client_type) VALUES ($1,$2,\'session\') RETURNING id',
                   [newName, newMobile]
                 )
                 customerId = newC.rows[0].id
@@ -584,7 +584,7 @@ export default async function handler(req, res) {
             }
           } else {
             const newC = await client.query(
-              'INSERT INTO customers (name, mobile, shop_name) VALUES ($1,$2,$3) RETURNING id',
+              'INSERT INTO customers (name, mobile, shop_name, client_type) VALUES ($1,$2,$3,\'session\') RETURNING id',
               [name.trim(), mobile || null, shop_name || null]
             )
             cid = newC.rows[0].id
@@ -639,7 +639,7 @@ export default async function handler(req, res) {
               if (existingP.rows.length > 0) {
                 pCid = existingP.rows[0].id
               } else {
-                const newP = await client.query('INSERT INTO customers (name) VALUES ($1) RETURNING id', [pName])
+                const newP = await client.query('INSERT INTO customers (name, client_type) VALUES ($1,\'session\') RETURNING id', [pName])
                 pCid = newP.rows[0].id
               }
             }

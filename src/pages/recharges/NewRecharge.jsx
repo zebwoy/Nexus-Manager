@@ -50,7 +50,7 @@ export default function NewRecharge() {
     f('name', val)
     if (val.length >= 2) {
       try {
-        const d = await api.get(`/customers?search=${encodeURIComponent(val)}`)
+        const d = await api.get(`/customers?search=${encodeURIComponent(val)}&type=recharge`)
         setCustomerSuggestions(d.customers || [])
       } catch {
         setCustomerSuggestions([])

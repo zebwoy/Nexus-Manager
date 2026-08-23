@@ -137,7 +137,7 @@ export default async function handler(req, res) {
             )
           } else {
             const newC = await client.query(
-              'INSERT INTO customers (name, mobile, shop_name, pancafe_username) VALUES ($1,$2,$3,$4) RETURNING id',
+              'INSERT INTO customers (name, mobile, shop_name, pancafe_username, client_type) VALUES ($1,$2,$3,$4,\'pancafe\') RETURNING id',
               [name.trim(), mobile || null, shop_name || null, pancafe_username]
             )
             cid = newC.rows[0].id

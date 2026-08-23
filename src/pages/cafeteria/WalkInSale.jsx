@@ -91,7 +91,7 @@ export default function WalkInSale() {
     setCustomer(c => ({ ...c, name: val }))
     if (val.length >= 2) {
       try {
-        const d = await api.get(`/customers?search=${encodeURIComponent(val)}`)
+        const d = await api.get(`/customers?search=${encodeURIComponent(val)}&type=walkin`)
         setCustomerSuggestions(d.customers || [])
       } catch {
         setCustomerSuggestions([])

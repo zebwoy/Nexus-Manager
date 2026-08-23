@@ -223,7 +223,7 @@ export function NewPanCafe() {
   const handleNameChange = async (val) => {
     f('name', val)
     if (val.length >= 2) {
-      try { const d = await api.get(`/customers?search=${encodeURIComponent(val)}`); setCustomerSuggestions(d.customers || []) }
+      try { const d = await api.get(`/customers?search=${encodeURIComponent(val)}&type=pancafe`); setCustomerSuggestions(d.customers || []) }
       catch { setCustomerSuggestions([]) }
     } else setCustomerSuggestions([])
   }

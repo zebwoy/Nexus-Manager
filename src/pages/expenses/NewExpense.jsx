@@ -87,7 +87,7 @@ export default function NewExpense() {
     f('vendor_name', val)
     if (val.trim().length >= 1) {
       try {
-        const d = await api.get(`/customers?search=${encodeURIComponent(val.trim())}`)
+        const d = await api.get(`/customers?search=${encodeURIComponent(val.trim())}&type=vendor`)
         setVendorSuggestions(d.customers || [])
         setShowVendorSuggestions(true)
       } catch {
