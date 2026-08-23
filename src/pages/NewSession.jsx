@@ -594,29 +594,24 @@ export default function NewSession() {
 
           {/* Standalone Quick Refreshments & Snacks Card */}
           <div className="card" style={{
-            display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.9rem 1.15rem'
+            display: 'flex', flexDirection: 'column', gap: '0.45rem', padding: '0.65rem 0.95rem'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <p style={{ fontSize: '0.825rem', fontWeight: 750, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.45rem', margin: 0 }}>
-                  <Coffee size={14} style={{ color: 'var(--accent-text)' }} /> Quick Refreshments &amp; Snacks
-                </p>
-                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0 }}>
-                  Optional drinks or snacks to attach to check-in invoice
-                </p>
-              </div>
+              <p style={{ fontSize: '0.78rem', fontWeight: 750, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
+                <Coffee size={13} style={{ color: 'var(--accent-text)' }} /> Quick Drinks &amp; Snacks
+              </p>
               {cafeCart.length > 0 && (
-                <span className="badge badge-accent" style={{ fontSize: '0.68rem', fontWeight: 750 }}>
+                <span className="badge badge-accent" style={{ fontSize: '0.65rem', fontWeight: 750, padding: '0.1rem 0.4rem' }}>
                   {cafeCart.reduce((sum, i) => sum + i.qty, 0)} items ({formatRupees(cafeTotal)})
                 </span>
               )}
             </div>
 
             <div style={{
-              display: 'flex', gap: '0.6rem', overflowX: 'auto', paddingBottom: '0.2rem'
+              display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.15rem'
             }}>
               {inventory.length === 0 ? (
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>No inventory items currently in stock</span>
+                <span style={{ fontSize: '0.725rem', color: 'var(--text-faint)', padding: '0.25rem 0' }}>No inventory items currently in stock</span>
               ) : (
                 inventory.map(item => {
                   const inCart = cafeCart.find(i => i.id === item.id)
@@ -627,65 +622,66 @@ export default function NewSession() {
                     <div
                       key={item.id}
                       style={{
-                        flex: '0 0 130px',
+                        flex: '0 0 125px',
                         display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-                        padding: '0.55rem 0.65rem', borderRadius: '8px',
+                        padding: '0.45rem 0.55rem', borderRadius: '7px',
                         background: qty > 0 ? 'rgba(var(--accent-rgb, 59,130,246), 0.06)' : 'var(--bg-input)',
                         border: qty > 0 ? '1.5px solid var(--accent)' : '1px solid var(--border)',
                         transition: 'all 0.15s ease'
                       }}
                     >
                       <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
-                          <span style={{ fontSize: '1rem' }}>{isDrink ? '🥤' : '🍿'}</span>
-                          <span style={{ fontSize: '0.65rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace" }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.15rem' }}>
+                          <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>{isDrink ? '🥤' : '🍿'}</span>
+                          <p style={{
+                            fontSize: '0.725rem', fontWeight: 750, color: 'var(--text)', margin: 0,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1
+                          }} title={item.name}>
+                            {item.name}
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.68rem', marginBottom: '0.35rem' }}>
+                          <span style={{ fontWeight: 800, color: 'var(--accent-text)', fontFamily: "'JetBrains Mono', monospace" }}>
+                            {formatRupees(item.sell_price)}
+                          </span>
+                          <span style={{ color: 'var(--text-faint)', fontSize: '0.625rem', fontFamily: "'JetBrains Mono', monospace" }}>
                             {item.stock_qty} left
                           </span>
                         </div>
-                        <p style={{
-                          fontSize: '0.75rem', fontWeight: 750, color: 'var(--text)',
-                          lineHeight: 1.2, marginBottom: '0.15rem',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-                        }} title={item.name}>
-                          {item.name}
-                        </p>
-                        <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--accent-text)', fontFamily: "'JetBrains Mono', monospace" }}>
-                          {formatRupees(item.sell_price)}
-                        </p>
                       </div>
 
-                      <div style={{ marginTop: '0.45rem' }}>
+                      <div>
                         {qty === 0 ? (
                           <button
                             type="button"
                             onClick={() => addItemToCart(item)}
                             className="btn-secondary btn-sm"
                             style={{
-                              width: '100%', padding: '0.2rem 0.4rem', fontSize: '0.7rem',
+                              width: '100%', padding: '0.15rem 0.35rem', fontSize: '0.68rem', height: '24px',
                               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem'
                             }}
                           >
-                            <Plus size={11} /> Add
+                            <Plus size={10} /> Add
                           </button>
                         ) : (
                           <div style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            background: 'var(--bg-elevated)', borderRadius: '5px', border: '1px solid var(--accent-border)',
-                            padding: '0.1rem 0.2rem'
+                            background: 'var(--bg-elevated)', borderRadius: '4px', border: '1px solid var(--accent-border)',
+                            height: '24px', padding: '0 0.2rem'
                           }}>
                             <button
                               type="button"
                               onClick={() => updateCartQty(item.id, qty - 1)}
                               style={{
-                                width: '1.25rem', height: '1.25rem', borderRadius: '3px',
+                                width: '1.15rem', height: '1.15rem', borderRadius: '3px',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 background: 'var(--bg-card)', border: '1px solid var(--border)',
-                                color: 'var(--text)', cursor: 'pointer'
+                                color: 'var(--text)', cursor: 'pointer', padding: 0
                               }}
                             >
-                              <Minus size={10} />
+                              <Minus size={9} />
                             </button>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-text)', fontFamily: "'JetBrains Mono', monospace" }}>
+                            <span style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--accent-text)', fontFamily: "'JetBrains Mono', monospace" }}>
                               {qty}
                             </span>
                             <button
@@ -693,14 +689,14 @@ export default function NewSession() {
                               onClick={() => updateCartQty(item.id, qty + 1)}
                               disabled={qty >= item.stock_qty}
                               style={{
-                                width: '1.25rem', height: '1.25rem', borderRadius: '3px',
+                                width: '1.15rem', height: '1.15rem', borderRadius: '3px',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 background: 'var(--bg-card)', border: '1px solid var(--border)',
                                 color: 'var(--text)', cursor: qty >= item.stock_qty ? 'not-allowed' : 'pointer',
-                                opacity: qty >= item.stock_qty ? 0.35 : 1
+                                opacity: qty >= item.stock_qty ? 0.35 : 1, padding: 0
                               }}
                             >
-                              <Plus size={10} />
+                              <Plus size={9} />
                             </button>
                           </div>
                         )}
