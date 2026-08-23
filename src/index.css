@@ -7,9 +7,21 @@
 /* ── Google Fonts ─────────────────────────────────────────── */
 
 @layer base {
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
 
-  html { font-size: 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  html, body, #root {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
 
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -561,11 +573,25 @@
   }
 }
 
-/* ── Scrollbar — thin & subtle ── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+/* ── Global Scrollbar Suppression (Preserving Full Scroll Functionality) ── */
+::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-corner {
+  display: none !important;
+  background: transparent !important;
+}
+
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
 
 /* ── Hide number input native spinners ── */
 input[type=number]::-webkit-inner-spin-button,
