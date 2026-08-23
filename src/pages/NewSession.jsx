@@ -592,12 +592,17 @@ export default function NewSession() {
           )}
           </div>
 
-          {/* Quick Drinks & Snacks — horizontal card strip */}
-          <div className="card" style={{ padding: '0.85rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            {/* Section header */}
+          {/* Quick Add-on: Drinks & Snacks */}
+          <div className="card" style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {/* Section header — matches .label style */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                <Coffee size={13} style={{ color: 'var(--accent-text)' }} /> Drinks &amp; Snacks
+              <span style={{
+                display: 'flex', alignItems: 'center', gap: '0.4rem',
+                fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: '0.06em'
+              }}>
+                <Coffee size={12} strokeWidth={2.5} style={{ color: 'var(--accent-text)', flexShrink: 0 }} />
+                Quick Add-on: Drinks &amp; Snacks
               </span>
               {cafeCart.length > 0 && (
                 <span className="badge badge-accent" style={{ fontSize: '0.68rem', fontWeight: 700 }}>
@@ -606,80 +611,122 @@ export default function NewSession() {
               )}
             </div>
 
-            {/* Card strip */}
-            <div style={{ display: 'flex', gap: '0.6rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+            {/* Item card strip */}
+            <div style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.15rem' }}>
               {inventory.length === 0 ? (
-                <span style={{ fontSize: '0.775rem', color: 'var(--text-faint)', padding: '0.5rem 0' }}>No items in stock</span>
+                <span style={{ fontSize: '0.775rem', color: 'var(--text-faint)', padding: '0.35rem 0' }}>No items currently in stock</span>
               ) : inventory.map(item => {
                 const inCart = cafeCart.find(i => i.id === item.id)
                 const qty = inCart?.qty || 0
-                const isDrink = ['drink','water','bull','monster','sting','coffee','tea','cola','lahori','juice','soda'].some(k => item.name.toLowerCase().includes(k))
 
                 return (
                   <div key={item.id} style={{
-                    flex: '0 0 110px',
-                    display: 'flex', flexDirection: 'column',
-                    padding: '0.65rem 0.6rem 0.55rem',
-                    borderRadius: '10px',
-                    background: qty > 0 ? 'rgba(var(--accent-rgb,59,130,246),0.07)' : 'var(--bg-input)',
-                    border: qty > 0 ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-                    transition: 'border-color 0.15s, background 0.15s',
-                    gap: '0.4rem'
+                    flex: '0 0 108px',
+                    display: 'flex', flexDirection: 'column', gap: '0.35rem',
+                    padding: '0.7rem 0.65rem 0.6rem',
+                    borderRadius: '12px',
+                    // Neumorphic raised surface — matches .card style
+                    background: qty > 0
+                      ? 'linear-gradient(135deg, var(--accent-dim) 0%, var(--bg-elevated) 100%)'
+                      : 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-elevated) 100%)',
+                    border: '1px solid var(--border)',
+                    borderTop: qty > 0 ? '1.5px solid var(--accent-border)' : '1.5px solid var(--bevel-top)',
+                    borderBottom: qty > 0 ? '1.5px solid var(--accent-border)' : '1.5px solid var(--bevel-bottom)',
+                    boxShadow: qty > 0
+                      ? '0 2px 6px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)'
+                      : 'var(--shadow-outset)',
+                    transition: 'box-shadow 0.15s, border-color 0.15s, background 0.15s',
                   }}>
-                    {/* Top: emoji + stock */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>{isDrink ? '🥤' : '🍿'}</span>
-                      <span style={{ fontSize: '0.6rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.2, textAlign: 'right' }}>
-                        {item.stock_qty} left
-                      </span>
-                    </div>
+                    {/* Stock count — engraved muted label */}
+                    <span style={{
+                      fontSize: '0.6rem', fontWeight: 600,
+                      color: qty > 0 ? 'var(--accent-text)' : 'var(--text-faint)',
+                      fontFamily: "'JetBrains Mono', monospace",
+                      textTransform: 'uppercase', letterSpacing: '0.04em'
+                    }}>
+                      {item.stock_qty} in stock
+                    </span>
 
-                    {/* Name */}
+                    {/* Item name */}
                     <p style={{
-                      margin: 0, fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)',
-                      lineHeight: 1.25,
-                      overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'
+                      margin: 0, fontSize: '0.75rem', fontWeight: 700,
+                      color: 'var(--text)', lineHeight: 1.25,
+                      overflow: 'hidden', display: '-webkit-box',
+                      WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'
                     }} title={item.name}>{item.name}</p>
 
                     {/* Price */}
-                    <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-text)', fontFamily: "'JetBrains Mono', monospace" }}>
+                    <span style={{
+                      fontSize: '0.775rem', fontWeight: 800,
+                      color: 'var(--accent-text)',
+                      fontFamily: "'JetBrains Mono', monospace"
+                    }}>
                       {formatRupees(item.sell_price)}
                     </span>
 
-                    {/* Stepper / Add button */}
+                    {/* Add / Stepper — btn-secondary neumorphic style */}
                     {qty === 0 ? (
                       <button
                         type="button"
                         onClick={() => addItemToCart(item)}
+                        className="btn-secondary btn-sm"
                         style={{
-                          marginTop: 'auto',
-                          width: '100%', height: '26px', borderRadius: '6px',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem',
-                          fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer',
-                          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-                          color: 'var(--text)', transition: 'background 0.15s'
+                          marginTop: 'auto', width: '100%',
+                          padding: '0.25rem 0.35rem', fontSize: '0.72rem', fontWeight: 650,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem',
+                          borderRadius: '7px', height: '28px'
                         }}
                       >
-                        <Plus size={11} /> Add
+                        <Plus size={11} strokeWidth={2.5} /> Add
                       </button>
                     ) : (
                       <div style={{
                         marginTop: 'auto',
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        height: '26px', borderRadius: '6px',
-                        background: 'var(--bg-elevated)', border: '1px solid var(--accent-border)',
-                        padding: '0 0.2rem'
+                        height: '28px', borderRadius: '7px',
+                        // Inset sunken — matches .input shadow
+                        background: 'var(--bg-input)',
+                        border: '1px solid var(--accent-border)',
+                        boxShadow: 'var(--shadow-inset)',
+                        padding: '0 0.15rem'
                       }}>
                         <button type="button" onClick={() => updateCartQty(item.id, qty - 1)}
-                          style={{ width: '1.2rem', height: '1.2rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)', cursor: 'pointer', padding: 0 }}>
-                          <Minus size={10} />
+                          style={{
+                            width: '1.35rem', height: '1.35rem', borderRadius: '5px', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            // Raised tactile button surface
+                            background: 'linear-gradient(180deg, var(--bg-card) 0%, var(--bg-elevated) 100%)',
+                            border: '1px solid var(--border)',
+                            borderTop: '1.5px solid var(--bevel-top)',
+                            borderBottom: '1.5px solid var(--bevel-bottom)',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                            color: 'var(--text)', cursor: 'pointer', padding: 0
+                          }}>
+                          <Minus size={9} strokeWidth={2.5} />
                         </button>
-                        <span style={{ fontSize: '0.775rem', fontWeight: 800, color: 'var(--accent-text)', fontFamily: "'JetBrains Mono', monospace", minWidth: '14px', textAlign: 'center' }}>
+                        <span style={{
+                          fontSize: '0.8rem', fontWeight: 800,
+                          color: 'var(--accent-text)',
+                          fontFamily: "'JetBrains Mono', monospace",
+                          minWidth: '16px', textAlign: 'center'
+                        }}>
                           {qty}
                         </span>
-                        <button type="button" onClick={() => updateCartQty(item.id, qty + 1)} disabled={qty >= item.stock_qty}
-                          style={{ width: '1.2rem', height: '1.2rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)', cursor: qty >= item.stock_qty ? 'not-allowed' : 'pointer', opacity: qty >= item.stock_qty ? 0.35 : 1, padding: 0 }}>
-                          <Plus size={10} />
+                        <button type="button" onClick={() => updateCartQty(item.id, qty + 1)}
+                          disabled={qty >= item.stock_qty}
+                          style={{
+                            width: '1.35rem', height: '1.35rem', borderRadius: '5px', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: 'linear-gradient(180deg, var(--bg-card) 0%, var(--bg-elevated) 100%)',
+                            border: '1px solid var(--border)',
+                            borderTop: '1.5px solid var(--bevel-top)',
+                            borderBottom: '1.5px solid var(--bevel-bottom)',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                            color: 'var(--text)',
+                            cursor: qty >= item.stock_qty ? 'not-allowed' : 'pointer',
+                            opacity: qty >= item.stock_qty ? 0.35 : 1, padding: 0
+                          }}>
+                          <Plus size={9} strokeWidth={2.5} />
                         </button>
                       </div>
                     )}
