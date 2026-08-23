@@ -56,8 +56,8 @@ export const api = {
   delete: (path)         => request(path, { method: 'DELETE' }),
   patch:  (path, body)   => request(path, { method: 'PATCH',  body: JSON.stringify(body) }),
 
-  // Binary upload for Vercel Blob (logo images, etc.)
-  uploadBlob: async (file, schemaName) => {
+  // Binary upload for Vercel Blob (receipts, logo images, etc.)
+  uploadBlob: async (file, schemaName, folder = 'receipts') => {
     const user = getUser()
     const tenantSchema = localStorage.getItem('nexus_tenant_schema')
     const userEmail = localStorage.getItem('nexus_user_email')
@@ -65,6 +65,7 @@ export const api = {
       'Content-Type': file.type,
       'x-filename': file.name,
       'x-content-type': file.type,
+      'x-folder': folder,
       'x-schema-name': schemaName || tenantSchema || 'org',
       ...(user ? { 'x-user-id': String(user.id), 'x-username': user.username, 'x-role': user.role || 'operator' } : {}),
       ...(userEmail ? { 'x-user-email': userEmail } : {}),

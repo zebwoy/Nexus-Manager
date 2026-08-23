@@ -21,22 +21,55 @@ export default async function handler(req, res) {
 
         if (search) {
           const r = await client.query(
-            `SELECT id, name, mobile, shop_name, pancafe_username
+            `SELECT id, name, mobile, shop_name, pancafe_username, address, client_type
              FROM customers
-             WHERE name ILIKE $1 OR mobile ILIKE $1 OR shop_name ILIKE $1 OR pancafe_username ILIKE $1
-             ORDER BY name LIMIT 10`,
+             WHERE name ILIKE $1 OR mobile ILIKE $1 OR shop_name ILIKE $1 OR pancafe_username ILIKE $1 OR address ILIKE $1
+             ORDER BY name LIMIT 15`,
             [`%${search.trim()}%`]
           )
+          return ok(res, { customers: r.rows })
+        }
+
+        if (view === 'vendor') {
+          const r = await client.query(`
+            SELECT
+              c.id, c.name, c.mobile, c.shop_name, c.address, c.client_type, c.created_at,
+              COUNT(DISTINCT e.id) AS expense_count,
+              COALESCE(SUM(e.amount), 0) AS total_expense_amount
+            FROM customers c
+            LEFT JOIN expenses e ON (e.vendor_name ILIKE c.name)
+            WHERE c.client_type = 'vendor' OR e.id IS NOT NULL
+            GROUP BY c.id
+            ORDER BY total_expense_amount DESC, c.name ASC
+            LIMIT 100
+          `)
+          return ok(res, { customers: r.rows })
+        }
+
+        if (view === 'all') {
+          const r = await client.query(`
+            SELECT
+              c.id, c.name, c.mobile, c.shop_name, c.address, c.client_type, c.created_at,
+              COUNT(DISTINCT s.id) AS session_count,
+              COUNT(DISTINCT e.id) AS expense_count
+            FROM customers c
+            LEFT JOIN sessions s ON s.customer_id = c.id AND (s.is_deleted IS NULL OR s.is_deleted = FALSE)
+            LEFT JOIN expenses e ON e.vendor_name ILIKE c.name
+            GROUP BY c.id
+            ORDER BY c.created_at DESC, c.name ASC
+            LIMIT 100
+          `)
           return ok(res, { customers: r.rows })
         }
 
         if (view === 'cafeteria') {
           const r = await client.query(`
             SELECT
-              c.id, c.name, c.mobile, c.shop_name, c.created_at,
+              c.id, c.name, c.mobile, c.shop_name, c.address, c.client_type, c.created_at,
               COUNT(DISTINCT s.id) AS session_count
             FROM customers c
             JOIN sales s ON s.customer_id = c.id
+            WHERE s.is_deleted IS NULL OR s.is_deleted = FALSE
             GROUP BY c.id
             ORDER BY session_count DESC, c.name ASC
             LIMIT 100
@@ -46,7 +79,7 @@ export default async function handler(req, res) {
 
         const r = await client.query(`
           SELECT
-            c.id, c.name, c.mobile, c.shop_name, c.pancafe_username, c.created_at,
+            c.id, c.name, c.mobile, c.shop_name, c.address, c.client_type, c.pancafe_username, c.created_at,
             COUNT(DISTINCT s.id) AS session_count
           FROM customers c
           JOIN sessions s ON s.customer_id = c.id
@@ -60,13 +93,13 @@ export default async function handler(req, res) {
 
       if (req.method === 'POST') {
         const b = req.body || {}
-        const { name, mobile, shop_name, pancafe_username } = b
-        if (!name) return err(res, 'Customer name is required')
+        const { name, mobile, shop_name, pancafe_username, address, client_type } = b
+        if (!name) return err(res, 'Name is required')
 
         const r = await client.query(
-          `INSERT INTO customers (name, mobile, shop_name, pancafe_username)
-           VALUES ($1, $2, $3, $4) RETURNING *`,
-          [name.trim(), mobile?.trim() || null, shop_name?.trim() || null, pancafe_username?.trim() || null]
+          `INSERT INTO customers (name, mobile, shop_name, pancafe_username, address, client_type)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+          [name.trim(), mobile?.trim() || null, shop_name?.trim() || null, pancafe_username?.trim() || null, address?.trim() || null, client_type || 'customer']
         )
         return ok(res, { customer: r.rows[0] }, 201)
       }
@@ -87,12 +120,27 @@ export default async function handler(req, res) {
         if (b.category       !== undefined) { updates.push(`category = $${idx++}`);       vals.push(b.category) }
         if (b.amount         !== undefined) { updates.push(`amount = $${idx++}`);         vals.push(Number(b.amount)) }
         if (b.vendor_name    !== undefined) { updates.push(`vendor_name = $${idx++}`);    vals.push(b.vendor_name || null) }
+        if (b.vendor_address !== undefined) { updates.push(`vendor_address = $${idx++}`); vals.push(b.vendor_address || null) }
         if (b.note           !== undefined) { updates.push(`note = $${idx++}`);           vals.push(b.note || null) }
         if (b.date           !== undefined) { updates.push(`date = $${idx++}`);           vals.push(b.date) }
         if (b.payment_method !== undefined) { updates.push(`payment_method = $${idx++}`); vals.push(b.payment_method) }
+        if (b.receipt_url    !== undefined) { updates.push(`receipt_url = $${idx++}`);    vals.push(b.receipt_url || null) }
         if (updates.length === 0) return err(res, 'No fields to update', 400)
         vals.push(expenseId)
         await client.query(`UPDATE expenses SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
+
+        // If vendor updated, upsert into vendor registry
+        if (b.vendor_name && b.vendor_name.trim()) {
+          const vName = b.vendor_name.trim()
+          const vAddr = b.vendor_address ? b.vendor_address.trim() : null
+          const existingV = await client.query('SELECT id FROM customers WHERE name ILIKE $1', [vName])
+          if (existingV.rows.length === 0) {
+            await client.query('INSERT INTO customers (name, address, client_type) VALUES ($1, $2, $3)', [vName, vAddr, 'vendor'])
+          } else if (vAddr) {
+            await client.query('UPDATE customers SET address = COALESCE($1, address) WHERE id = $2', [vAddr, existingV.rows[0].id])
+          }
+        }
+
         await client.query(
           `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'EXPENSE_EDIT','expenses',$3,$4)`,
           [userId || null, username || 'system', `Edited expense #${expenseId}`, JSON.stringify(b)]
@@ -122,7 +170,12 @@ export default async function handler(req, res) {
 
       if (req.method === 'GET') {
         const date = req.query.date
-        let q = `SELECT e.*, u.username AS created_by_username FROM expenses e LEFT JOIN users u ON u.id = e.created_by`
+        let q = `
+          SELECT e.*, u.username AS created_by_username, ii.name AS item_name
+          FROM expenses e
+          LEFT JOIN users u ON u.id = e.created_by
+          LEFT JOIN inventory_items ii ON ii.id = e.item_id
+        `
         const vals = []
         const clauses = []
         if (date) {
@@ -137,13 +190,12 @@ export default async function handler(req, res) {
 
       if (req.method === 'POST') {
         const b = req.body || {}
-        const { category, amount, vendor_name, note, date, payment_method, item_id, units, new_item } = b
+        const { category, amount, vendor_name, vendor_address, note, date, payment_method, item_id, units, new_item, receipt_url } = b
         if (!amount) return err(res, 'Amount is required')
 
         await client.query('BEGIN')
         try {
-          let finalNote = note || ''
-
+          let userNote = (note || '').trim()
           let linkedItemId = item_id ? Number(item_id) : null
           let linkedUnits = units ? Number(units) : 0
 
@@ -157,9 +209,11 @@ export default async function handler(req, res) {
                 [Number(units), Number((Number(amount) / Number(units)).toFixed(2)), Number(item_id)]
               )
               const item = itemR.rows[0]
-              finalNote = `Restocked ${units} units of ${item?.name || 'item'}. ` + finalNote
               linkedItemId = Number(item_id)
               linkedUnits = Number(units)
+              if (!userNote) {
+                userNote = `Restocked ${units} units of ${item?.name || 'item'}`
+              }
             } else if (new_item && units) {
               const calculatedBuyPrice = Number((Number(amount) / Number(units)).toFixed(2))
               const newRes = await client.query(
@@ -177,26 +231,41 @@ export default async function handler(req, res) {
               )
               linkedItemId = newRes.rows[0]?.id || null
               linkedUnits = Number(units)
-              finalNote = `Added and stocked ${units} units of ${newRes.rows[0]?.name || 'new product'}. ` + finalNote
+              if (!userNote) {
+                userNote = `Added and stocked ${units} units of ${newRes.rows[0]?.name || 'new product'}`
+              }
+            }
+          }
+
+          // Auto-sync vendor into registry
+          const vName = vendor_name ? vendor_name.trim() : null
+          const vAddr = vendor_address ? vendor_address.trim() : null
+          if (vName) {
+            const existingV = await client.query('SELECT id FROM customers WHERE name ILIKE $1', [vName])
+            if (existingV.rows.length === 0) {
+              await client.query('INSERT INTO customers (name, address, client_type) VALUES ($1, $2, $3)', [vName, vAddr, 'vendor'])
+            } else if (vAddr) {
+              await client.query('UPDATE customers SET address = COALESCE($1, address) WHERE id = $2', [vAddr, existingV.rows[0].id])
             }
           }
 
           const r = await client.query(
-            `INSERT INTO expenses (category, amount, vendor_name, note, item_id, units, date, payment_method, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+            `INSERT INTO expenses (category, amount, vendor_name, vendor_address, note, item_id, units, receipt_url, date, payment_method, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
             [
               category || 'Other',
               amount,
-              vendor_name || null,
-              finalNote.trim() || null,
+              vName,
+              vAddr,
+              userNote || null,
               linkedItemId,
               linkedUnits,
+              receipt_url || null,
               date || new Date().toISOString().slice(0, 10),
               payment_method || 'cash',
               userId
             ]
           )
-
 
           await client.query(
             `INSERT INTO audit_logs (user_id, username, action, module, details, metadata)
@@ -204,7 +273,7 @@ export default async function handler(req, res) {
             [
               userId,
               req.headers['x-username'] || 'staff',
-              `Recorded expense of ₹${amount} (${category || 'Other'}) — ${vendor_name ? `Vendor: ${vendor_name}. ` : ''}${finalNote ? `Note: ${finalNote}` : ''}`.trim(),
+              `Recorded expense of ₹${amount} (${category || 'Other'}) — ${vName ? `Vendor: ${vName}. ` : ''}${userNote ? `Note: ${userNote}` : ''}`.trim(),
               JSON.stringify({ expense: r.rows[0], category, amount, payment_method: payment_method || 'cash' })
             ]
           )

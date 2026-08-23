@@ -62,13 +62,15 @@ CREATE TABLE IF NOT EXISTS settings (
     value VARCHAR(255) NOT NULL
 );
 
--- 7. Customers
+-- 7. Customers & Vendor Registry
 CREATE TABLE IF NOT EXISTS customers (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     mobile VARCHAR(20),
     shop_name VARCHAR(100),
     pancafe_username VARCHAR(100),
+    address TEXT,
+    client_type VARCHAR(30) DEFAULT 'customer',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -145,29 +147,28 @@ CREATE TABLE IF NOT EXISTS pancafe_sessions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 13. Recharge Platforms
-CREATE TABLE IF NOT EXISTS recharge_platforms (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL UNIQUE,
-    description TEXT,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 14. Recharges
+-- 13. Recharges (In-Game / Mobile RC)
 CREATE TABLE IF NOT EXISTS recharges (
     id SERIAL PRIMARY KEY,
     customer_id INT REFERENCES customers(id),
-    date DATE NOT NULL DEFAULT CURRENT_DATE,
     game_platform VARCHAR(100),
     cost_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     charge_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    margin DECIMAL(10, 2) GENERATED ALWAYS AS (charge_price - cost_price) STORED,
-    payment_received DECIMAL(10, 2),
-    payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'split')),
+    payment_received DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online')),
     note TEXT,
-
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
     created_by INT REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 14. Day Openings (EOD Cash Drawer Opening)
+CREATE TABLE IF NOT EXISTS day_openings (
+    id SERIAL PRIMARY KEY,
+    date DATE NOT NULL UNIQUE,
+    opening_cash DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    denominations JSONB,
+    opened_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -178,9 +179,11 @@ CREATE TABLE IF NOT EXISTS expenses (
     category VARCHAR(50) NOT NULL CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Cafeteria', 'Other')),
     amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     vendor_name VARCHAR(200),
+    vendor_address TEXT,
     note TEXT,
     item_id INT,
     units INT DEFAULT 0,
+    receipt_url TEXT,
     payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed')),
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -572,6 +575,10 @@ export async function getTenantClient(pool, req) {
       ALTER TABLE sales ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS item_id INT;
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS units INT DEFAULT 0;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS vendor_address TEXT;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS client_type VARCHAR(30) DEFAULT 'customer';
       ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS initial_stock INT NOT NULL DEFAULT 0;
       UPDATE inventory_items SET initial_stock = 20 WHERE name ILIKE '%lahori%' AND initial_stock = 0;
       UPDATE inventory_items SET initial_stock = stock_qty WHERE initial_stock = 0;

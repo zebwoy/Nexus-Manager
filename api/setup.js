@@ -22,19 +22,20 @@ export default async function handler(req, res) {
         return err(res, 'Vercel Blob is not configured. Please add BLOB_READ_WRITE_TOKEN to your environment variables.', 503)
       }
 
-      const filename = req.headers['x-filename'] || 'logo.png'
+      const filename = req.headers['x-filename'] || 'receipt.png'
       const contentType = req.headers['x-content-type'] || 'image/png'
       const orgSchema = req.headers['x-schema-name'] || schemaName || 'org'
+      const folder = req.headers['x-folder'] || req.query?.folder || 'receipts'
 
       const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml']
       if (!allowedTypes.includes(contentType)) {
-        return err(res, 'Only PNG, JPEG, WebP, and SVG files are allowed for logos.', 400)
+        return err(res, 'Only PNG, JPEG, WebP, and SVG files are allowed.', 400)
       }
 
       try {
         const { put } = await import('@vercel/blob')
         const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '-').toLowerCase()
-        const blobPath = `logos/${orgSchema}/${Date.now()}-${safeName}`
+        const blobPath = `${folder}/${orgSchema}/${Date.now()}-${safeName}`
         const body = req.body
         if (!body || (Buffer.isBuffer(body) && body.length === 0)) {
           return err(res, 'No file data received', 400)

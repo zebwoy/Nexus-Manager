@@ -18,7 +18,7 @@ const NAV = [
   { to: '/inventory', Icon: Coffee,          label: 'Cafeteria'  },
   { to: '/recharges', Icon: Zap,             label: 'Recharges'  },
   { to: '/expenses',  Icon: TrendingDown,    label: 'Expenses'   },
-  { to: '/customers', Icon: Users,           label: 'Customers'  },
+  { to: '/customers', Icon: Users,           label: 'Client Registry' },
   { to: '/eod',       Icon: FileCheck,       label: 'EOD Reconciliation' },
   { to: '/reports',   Icon: BarChart2,       label: 'Reports',   adminOnly: true },
   { to: '/audit',     Icon: Shield,          label: 'Audit Trail', adminOnly: true, noTrial: true },
