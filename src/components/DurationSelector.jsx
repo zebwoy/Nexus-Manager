@@ -134,17 +134,20 @@ export default function DurationSelector({
 
         {/* Center Display */}
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          gap: '0.45rem', padding: '0 0.5rem', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden'
+          display: 'flex', alignItems: 'baseline', justifyContent: 'center',
+          gap: '0.35rem', padding: '0 0.5rem', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden'
         }}>
           <span style={{
             fontSize: '0.875rem', fontWeight: 750, color: 'var(--text)',
-            letterSpacing: '-0.01em', whiteSpace: 'nowrap'
+            letterSpacing: '-0.01em', whiteSpace: 'nowrap', lineHeight: 1.2
           }}>
             {formatDuration(currentMins)}
           </span>
 
-          <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          <span style={{
+            fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)',
+            whiteSpace: 'nowrap', lineHeight: 1.2
+          }}>
             ({(currentMins / 60).toFixed(currentMins % 60 === 0 ? 0 : 1)}h)
           </span>
         </div>
