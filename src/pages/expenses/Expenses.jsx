@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatRupees, formatDate, todayISO, showUndoToast } from '../../lib/helpers'
 import { PageLoader, EmptyState, ErrorMsg, FilterBar, DateInput, Modal, Field, Spinner } from '../../components/UI'
-import { TrendingDown, Plus, Edit3, Trash2, Image as ImageIcon, ExternalLink, MapPin, Building, Package, UploadCloud, X, Download } from 'lucide-react'
+import { TrendingDown, Plus, Edit3, Trash2, Image as ImageIcon, ExternalLink, MapPin, Building, UploadCloud, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { toast } from 'react-toastify'
 
@@ -26,7 +26,7 @@ export default function Expenses() {
   const editFileInputRef = useRef(null)
 
   // Receipt Viewer Modal State
-  const [viewingReceipt, setViewingReceipt] = useState(null) // { url, title, amount, vendor }
+  const [viewingReceipt, setViewingReceipt] = useState(null)
 
   useEffect(() => { load() }, [dateFilter])
   
@@ -52,6 +52,9 @@ export default function Expenses() {
       note: exp.note || '',
       date: exp.date || todayISO(),
       payment_method: exp.payment_method || 'cash',
+      packs_count: exp.packs_count || 1,
+      pack_size: exp.pack_size || exp.units || 1,
+      unit_sell_price: exp.unit_sell_price || exp.resolved_sell_price || '',
       receipt_url: exp.receipt_url || null
     })
     setEditReceiptFile(null)
@@ -95,6 +98,9 @@ export default function Expenses() {
         note: editExpense.note?.trim() || null,
         date: editExpense.date,
         payment_method: editExpense.payment_method,
+        packs_count: editExpense.packs_count ? Number(editExpense.packs_count) : null,
+        pack_size: editExpense.pack_size ? Number(editExpense.pack_size) : null,
+        unit_sell_price: editExpense.unit_sell_price ? Number(editExpense.unit_sell_price) : null,
         receipt_url: receiptUrl
       })
       toast.success('Expense record updated')
@@ -389,146 +395,168 @@ export default function Expenses() {
               </tr>
             </thead>
             <tbody>
-              {items.map((e, idx) => (
-                <tr key={e.id} style={{ background: idx % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent' }}>
-                  {/* Category */}
-                  <td className="table-cell">
-                    <span className={`badge ${e.category === 'Cafeteria' ? 'badge-accent' : e.category === 'Marketing' ? 'badge-info' : 'badge-warning'}`}>
-                      {e.category}
-                    </span>
-                  </td>
+              {items.map((e, idx) => {
+                const totalUnitsNum = Number(e.units) || 0
+                const numPacks = Number(e.packs_count) || 1
+                const sizePerPack = Number(e.pack_size) || totalUnitsNum || 1
+                const unitBuy = Number(e.unit_buy_price || e.resolved_buy_price) || (totalUnitsNum > 0 ? (Number(e.amount) / totalUnitsNum) : 0)
+                const unitSell = Number(e.unit_sell_price || e.resolved_sell_price) || 0
 
-                  {/* Amount */}
-                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--danger)' }}>
-                    {formatRupees(e.amount)}
-                  </td>
+                return (
+                  <tr key={e.id} style={{ background: idx % 2 === 0 ? 'rgba(0,0,0,0.015)' : 'transparent' }}>
+                    {/* Category */}
+                    <td className="table-cell">
+                      <span className={`badge ${e.category === 'Cafeteria' ? 'badge-accent' : e.category === 'Marketing' ? 'badge-info' : 'badge-warning'}`}>
+                        {e.category}
+                      </span>
+                    </td>
 
-                  {/* Payment Method */}
-                  <td className="table-cell">
-                    <span className={`badge ${e.payment_method === 'online' ? 'badge-warning' : 'badge-accent'}`} style={{ fontSize: '0.65rem' }}>
-                      {e.payment_method || 'cash'}
-                    </span>
-                  </td>
+                    {/* Amount */}
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'var(--danger)' }}>
+                      {formatRupees(e.amount)}
+                    </td>
 
-                  {/* Vendor & Address */}
-                  <td className="table-cell">
-                    {e.vendor_name ? (
-                      <div>
-                        <div style={{ fontWeight: 750, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                          <Building size={12} style={{ color: 'var(--accent)' }} />
-                          <span>{e.vendor_name}</span>
+                    {/* Payment Method */}
+                    <td className="table-cell">
+                      <span className={`badge ${e.payment_method === 'online' ? 'badge-warning' : 'badge-accent'}`} style={{ fontSize: '0.65rem' }}>
+                        {e.payment_method || 'cash'}
+                      </span>
+                    </td>
+
+                    {/* Vendor & Address */}
+                    <td className="table-cell">
+                      {e.vendor_name ? (
+                        <div>
+                          <div style={{ fontWeight: 750, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <Building size={12} style={{ color: 'var(--accent)' }} />
+                            <span>{e.vendor_name}</span>
+                          </div>
+                          {e.vendor_address && (
+                            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '2px' }}>
+                              <MapPin size={11} /> {e.vendor_address}
+                            </div>
+                          )}
                         </div>
-                        {e.vendor_address && (
-                          <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '2px' }}>
-                            <MapPin size={11} /> {e.vendor_address}
+                      ) : (
+                        <span style={{ color: 'var(--text-faint)' }}>—</span>
+                      )}
+                    </td>
+
+                    {/* Reference Details (Simple list items) */}
+                    <td className="table-cell" style={{ minWidth: '220px' }}>
+                      <div style={{ fontSize: '0.8rem', lineHeight: 1.45 }}>
+                        {e.category === 'Cafeteria' && (e.item_name || totalUnitsNum > 0) ? (
+                          <ul style={{ margin: 0, paddingLeft: '1.1rem', listStyleType: 'disc', color: 'var(--text-muted)' }}>
+                            {e.item_name && (
+                              <li style={{ fontWeight: 750, color: 'var(--text)', marginBottom: '2px' }}>
+                                {e.item_name}
+                              </li>
+                            )}
+                            <li>
+                              {numPacks > 1 || (sizePerPack > 1 && sizePerPack !== totalUnitsNum) ? (
+                                <span>{numPacks} pack{numPacks > 1 ? 's' : ''} × {sizePerPack} units (<strong style={{ color: 'var(--text)' }}>{totalUnitsNum} total units</strong>)</span>
+                              ) : (
+                                <span><strong style={{ color: 'var(--text)' }}>{totalUnitsNum} total units</strong></span>
+                              )}
+                            </li>
+                            {unitBuy > 0 && (
+                              <li>
+                                Cost: <strong style={{ color: 'var(--danger)' }}>{formatRupees(unitBuy.toFixed(2))}</strong> / unit
+                                {unitSell > 0 ? (
+                                  <span> • Sell: <strong style={{ color: 'var(--success)' }}>{formatRupees(unitSell.toFixed(2))}</strong> / unit</span>
+                                ) : null}
+                              </li>
+                            )}
+                            {(() => {
+                              if (!e.note) return null
+                              const isAutoRestockNote = /^(added and stocked|restocked)\s+\d+\s+units/i.test(e.note.trim())
+                              if (isAutoRestockNote && e.item_name) return null
+                              return (
+                                <li style={{ color: 'var(--text)', fontStyle: 'italic', marginTop: '2px' }}>
+                                  Note: {e.note}
+                                </li>
+                              )
+                            })()}
+                          </ul>
+                        ) : (
+                          <div>
+                            {e.note ? (
+                              <span style={{ color: 'var(--text-muted)' }}>{e.note}</span>
+                            ) : (
+                              <span style={{ color: 'var(--text-faint)' }}>—</span>
+                            )}
                           </div>
                         )}
                       </div>
-                    ) : (
-                      <span style={{ color: 'var(--text-faint)' }}>—</span>
-                    )}
-                  </td>
+                    </td>
 
-                  {/* Reference Note / Cafeteria Details */}
-                  <td className="table-cell" style={{ minWidth: '180px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-start' }}>
-                      {e.category === 'Cafeteria' && e.item_name && (
-                        <span
+                    {/* Receipt Proof Attachment */}
+                    <td className="table-cell">
+                      {e.receipt_url ? (
+                        <button
+                          type="button"
+                          onClick={() => setViewingReceipt({
+                            url: e.receipt_url,
+                            title: `${e.category} Expense Receipt`,
+                            amount: e.amount,
+                            vendor: e.vendor_name
+                          })}
                           className="badge badge-accent"
                           style={{
-                            whiteSpace: 'nowrap',
+                            cursor: 'pointer',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '0.35rem',
-                            fontSize: '0.75rem',
-                            fontWeight: 750,
-                            padding: '0.2rem 0.55rem'
+                            padding: '0.3rem 0.55rem',
+                            fontSize: '0.7rem',
+                            border: '1px solid var(--accent-border)'
                           }}
+                          title="Click to view full receipt proof"
                         >
-                          <Package size={12} />
-                          <span>{e.units ? `${e.units}× ` : ''}{e.item_name}</span>
-                        </span>
+                          <ImageIcon size={12} />
+                          <span>View Proof</span>
+                        </button>
+                      ) : (
+                        <span style={{ color: 'var(--text-faint)', fontSize: '0.75rem' }}>—</span>
                       )}
-                      {(() => {
-                        if (!e.note) return !e.item_name ? <span style={{ color: 'var(--text-faint)' }}>—</span> : null
-                        // Suppress redundant auto-generated string if item badge is already rendered
-                        const isAutoRestockNote = e.category === 'Cafeteria' && /^(added and stocked|restocked)\s+\d+\s+units/i.test(e.note.trim())
-                        if (isAutoRestockNote && e.item_name) return null
-                        return (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', lineHeight: 1.4 }}>
-                            {e.note}
-                          </span>
-                        )
-                      })()}
-                    </div>
-                  </td>
-
-                  {/* Receipt Proof Attachment */}
-                  <td className="table-cell">
-                    {e.receipt_url ? (
-                      <button
-                        type="button"
-                        onClick={() => setViewingReceipt({
-                          url: e.receipt_url,
-                          title: `${e.category} Expense Receipt`,
-                          amount: e.amount,
-                          vendor: e.vendor_name
-                        })}
-                        className="badge badge-accent"
-                        style={{
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                          padding: '0.3rem 0.55rem',
-                          fontSize: '0.7rem',
-                          border: '1px solid var(--accent-border)'
-                        }}
-                        title="Click to view full receipt proof"
-                      >
-                        <ImageIcon size={12} />
-                        <span>View Proof</span>
-                      </button>
-                    ) : (
-                      <span style={{ color: 'var(--text-faint)', fontSize: '0.75rem' }}>—</span>
-                    )}
-                  </td>
-
-                  {/* Operational Date */}
-                  <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>
-                    {formatDate(e.date)}
-                  </td>
-
-                  {/* Operator */}
-                  <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontWeight: 600 }}>
-                    @{e.created_by_username || 'system'}
-                  </td>
-
-                  {/* Actions */}
-                  {isAdmin && (
-                    <td className="table-cell">
-                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                        <button
-                          onClick={() => handleEdit(e)}
-                          className="btn-secondary btn-icon"
-                          style={{ width: '1.75rem', height: '1.75rem', borderRadius: '4px', padding: 0 }}
-                          title="Edit Expense"
-                        >
-                          <Edit3 size={12} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(e.id, e.category, e.amount)}
-                          className="btn-secondary btn-icon"
-                          style={{ width: '1.75rem', height: '1.75rem', borderRadius: '4px', padding: 0, color: 'var(--danger)', borderColor: 'var(--danger-border)' }}
-                          title="Delete Expense (with Undo)"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
                     </td>
-                  )}
-                </tr>
-              ))}
+
+                    {/* Operational Date */}
+                    <td className="table-cell" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>
+                      {formatDate(e.date)}
+                    </td>
+
+                    {/* Operator */}
+                    <td className="table-cell" style={{ color: 'var(--text-muted)', fontSize: '0.725rem', fontWeight: 600 }}>
+                      @{e.created_by_username || 'system'}
+                    </td>
+
+                    {/* Actions */}
+                    {isAdmin && (
+                      <td className="table-cell">
+                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                          <button
+                            onClick={() => handleEdit(e)}
+                            className="btn-secondary btn-icon"
+                            style={{ width: '1.75rem', height: '1.75rem', borderRadius: '4px', padding: 0 }}
+                            title="Edit Expense"
+                          >
+                            <Edit3 size={12} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(e.id, e.category, e.amount)}
+                            className="btn-secondary btn-icon"
+                            style={{ width: '1.75rem', height: '1.75rem', borderRadius: '4px', padding: 0, color: 'var(--danger)', borderColor: 'var(--danger-border)' }}
+                            title="Delete Expense (with Undo)"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

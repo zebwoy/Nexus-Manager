@@ -183,6 +183,10 @@ CREATE TABLE IF NOT EXISTS expenses (
     note TEXT,
     item_id INT,
     units INT DEFAULT 0,
+    packs_count INT DEFAULT 1,
+    pack_size INT DEFAULT 1,
+    unit_buy_price DECIMAL(10, 2),
+    unit_sell_price DECIMAL(10, 2),
     receipt_url TEXT,
     payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed')),
     created_by INT REFERENCES users(id),
@@ -575,6 +579,10 @@ export async function getTenantClient(pool, req) {
       ALTER TABLE sales ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS item_id INT;
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS units INT DEFAULT 0;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS packs_count INT DEFAULT 1;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS pack_size INT DEFAULT 1;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS unit_buy_price DECIMAL(10, 2);
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS unit_sell_price DECIMAL(10, 2);
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS vendor_address TEXT;
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT;
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT;

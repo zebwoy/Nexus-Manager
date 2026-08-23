@@ -4,7 +4,7 @@ import { api } from '../../lib/api'
 import { formatRupees, todayISO } from '../../lib/helpers'
 import { Field, ErrorMsg, TrialWarningModal, Spinner, DateInput } from '../../components/UI'
 import { useAuth } from '../../context/AuthContext'
-import { Package, Banknote, CreditCard, UploadCloud, FileText, Image as ImageIcon, X, MapPin, Building } from 'lucide-react'
+import { Package, Banknote, CreditCard, UploadCloud, X, MapPin, Building, Calculator, Tag } from 'lucide-react'
 
 const CATS = ['Marketing', 'Employee', 'Inventory', 'Cafeteria', 'Other']
 
@@ -39,12 +39,13 @@ export default function NewExpense() {
   const [inventory, setInventory] = useState([])
   const [cafeMode, setCafeMode] = useState('existing') // 'existing' | 'new'
   const [itemId, setItemId] = useState('')
-  const [units, setUnits] = useState('1')
+  const [packsCount, setPacksCount] = useState('1')
+  const [packSize, setPackSize] = useState('24')
+  const [unitSellPrice, setUnitSellPrice] = useState('')
 
   // New cafeteria item details
   const [newItemName, setNewItemName] = useState('')
   const [newItemCategory, setNewItemCategory] = useState('Drinks')
-  const [newItemSellPrice, setNewItemSellPrice] = useState('')
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
@@ -71,6 +72,15 @@ export default function NewExpense() {
         .catch(err => setError('Failed to load inventory: ' + err.message))
     }
   }, [form.category])
+
+  // When selecting an existing item, pre-fill sell price
+  const handleItemSelect = (id) => {
+    setItemId(id)
+    const selected = inventory.find(i => String(i.id) === String(id))
+    if (selected && selected.sell_price) {
+      setUnitSellPrice(String(selected.sell_price))
+    }
+  }
 
   // Vendor Autocomplete handler
   const handleVendorNameChange = async (val) => {
@@ -126,6 +136,16 @@ export default function NewExpense() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  // Calculated quantities & financial breakdown
+  const numPacks = Math.max(1, Number(packsCount) || 1)
+  const sizePerPack = Math.max(1, Number(packSize) || 1)
+  const totalSellableUnits = numPacks * sizePerPack
+  const costAmountNum = Number(form.amount) || 0
+  const calculatedUnitBuyPrice = (costAmountNum > 0 && totalSellableUnits > 0) ? (costAmountNum / totalSellableUnits) : 0
+  const sellPriceNum = Number(unitSellPrice) || 0
+  const marginPerUnit = sellPriceNum > 0 ? (sellPriceNum - calculatedUnitBuyPrice) : 0
+  const marginPercent = calculatedUnitBuyPrice > 0 && sellPriceNum > 0 ? ((marginPerUnit / calculatedUnitBuyPrice) * 100).toFixed(1) : 0
+
   const handleSubmit = async () => {
     if (!form.amount || Number(form.amount) <= 0) {
       setError('Valid cost amount is required')
@@ -133,8 +153,8 @@ export default function NewExpense() {
     }
 
     if (form.category === 'Cafeteria') {
-      if (!units || Number(units) <= 0) {
-        setError('Quantity (Units) must be a positive number')
+      if (numPacks <= 0 || sizePerPack <= 0) {
+        setError('Packs count and units per pack must be positive numbers')
         return
       }
       if (cafeMode === 'existing' && !itemId) {
@@ -143,8 +163,8 @@ export default function NewExpense() {
       }
       if (cafeMode === 'new') {
         if (!newItemName.trim()) { setError('New item name is required'); return }
-        if (!newItemSellPrice || Number(newItemSellPrice) <= 0) {
-          setError('New item selling price must be positive')
+        if (!unitSellPrice || Number(unitSellPrice) <= 0) {
+          setError('Selling price per unit must be positive')
           return
         }
       }
@@ -178,12 +198,15 @@ export default function NewExpense() {
         date: form.date,
         payment_method: payMethod,
         receipt_url: receiptUrl,
-        units: form.category === 'Cafeteria' ? Number(units) : null,
+        packs_count: form.category === 'Cafeteria' ? numPacks : null,
+        pack_size: form.category === 'Cafeteria' ? sizePerPack : null,
+        units: form.category === 'Cafeteria' ? totalSellableUnits : null,
+        unit_sell_price: (form.category === 'Cafeteria' && unitSellPrice) ? Number(unitSellPrice) : null,
         item_id: (form.category === 'Cafeteria' && cafeMode === 'existing') ? Number(itemId) : null,
         new_item: (form.category === 'Cafeteria' && cafeMode === 'new') ? {
           name: newItemName.trim(),
           category: newItemCategory,
-          sell_price: Number(newItemSellPrice)
+          sell_price: Number(unitSellPrice)
         } : null
       }
 
@@ -222,11 +245,11 @@ export default function NewExpense() {
         </Field>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <Field label="Cost Amount (₹)" required>
+          <Field label="Total Bill / Cost Amount (₹)" required>
             <input
               type="number"
               className="input"
-              placeholder="e.g. 280"
+              placeholder="e.g. 380"
               value={form.amount}
               onChange={e => f('amount', e.target.value)}
             />
@@ -268,16 +291,28 @@ export default function NewExpense() {
             </div>
 
             {cafeMode === 'existing' ? (
-              <Field label="Select Cafeteria Item to Restock" required>
-                <select className="input" value={itemId} onChange={e => setItemId(e.target.value)}>
-                  <option value="">-- Choose Item --</option>
-                  {inventory.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} (In Stock: {item.stock_qty})
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <Field label="Select Cafeteria Item to Restock" required>
+                  <select className="input" value={itemId} onChange={e => handleItemSelect(e.target.value)}>
+                    <option value="">-- Choose Item --</option>
+                    {inventory.map(item => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} (Stock: {item.stock_qty} | Sell: {formatRupees(item.sell_price)})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Selling Price per Unit (₹)">
+                  <input
+                    type="number"
+                    className="input"
+                    placeholder="e.g. 10"
+                    value={unitSellPrice}
+                    onChange={e => setUnitSellPrice(e.target.value)}
+                  />
+                </Field>
+              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <Field label="New Item Name" required>
@@ -291,22 +326,77 @@ export default function NewExpense() {
                       <option value="Other">Other</option>
                     </select>
                   </Field>
-                  <Field label="Selling Price (₹)" required>
-                    <input type="number" className="input" placeholder="Price" value={newItemSellPrice} onChange={e => setNewItemSellPrice(e.target.value)} />
+                  <Field label="Selling Price per Unit (₹)" required>
+                    <input type="number" className="input" placeholder="e.g. 125" value={unitSellPrice} onChange={e => setUnitSellPrice(e.target.value)} />
                   </Field>
                 </div>
               </div>
             )}
 
-            <Field label="Total Quantity Received (Units / Pack Size)" required>
-              <input type="number" className="input" placeholder="e.g. 24 or 36" value={units} onChange={e => setUnits(e.target.value)} />
-            </Field>
+            {/* Pack and Unit Breakdown */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <Field label="Packs / Crates Purchased" required>
+                <input
+                  type="number"
+                  min="1"
+                  className="input"
+                  placeholder="e.g. 2"
+                  value={packsCount}
+                  onChange={e => setPacksCount(e.target.value)}
+                />
+              </Field>
+              <Field label="Units per Pack (Pack Size)" required>
+                <input
+                  type="number"
+                  min="1"
+                  className="input"
+                  placeholder="e.g. 24"
+                  value={packSize}
+                  onChange={e => setPackSize(e.target.value)}
+                />
+              </Field>
+            </div>
 
-            {form.amount && units && Number(units) > 0 && (
-              <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 650 }}>
-                Calculated Buy Price: <span style={{ color: 'var(--success)', fontWeight: 800 }}>{formatRupees((Number(form.amount) / Number(units)).toFixed(2))}</span> per unit.
-              </p>
-            )}
+            {/* Live Financial Breakdown Card */}
+            <div style={{
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              borderRadius: '10px', padding: '0.75rem 0.95rem',
+              display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.75rem'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Total Sellable Units:</span>
+                <span style={{ fontWeight: 800, color: 'var(--text)' }}>
+                  {numPacks} pack{numPacks > 1 ? 's' : ''} × {sizePerPack} units = <span style={{ color: 'var(--accent-text)' }}>{totalSellableUnits} units</span>
+                </span>
+              </div>
+
+              {costAmountNum > 0 && totalSellableUnits > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed var(--border)', paddingTop: '0.35rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Cost Price (Buy Price):</span>
+                  <span style={{ fontWeight: 800, color: 'var(--danger)' }}>
+                    {formatRupees(calculatedUnitBuyPrice.toFixed(2))} / unit
+                  </span>
+                </div>
+              )}
+
+              {sellPriceNum > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Retail Selling Price:</span>
+                  <span style={{ fontWeight: 800, color: 'var(--success)' }}>
+                    {formatRupees(sellPriceNum.toFixed(2))} / unit
+                  </span>
+                </div>
+              )}
+
+              {costAmountNum > 0 && sellPriceNum > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed var(--border)', paddingTop: '0.35rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Expected Profit Margin:</span>
+                  <span style={{ fontWeight: 800, color: marginPerUnit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                    {formatRupees(marginPerUnit.toFixed(2))} ({marginPercent}%) / unit
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

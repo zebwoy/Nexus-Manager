@@ -117,14 +117,18 @@ export default async function handler(req, res) {
       if (expenseId && req.method === 'PATCH') {
         const b = req.body || {}
         const updates = []; const vals = []; let idx = 1
-        if (b.category       !== undefined) { updates.push(`category = $${idx++}`);       vals.push(b.category) }
-        if (b.amount         !== undefined) { updates.push(`amount = $${idx++}`);         vals.push(Number(b.amount)) }
-        if (b.vendor_name    !== undefined) { updates.push(`vendor_name = $${idx++}`);    vals.push(b.vendor_name || null) }
-        if (b.vendor_address !== undefined) { updates.push(`vendor_address = $${idx++}`); vals.push(b.vendor_address || null) }
-        if (b.note           !== undefined) { updates.push(`note = $${idx++}`);           vals.push(b.note || null) }
-        if (b.date           !== undefined) { updates.push(`date = $${idx++}`);           vals.push(b.date) }
-        if (b.payment_method !== undefined) { updates.push(`payment_method = $${idx++}`); vals.push(b.payment_method) }
-        if (b.receipt_url    !== undefined) { updates.push(`receipt_url = $${idx++}`);    vals.push(b.receipt_url || null) }
+        if (b.category        !== undefined) { updates.push(`category = $${idx++}`);        vals.push(b.category) }
+        if (b.amount          !== undefined) { updates.push(`amount = $${idx++}`);          vals.push(Number(b.amount)) }
+        if (b.vendor_name     !== undefined) { updates.push(`vendor_name = $${idx++}`);     vals.push(b.vendor_name || null) }
+        if (b.vendor_address  !== undefined) { updates.push(`vendor_address = $${idx++}`);  vals.push(b.vendor_address || null) }
+        if (b.note            !== undefined) { updates.push(`note = $${idx++}`);            vals.push(b.note || null) }
+        if (b.date            !== undefined) { updates.push(`date = $${idx++}`);            vals.push(b.date) }
+        if (b.payment_method  !== undefined) { updates.push(`payment_method = $${idx++}`);  vals.push(b.payment_method) }
+        if (b.receipt_url     !== undefined) { updates.push(`receipt_url = $${idx++}`);     vals.push(b.receipt_url || null) }
+        if (b.packs_count     !== undefined) { updates.push(`packs_count = $${idx++}`);     vals.push(Number(b.packs_count)) }
+        if (b.pack_size       !== undefined) { updates.push(`pack_size = $${idx++}`);       vals.push(Number(b.pack_size)) }
+        if (b.unit_buy_price  !== undefined) { updates.push(`unit_buy_price = $${idx++}`);  vals.push(Number(b.unit_buy_price)) }
+        if (b.unit_sell_price !== undefined) { updates.push(`unit_sell_price = $${idx++}`); vals.push(Number(b.unit_sell_price)) }
         if (updates.length === 0) return err(res, 'No fields to update', 400)
         vals.push(expenseId)
         await client.query(`UPDATE expenses SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
@@ -171,7 +175,12 @@ export default async function handler(req, res) {
       if (req.method === 'GET') {
         const date = req.query.date
         let q = `
-          SELECT e.*, u.username AS created_by_username, ii.name AS item_name
+          SELECT
+            e.*,
+            u.username AS created_by_username,
+            ii.name AS item_name,
+            COALESCE(e.unit_sell_price, ii.sell_price) AS resolved_sell_price,
+            COALESCE(e.unit_buy_price, ii.buy_price) AS resolved_buy_price
           FROM expenses e
           LEFT JOIN users u ON u.id = e.created_by
           LEFT JOIN inventory_items ii ON ii.id = e.item_id
@@ -190,50 +199,54 @@ export default async function handler(req, res) {
 
       if (req.method === 'POST') {
         const b = req.body || {}
-        const { category, amount, vendor_name, vendor_address, note, date, payment_method, item_id, units, new_item, receipt_url } = b
+        const {
+          category, amount, vendor_name, vendor_address, note, date,
+          payment_method, item_id, units, packs_count, pack_size,
+          unit_sell_price, new_item, receipt_url
+        } = b
         if (!amount) return err(res, 'Amount is required')
 
         await client.query('BEGIN')
         try {
           let userNote = (note || '').trim()
           let linkedItemId = item_id ? Number(item_id) : null
-          let linkedUnits = units ? Number(units) : 0
+          let numPacks = packs_count ? Math.max(1, Number(packs_count)) : 1
+          let perPackSize = pack_size ? Math.max(1, Number(pack_size)) : (units ? Number(units) : 1)
+          let totalSellableUnits = units ? Number(units) : (numPacks * perPackSize)
+          let calculatedBuyPrice = totalSellableUnits > 0 ? Number((Number(amount) / totalSellableUnits).toFixed(2)) : 0
+          let sellPrice = unit_sell_price ? Number(unit_sell_price) : null
 
           if (category === 'Cafeteria') {
-            if (item_id && units) {
+            if (item_id && totalSellableUnits > 0) {
               const itemR = await client.query(
                 `UPDATE inventory_items 
                  SET stock_qty = stock_qty + $1,
-                     buy_price = $2
-                 WHERE id = $3 RETURNING name, stock_qty`,
-                [Number(units), Number((Number(amount) / Number(units)).toFixed(2)), Number(item_id)]
+                     buy_price = $2,
+                     sell_price = COALESCE($3, sell_price)
+                 WHERE id = $4 RETURNING name, stock_qty, sell_price`,
+                [totalSellableUnits, calculatedBuyPrice, sellPrice, Number(item_id)]
               )
               const item = itemR.rows[0]
               linkedItemId = Number(item_id)
-              linkedUnits = Number(units)
-              if (!userNote) {
-                userNote = `Restocked ${units} units of ${item?.name || 'item'}`
+              if (!sellPrice && item?.sell_price) {
+                sellPrice = Number(item.sell_price)
               }
-            } else if (new_item && units) {
-              const calculatedBuyPrice = Number((Number(amount) / Number(units)).toFixed(2))
+            } else if (new_item && totalSellableUnits > 0) {
+              sellPrice = Number(new_item.sell_price) || 0
               const newRes = await client.query(
                 `INSERT INTO inventory_items (name, category, buy_price, sell_price, initial_stock, stock_qty, created_by)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name`,
+                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, sell_price`,
                 [
                   new_item.name,
                   new_item.category || 'Drinks',
                   calculatedBuyPrice,
-                  Number(new_item.sell_price),
-                  Number(units),
-                  Number(units),
+                  sellPrice,
+                  totalSellableUnits,
+                  totalSellableUnits,
                   userId
                 ]
               )
               linkedItemId = newRes.rows[0]?.id || null
-              linkedUnits = Number(units)
-              if (!userNote) {
-                userNote = `Added and stocked ${units} units of ${newRes.rows[0]?.name || 'new product'}`
-              }
             }
           }
 
@@ -250,8 +263,12 @@ export default async function handler(req, res) {
           }
 
           const r = await client.query(
-            `INSERT INTO expenses (category, amount, vendor_name, vendor_address, note, item_id, units, receipt_url, date, payment_method, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+            `INSERT INTO expenses (
+              category, amount, vendor_name, vendor_address, note, item_id,
+              units, packs_count, pack_size, unit_buy_price, unit_sell_price,
+              receipt_url, date, payment_method, created_by
+            )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
             [
               category || 'Other',
               amount,
@@ -259,7 +276,11 @@ export default async function handler(req, res) {
               vAddr,
               userNote || null,
               linkedItemId,
-              linkedUnits,
+              totalSellableUnits,
+              numPacks,
+              perPackSize,
+              calculatedBuyPrice,
+              sellPrice,
               receipt_url || null,
               date || new Date().toISOString().slice(0, 10),
               payment_method || 'cash',
