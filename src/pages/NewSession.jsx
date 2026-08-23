@@ -85,9 +85,13 @@ export default function NewSession() {
 
   // Recompute charge and time_out whenever relevant fields change
   useEffect(() => {
-    const hourlyRate = Number(pricing[form.device_type]?.[60]) || (form.device_type === 'PC' ? 70 : form.device_type === 'XBOX' ? 100 : 120)
-    const base = calculateDynamicTariff(hourlyRate, form.duration_mins)
-    setCharge(base)
+    if (!form.device_type) {
+      setCharge(0)
+    } else {
+      const hourlyRate = Number(pricing[form.device_type]?.[60]) || (form.device_type === 'PC' ? 70 : form.device_type === 'XBOX' ? 100 : 120)
+      const base = calculateDynamicTariff(hourlyRate, form.duration_mins)
+      setCharge(base)
+    }
 
     if (form.time_in && form.duration_mins) {
       const dt = new Date(`${form.date}T${form.time_in}`)
@@ -266,7 +270,7 @@ export default function NewSession() {
       {/* Page Header */}
       <div style={{ marginBottom: '1.5rem' }}>
         <h1 className="page-title">New Session</h1>
-        <p className="page-sub">Establish operator connection and session allocation</p>
+        <p className="page-sub">Start a new gaming session and assign station</p>
       </div>
 
       {isPredated && (
@@ -285,7 +289,7 @@ export default function NewSession() {
 
       <ErrorMsg error={error} />
 
-      {/* Main Console Body */}
+      {/* Main Form Body */}
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         
         {/* Row 1: Customer Info */}
@@ -325,7 +329,7 @@ export default function NewSession() {
 
         {/* Row 2: Device Station & Duration */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', alignItems: 'flex-start' }}>
-          <Field label="Station allocation" required>
+          <Field label="Device Station" required>
             <select className="input" value={form.device_id} onChange={e => handleDeviceChange(e.target.value)}>
               <option value="">Choose device terminal</option>
               {devices.filter(d => d.is_active).map(d => (
@@ -333,19 +337,18 @@ export default function NewSession() {
               ))}
             </select>
           </Field>
-          <div>
+          <Field label="Session Duration">
             <DurationSelector
               value={form.duration_mins}
               onChange={mins => setForm(f => ({ ...f, duration_mins: mins }))}
-              hourlyRate={pricing[form.device_type]?.[60] || (form.device_type === 'PC' ? 70 : form.device_type === 'XBOX' ? 100 : 120)}
-              label="Allotted Session Duration"
+              hourlyRate={form.device_type ? (pricing[form.device_type]?.[60] || (form.device_type === 'PC' ? 70 : form.device_type === 'XBOX' ? 100 : 120)) : null}
             />
-          </div>
+          </Field>
         </div>
 
         {/* Row 3: Date & Access Times */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-          <Field label="System Date">
+          <Field label="Session Date">
             <DateInput
               value={form.date}
               onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
@@ -353,12 +356,12 @@ export default function NewSession() {
             />
           </Field>
 
-          <Field label="Connection Time">
+          <Field label="Time In">
             <input type="time" className="input" value={form.time_in}
               onChange={e => setForm(f => ({ ...f, time_in: e.target.value }))} />
           </Field>
-          <Field label={crossesMidnight ? 'Est. Termination (+1 day)' : 'Est. Termination'}>
-            <input type="time" className="input" style={{ background: 'rgba(0,0,0,0.1)', cursor: 'not-allowed',
+          <Field label={crossesMidnight ? 'Time Out (+1 day)' : 'Time Out'}>
+            <input type="time" className="input" style={{ background: 'var(--bg-input)', cursor: 'default',
               ...(crossesMidnight ? { color: 'var(--warning)', fontWeight: 700 } : {}) }}
               value={timeOut} readOnly />
           </Field>
@@ -572,8 +575,8 @@ export default function NewSession() {
 
         {/* Payment Collection — Split Cash / Online */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <p style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <CreditCard size={14} /> Payment Collection
+          <p className="label" style={{ marginBottom: 0, fontWeight: 750, color: 'var(--text)' }}>
+            Payment Collection (Optional at check-in)
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <Field label="Cash Received (₹)">
@@ -611,17 +614,17 @@ export default function NewSession() {
         </div>
 
         {/* Remark */}
-        <Field label="Console Remark / Notes">
-          <input className="input" placeholder="Access codes, extra hardware notes..."
+        <Field label="Session Notes / Remarks">
+          <input className="input" placeholder="e.g. Extra controller, LAN tournament, specific game note..."
             value={form.remark} onChange={e => setForm(f => ({ ...f, remark: e.target.value }))} />
         </Field>
 
         {/* Action Controls */}
         <div style={{ display: 'flex', gap: '0.85rem', paddingTop: '0.5rem', borderTop: '1.5px solid var(--border)' }}>
           <button onClick={handleSubmit} disabled={loading} className="btn-primary" style={{ padding: '0.65rem 1.35rem' }}>
-            {loading ? <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Spinner size="sm" /> Storing...</span> : 'Authorize Session'}
+            {loading ? <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Spinner size="sm" /> Starting...</span> : 'Start Session'}
           </button>
-          <button onClick={() => navigate('/sessions')} className="btn-secondary" style={{ padding: '0.65rem 1.35rem' }}>Abort Command</button>
+          <button onClick={() => navigate('/sessions')} className="btn-secondary" style={{ padding: '0.65rem 1.35rem' }}>Cancel</button>
         </div>
       </div>
     </div>
