@@ -142,9 +142,9 @@ export default function DateInput({
     setViewMode('days')
   }
 
-  // Format display text: "23 - 08 - 2026"
+  // Format display text: "23 Aug 2026" (non-breaking spaces to guarantee zero wrapping)
   const formattedDisplay = isValidSelected
-    ? `${String(selectedDate.getDate()).padStart(2, '0')} - ${String(selectedDate.getMonth() + 1).padStart(2, '0')} - ${selectedDate.getFullYear()}`
+    ? `${String(selectedDate.getDate()).padStart(2, '0')}\u00A0${MONTH_SHORT[selectedDate.getMonth()]}\u00A0${selectedDate.getFullYear()}`
     : placeholder
 
   // Generate calendar days grid (6 rows of 7 days = 42 cells)
@@ -186,7 +186,15 @@ export default function DateInput({
     <div
       ref={containerRef}
       className={`date-picker-custom ${className}`}
-      style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', ...style }}
+      style={{
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.35rem',
+        width: '100%',
+        minWidth: 0,
+        ...style
+      }}
     >
       {/* Optional Stepper: Previous Day */}
       {showSteppers && (
@@ -196,7 +204,7 @@ export default function DateInput({
           onClick={() => handleStep(-1)}
           disabled={disabled}
           title="Previous Day"
-          style={{ width: '2rem', height: '2.1rem', borderRadius: '8px', padding: 0 }}
+          style={{ width: '2.25rem', height: '2.5rem', borderRadius: '10px', padding: 0, flexShrink: 0 }}
         >
           <ChevronLeft size={14} />
         </button>
@@ -207,29 +215,35 @@ export default function DateInput({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(o => !o)}
-        className="input"
+        className="input date-picker-trigger"
         style={{
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: '0.65rem',
+          gap: '0.45rem',
           cursor: disabled ? 'not-allowed' : 'pointer',
-          padding: '0.45rem 0.85rem',
+          padding: '0.45rem 0.65rem',
           fontFamily: "'JetBrains Mono', monospace",
-          fontSize: '0.825rem',
+          fontSize: '0.8125rem',
           fontWeight: 700,
           color: isValidSelected ? 'var(--text)' : 'var(--text-faint)',
-          minWidth: '150px',
+          height: '2.5rem',
+          boxSizing: 'border-box',
+          width: '100%',
+          minWidth: 0,
+          flex: 1,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
           borderColor: isOpen ? 'var(--accent)' : 'var(--border)',
           boxShadow: isOpen ? '0 0 0 3px var(--accent-dim), var(--shadow-inset)' : 'var(--shadow-inset)',
           transition: 'all 0.15s ease',
           ...inputStyle
         }}
       >
-        <Calendar size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-        <span>{formattedDisplay}</span>
+        <Calendar size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formattedDisplay}</span>
       </button>
-
 
       {/* Optional Stepper: Next Day */}
       {showSteppers && (
@@ -239,7 +253,7 @@ export default function DateInput({
           onClick={() => handleStep(1)}
           disabled={disabled}
           title="Next Day"
-          style={{ width: '2rem', height: '2.1rem', borderRadius: '8px', padding: 0 }}
+          style={{ width: '2.25rem', height: '2.5rem', borderRadius: '10px', padding: 0, flexShrink: 0 }}
         >
           <ChevronRight size={14} />
         </button>
@@ -251,7 +265,20 @@ export default function DateInput({
           type="button"
           onClick={handleSetToday}
           className="badge badge-accent"
-          style={{ cursor: 'pointer', border: '1px solid var(--accent-border)', padding: '0.3rem 0.6rem', fontSize: '0.7rem' }}
+          style={{
+            cursor: 'pointer',
+            border: '1px solid var(--accent-border)',
+            padding: '0 0.55rem',
+            fontSize: '0.725rem',
+            fontWeight: 750,
+            height: '2.5rem',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '10px',
+            flexShrink: 0,
+            whiteSpace: 'nowrap'
+          }}
           title="Jump to Today"
         >
           Today
