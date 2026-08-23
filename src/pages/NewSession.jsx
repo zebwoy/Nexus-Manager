@@ -7,7 +7,7 @@ import DurationSelector from '../components/DurationSelector'
 import { toast } from 'react-toastify'
 import {
   Banknote, CreditCard, Smartphone, Moon,
-  Gamepad2, Users, Plus, X, Receipt, CheckCircle2, Calendar
+  Gamepad2, Users, Plus, Minus, X, Receipt, CheckCircle2, Calendar, Coffee
 } from 'lucide-react'
 
 const DEVICE_TYPES = { PC: 'PC', XBOX: 'XBOX', PS: 'PS' }
@@ -45,6 +45,10 @@ export default function NewSession() {
   // Console players state
   const [players, setPlayers] = useState([{ own_controller: false }])
 
+  // Cafeteria / Refreshments state
+  const [inventory, setInventory] = useState([])
+  const [cafeCart, setCafeCart] = useState([])
+
   // Computed
   const [charge, setCharge] = useState(0)
   const [timeOut, setTimeOut] = useState('')
@@ -53,10 +57,11 @@ export default function NewSession() {
 
   const loadSetup = async () => {
     try {
-      const [devData, priceData, settData] = await Promise.all([
+      const [devData, priceData, settData, invData] = await Promise.all([
         api.get('/devices'),
         api.get('/pricing'),
         api.get('/settings'),
+        api.get('/inventory').catch(() => ({ items: [] })),
       ])
       const devList = devData.devices || []
       setDevices(devList)
@@ -71,6 +76,7 @@ export default function NewSession() {
         for (const row of settData.settings) s[row.key] = Number(row.value)
         setSettings(prev => ({ ...prev, ...s }))
       }
+      setInventory((invData.items || []).filter(item => item.is_active !== false && item.stock_qty > 0))
 
       // Check for preselected device_id in query params
       const preDevId = searchParams.get('device_id')
@@ -114,7 +120,27 @@ export default function NewSession() {
     }, 0)
   })()
 
-  const total = charge + controllerTotal + extraPersonTotal
+  const cafeTotal = cafeCart.reduce((sum, i) => sum + i.sell_price * i.qty, 0)
+  const total = charge + controllerTotal + extraPersonTotal + cafeTotal
+
+  const addItemToCart = (item) => {
+    setCafeCart(c => {
+      const ex = c.find(i => i.id === item.id)
+      if (ex) {
+        if (ex.qty >= item.stock_qty) return c
+        return c.map(i => i.id === item.id ? { ...i, qty: i.qty + 1 } : i)
+      }
+      return [...c, { id: item.id, name: item.name, sell_price: Number(item.sell_price || 0), qty: 1, stock_qty: item.stock_qty }]
+    })
+  }
+
+  const updateCartQty = (id, qty) => {
+    if (qty <= 0) {
+      setCafeCart(c => c.filter(i => i.id !== id))
+    } else {
+      setCafeCart(c => c.map(i => i.id === id ? { ...i, qty } : i))
+    }
+  }
 
   // Payment totals
   const cash   = cashAmount   !== '' ? Number(cashAmount)   : 0
@@ -235,6 +261,7 @@ export default function NewSession() {
         credit,
         remark: form.remark,
         players: playersPayload,
+        items: cafeCart.map(i => ({ item_id: i.id, qty: i.qty, unit_price: i.sell_price })),
       }
 
       if (hasSplit) {
@@ -561,6 +588,127 @@ export default function NewSession() {
               </div>
             </div>
           )}
+
+          {/* Quick Refreshments & Snacks Section */}
+          <div className="card" style={{
+            background: 'var(--bg-input)', border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow-inset)', padding: '1.15rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+              <div>
+                <p style={{ fontSize: '0.85rem', fontWeight: 750, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                  <Coffee size={15} style={{ color: 'var(--accent-text)' }} /> Quick Drinks &amp; Snacks
+                </p>
+                <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '2px', margin: 0 }}>
+                  Attach drinks or snacks to session invoice (optional)
+                </p>
+              </div>
+              {cafeCart.length > 0 && (
+                <span className="badge badge-accent" style={{ fontSize: '0.7rem', fontWeight: 750 }}>
+                  {cafeCart.reduce((sum, i) => sum + i.qty, 0)} items ({formatRupees(cafeTotal)})
+                </span>
+              )}
+            </div>
+
+            <div style={{
+              display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.35rem'
+            }}>
+              {inventory.length === 0 ? (
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-faint)' }}>No inventory items currently in stock</span>
+              ) : (
+                inventory.map(item => {
+                  const inCart = cafeCart.find(i => i.id === item.id)
+                  const qty = inCart?.qty || 0
+                  const isDrink = item.name.toLowerCase().includes('drink') || item.name.toLowerCase().includes('water') || item.name.toLowerCase().includes('bull') || item.name.toLowerCase().includes('monster') || item.name.toLowerCase().includes('sting') || item.name.toLowerCase().includes('coffee') || item.name.toLowerCase().includes('tea') || item.name.toLowerCase().includes('cola') || item.name.toLowerCase().includes('lahori')
+
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        flex: '0 0 150px',
+                        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+                        padding: '0.65rem 0.75rem', borderRadius: '10px',
+                        background: qty > 0 ? 'rgba(var(--accent-rgb, 59,130,246), 0.06)' : 'var(--bg-card)',
+                        border: qty > 0 ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                        boxShadow: 'var(--shadow)', transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                          <span style={{ fontSize: '1.1rem' }}>{isDrink ? '🥤' : '🍿'}</span>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-faint)', fontFamily: "'JetBrains Mono', monospace" }}>
+                            {item.stock_qty} left
+                          </span>
+                        </div>
+                        <p style={{
+                          fontSize: '0.8rem', fontWeight: 750, color: 'var(--text)',
+                          lineHeight: 1.25, marginBottom: '0.2rem',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                        }} title={item.name}>
+                          {item.name}
+                        </p>
+                        <p style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-text)', fontFamily: "'JetBrains Mono', monospace" }}>
+                          {formatRupees(item.sell_price)}
+                        </p>
+                      </div>
+
+                      <div style={{ marginTop: '0.6rem' }}>
+                        {qty === 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => addItemToCart(item)}
+                            className="btn-secondary btn-sm"
+                            style={{
+                              width: '100%', padding: '0.25rem 0.5rem', fontSize: '0.75rem',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem'
+                            }}
+                          >
+                            <Plus size={12} /> Add
+                          </button>
+                        ) : (
+                          <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            background: 'var(--bg-elevated)', borderRadius: '6px', border: '1px solid var(--accent-border)',
+                            padding: '0.15rem 0.25rem'
+                          }}>
+                            <button
+                              type="button"
+                              onClick={() => updateCartQty(item.id, qty - 1)}
+                              style={{
+                                width: '1.4rem', height: '1.4rem', borderRadius: '4px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                                color: 'var(--text)', cursor: 'pointer'
+                              }}
+                            >
+                              <Minus size={11} />
+                            </button>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--accent-text)', fontFamily: "'JetBrains Mono', monospace" }}>
+                              {qty}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateCartQty(item.id, qty + 1)}
+                              disabled={qty >= item.stock_qty}
+                              style={{
+                                width: '1.4rem', height: '1.4rem', borderRadius: '4px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                                color: 'var(--text)', cursor: qty >= item.stock_qty ? 'not-allowed' : 'pointer',
+                                opacity: qty >= item.stock_qty ? 0.35 : 1
+                              }}
+                            >
+                              <Plus size={11} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Right Column: Billing, Payment & Checkout */}
@@ -583,12 +731,14 @@ export default function NewSession() {
               <Receipt size={14} /> Computed Session Invoice
             </p>
 
-            {form.device_id ? (
+            {(form.device_id || cafeCart.length > 0) ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8125rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-                  <span>Seat Charge ({formatDuration(form.duration_mins)} · {devices.find(d => d.id === Number(form.device_id))?.label})</span>
-                  <span style={{ color: 'var(--text)' }}>{formatRupees(charge)}</span>
-                </div>
+                {form.device_id && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                    <span>Seat Charge ({formatDuration(form.duration_mins)} · {devices.find(d => d.id === Number(form.device_id))?.label})</span>
+                    <span style={{ color: 'var(--text)' }}>{formatRupees(charge)}</span>
+                  </div>
+                )}
                 
                 {controllerTotal > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
@@ -603,6 +753,18 @@ export default function NewSession() {
                     <span style={{ color: 'var(--text)' }}>{formatRupees(extraPersonTotal)}</span>
                   </div>
                 )}
+
+                {cafeCart.length > 0 && (
+                  <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.45rem', marginTop: '0.2rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <span style={{ fontSize: '0.725rem', color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Refreshments &amp; Snacks</span>
+                    {cafeCart.map((item) => (
+                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                        <span>{item.name} ×{item.qty}</span>
+                        <span style={{ color: 'var(--text)' }}>{formatRupees(item.sell_price * item.qty)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 
                 <div style={{
                   display: 'flex', justifyContent: 'space-between', fontWeight: 800,
@@ -615,7 +777,7 @@ export default function NewSession() {
               </div>
             ) : (
               <div style={{ padding: '1.25rem 0', textAlign: 'center', color: 'var(--text-faint)', fontSize: '0.8125rem' }}>
-                Select a station terminal to view live billing estimate
+                Select a station terminal or refreshments to view live billing estimate
               </div>
             )}
           </div>

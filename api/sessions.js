@@ -537,7 +537,7 @@ export default async function handler(req, res) {
         customer_id, name, mobile, shop_name, device_id, duration_mins,
         time_in, time_out, date, charge, controller_total,
         extra_person_total, total, credit, remark,
-        players, payment_method,
+        players, payment_method, items,
         cash_amount, online_amount, payment_received,
       } = body
 
@@ -649,6 +649,32 @@ export default async function handler(req, res) {
                VALUES ($1, $2, $3, $4, $5, $6, $7)`,
               [sessionId, p.player_number, pCid, pName, p.own_controller || false, p.controller_fee || 0, p.extra_person_fee || 0]
             )
+          }
+        }
+
+        // Attach Initial Cafeteria / Refreshments Sale if items selected
+        if (items?.length) {
+          const validItems = items.filter(it => Number(it.qty) > 0)
+          if (validItems.length > 0) {
+            const itemsTotal = validItems.reduce((sum, it) => sum + Number(it.unit_price || 0) * Number(it.qty || 0), 0)
+            const saleRes = await client.query(
+              `INSERT INTO sales (session_id, customer_id, sale_type, date, total, payment_received, payment_method, created_by)
+               VALUES ($1, $2, 'session', $3, $4, 0, $5, $6)
+               RETURNING id`,
+              [sessionId, cid || null, date, itemsTotal, finalMethod, userId || null]
+            )
+            const saleId = saleRes.rows[0].id
+            for (const it of validItems) {
+              await client.query(
+                `INSERT INTO sale_items (sale_id, item_id, qty, unit_price)
+                 VALUES ($1, $2, $3, $4)`,
+                [saleId, it.item_id, it.qty, it.unit_price]
+              )
+              await client.query(
+                `UPDATE inventory_items SET stock_qty = GREATEST(0, stock_qty - $1) WHERE id = $2`,
+                [it.qty, it.item_id]
+              )
+            }
           }
         }
 
