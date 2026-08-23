@@ -20,10 +20,14 @@ export default async function handler(req, res) {
         const view = req.query.view || 'session'
 
         if (search) {
+          const clientType = req.query.type
+          let whereClause = `(name ILIKE $1 OR mobile ILIKE $1 OR shop_name ILIKE $1 OR pancafe_username ILIKE $1 OR address ILIKE $1)`
+          if (clientType === 'session') whereClause += ` AND (client_type IS NULL OR client_type NOT IN ('vendor'))` 
+          else if (clientType === 'vendor') whereClause += ` AND client_type = 'vendor'`
           const r = await client.query(
             `SELECT id, name, mobile, shop_name, pancafe_username, address, client_type
              FROM customers
-             WHERE name ILIKE $1 OR mobile ILIKE $1 OR shop_name ILIKE $1 OR pancafe_username ILIKE $1 OR address ILIKE $1
+             WHERE ${whereClause}
              ORDER BY name LIMIT 15`,
             [`%${search.trim()}%`]
           )
