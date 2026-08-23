@@ -101,6 +101,8 @@ CREATE TABLE IF NOT EXISTS session_players (
     id SERIAL PRIMARY KEY,
     session_id INT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     player_number INT NOT NULL,
+    customer_id INT REFERENCES customers(id),
+    player_name VARCHAR(100),
     own_controller BOOLEAN DEFAULT FALSE,
     controller_fee DECIMAL(10, 2) DEFAULT 0.00,
     extra_person_fee DECIMAL(10, 2) DEFAULT 0.00
@@ -576,6 +578,8 @@ export async function getTenantClient(pool, req) {
     await client.query(`SET search_path TO "${schemaName}", public`)
     await client.query(`
       ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE session_players ADD COLUMN IF NOT EXISTS customer_id INT REFERENCES customers(id);
+      ALTER TABLE session_players ADD COLUMN IF NOT EXISTS player_name VARCHAR(100);
       ALTER TABLE sales ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS item_id INT;
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS units INT DEFAULT 0;

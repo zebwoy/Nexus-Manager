@@ -153,6 +153,12 @@ export default function Sessions() {
                       <td className="table-cell">
                         <p style={{ fontWeight: 700, color: 'var(--text)' }}>{s.name || <span style={{ color: 'var(--text-faint)' }}>Walk-in Client</span>}</p>
                         {s.mobile && <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace", marginTop: '0.1rem' }}>{s.mobile}</p>}
+                        {s.players_list && s.players_list.length > 1 && (
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <span>👥</span>
+                            <span>{s.players_list.map(p => p.player_name).join(', ')}</span>
+                          </p>
+                        )}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.25rem' }}>
                           {s.is_active && <span className="badge-active-session animate-pulse" style={{ fontSize: '0.6rem' }}>ACTIVE</span>}
                           {s.is_predated && <span className="badge badge-neutral" style={{ fontSize: '0.58rem', padding: '0.1rem 0.35rem' }} title="Recorded after the session took place">BACKDATED</span>}

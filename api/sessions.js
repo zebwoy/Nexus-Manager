@@ -268,7 +268,14 @@ export default async function handler(req, res) {
              WHERE s.id = $1`,
             [sessionId]
           ),
-          client.query(`SELECT * FROM session_players WHERE session_id = $1 ORDER BY player_number`, [sessionId]),
+          client.query(
+            `SELECT sp.*, COALESCE(sp.player_name, cp.name, 'Player ' || sp.player_number) AS display_name, cp.mobile AS player_mobile
+             FROM session_players sp
+             LEFT JOIN customers cp ON cp.id = sp.customer_id
+             WHERE sp.session_id = $1
+             ORDER BY sp.player_number ASC`,
+            [sessionId]
+          ),
           client.query(
             `SELECT s.*, json_agg(json_build_object('id', ii.id, 'name', ii.name, 'qty', si.qty, 'unit_price', si.unit_price)) AS items
              FROM sales s
@@ -447,7 +454,18 @@ export default async function handler(req, res) {
         SELECT s.*, c.name, c.mobile, c.shop_name, d.label AS device_label, d.type AS device_type,
                u.username AS created_by_username,
                (s.time_out > NOW() AND s.date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date) AS is_active,
-               (s.date < (s.created_at AT TIME ZONE 'Asia/Kolkata')::date) AS is_predated
+               (s.date < (s.created_at AT TIME ZONE 'Asia/Kolkata')::date) AS is_predated,
+               COALESCE(
+                 (SELECT json_agg(json_build_object(
+                   'player_number', sp.player_number,
+                   'player_name', COALESCE(sp.player_name, cp.name, 'Player ' || sp.player_number),
+                   'own_controller', sp.own_controller
+                 ) ORDER BY sp.player_number)
+                  FROM session_players sp
+                  LEFT JOIN customers cp ON cp.id = sp.customer_id
+                  WHERE sp.session_id = s.id),
+                 '[]'::json
+               ) AS players_list
         FROM sessions s
 
         LEFT JOIN customers c ON c.id = s.customer_id
@@ -608,9 +626,28 @@ export default async function handler(req, res) {
 
         if (players?.length) {
           for (const p of players) {
+            let pCid = p.customer_id ? Number(p.customer_id) : null
+            let pName = p.player_name ? p.player_name.trim() : null
+
+            if (p.player_number === 1 && !pName && name) {
+              pName = name.trim()
+              pCid = cid
+            }
+
+            if (pName && !pCid) {
+              const existingP = await client.query('SELECT id FROM customers WHERE name ILIKE $1', [pName])
+              if (existingP.rows.length > 0) {
+                pCid = existingP.rows[0].id
+              } else {
+                const newP = await client.query('INSERT INTO customers (name) VALUES ($1) RETURNING id', [pName])
+                pCid = newP.rows[0].id
+              }
+            }
+
             await client.query(
-              `INSERT INTO session_players (session_id, player_number, own_controller, controller_fee, extra_person_fee) VALUES ($1,$2,$3,$4,$5)`,
-              [sessionId, p.player_number, p.own_controller, p.controller_fee, p.extra_person_fee]
+              `INSERT INTO session_players (session_id, player_number, customer_id, player_name, own_controller, controller_fee, extra_person_fee)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [sessionId, p.player_number, pCid, pName, p.own_controller || false, p.controller_fee || 0, p.extra_person_fee || 0]
             )
           }
         }

@@ -142,11 +142,39 @@ export default function NewSession() {
     setCustomerSuggestions([])
   }
 
-  const addPlayer = () => setPlayers(p => [...p, { own_controller: false }])
-  const removePlayer = (i) => setPlayers(p => p.filter((_, idx) => idx !== i))
+  const [playerSuggestions, setPlayerSuggestions] = useState({})
+
+  const addPlayer = () => setPlayers(p => [...p, { own_controller: false, player_name: '', customer_id: null }])
+  const removePlayer = (i) => {
+    setPlayers(p => p.filter((_, idx) => idx !== i))
+    setPlayerSuggestions(p => {
+      const copy = { ...p }
+      delete copy[i]
+      return copy
+    })
+  }
   const toggleOwnController = (i) => setPlayers(p => p.map((pl, idx) =>
     idx === i ? { ...pl, own_controller: !pl.own_controller } : pl
   ))
+
+  const handlePlayerNameChange = async (i, val) => {
+    setPlayers(p => p.map((pl, idx) => idx === i ? { ...pl, player_name: val, customer_id: null } : pl))
+    if (val.trim().length >= 2) {
+      try {
+        const d = await api.get(`/customers?search=${encodeURIComponent(val.trim())}`)
+        setPlayerSuggestions(p => ({ ...p, [i]: d.customers || [] }))
+      } catch {
+        setPlayerSuggestions(p => ({ ...p, [i]: [] }))
+      }
+    } else {
+      setPlayerSuggestions(p => ({ ...p, [i]: [] }))
+    }
+  }
+
+  const selectPlayerCustomer = (i, cust) => {
+    setPlayers(p => p.map((pl, idx) => idx === i ? { ...pl, player_name: cust.name, customer_id: cust.id } : pl))
+    setPlayerSuggestions(p => ({ ...p, [i]: [] }))
+  }
 
   const isPredated = Boolean(form.date && form.date < todayISO())
 
@@ -179,8 +207,11 @@ export default function NewSession() {
       const playersPayload = isConsole
         ? players.map((p, i) => ({
             player_number: i + 1,
+            player_name: i === 0 ? (form.name || p.player_name || null) : (p.player_name || null),
+            customer_id: i === 0 ? (form.customer_id || p.customer_id || null) : (p.customer_id || null),
             own_controller: p.own_controller,
-            extra_fee: i + 1 >= (settings.extra_person_from || 3) ? settings.extra_person_fee : 0,
+            controller_fee: p.own_controller ? 0 : settings.controller_fee,
+            extra_person_fee: i + 1 >= (settings.extra_person_from || 3) ? settings.extra_person_fee : 0,
           }))
         : []
 
@@ -373,53 +404,124 @@ export default function NewSession() {
           </div>
         )}
 
-        {/* Players Add-ons list */}
+        {/* Console Players Allocations list */}
         {isConsole && (
           <div className="card" style={{
             background: 'var(--bg-input)', border: '1px solid var(--border)',
             boxShadow: 'var(--shadow-inset)', padding: '1.15rem'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
-              <p style={{ fontSize: '0.85rem', fontWeight: 750, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Users size={15} style={{ color: 'var(--accent-text)' }} /> Player Allocations
-              </p>
-              <button onClick={addPlayer} className="btn-secondary btn-sm" style={{ padding: '0.2rem 0.55rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                <Plus size={12} strokeWidth={2.5} /> Add Player
-              </button>
+              <div>
+                <p style={{ fontSize: '0.85rem', fontWeight: 750, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                  <Users size={15} style={{ color: 'var(--accent-text)' }} /> Console Players &amp; Controller Allocation
+                </p>
+                <p style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '2px', margin: 0 }}>
+                  Tag co-players for loyalty tracking or leave as guest
+                </p>
+              </div>
+              {players.length < 4 && (
+                <button type="button" onClick={addPlayer} className="btn-secondary btn-sm" style={{ padding: '0.25rem 0.65rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <Plus size={12} strokeWidth={2.5} /> Add Player
+                </button>
+              )}
             </div>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {players.map((p, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.65rem 0.75rem',
-                  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px',
-                  boxShadow: 'var(--shadow)'
-                }}>
-                  <span style={{ fontSize: '0.725rem', color: 'var(--text-faint)', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", width: '4.5rem' }}>
-                    PLAYER {i + 1}
-                  </span>
-                  
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', flex: 1, fontSize: '0.8125rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                    <input type="checkbox" style={{ cursor: 'pointer' }}
-                      checked={p.own_controller}
-                      onChange={() => toggleOwnController(i)} />
-                    <span>Brought own controller</span>
-                  </label>
-                  
-                  <div style={{ textAlign: 'right', fontSize: '0.75rem', fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-faint)', display: 'flex', gap: '0.5rem' }}>
-                    {!p.own_controller && <span style={{ color: 'var(--text-muted)' }}>+{formatRupees(settings.controller_fee)} controller</span>}
-                    {i + 1 >= (settings.extra_person_from || 3) && (
-                      <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>+{formatRupees(settings.extra_person_fee)} seat fee</span>
-                    )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              {players.map((p, i) => {
+                const isHost = i === 0
+                const suggestions = playerSuggestions[i] || []
+
+                return (
+                  <div key={i} style={{
+                    display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem 0.85rem',
+                    background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '10px',
+                    boxShadow: 'var(--shadow)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      {/* Player Label */}
+                      <div style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                        fontSize: '0.75rem', fontWeight: 800, color: isHost ? 'var(--accent-text)' : 'var(--text-muted)',
+                        width: '5.5rem', flexShrink: 0
+                      }}>
+                        {isHost ? '👑 Player 1 (Host)' : `🎮 Player ${i + 1}`}
+                      </div>
+
+                      {/* Player Name Input with Autocomplete (for Player 2, 3, 4) */}
+                      <div style={{ flex: '1 1 180px', position: 'relative' }}>
+                        {isHost ? (
+                          <div style={{
+                            fontSize: '0.8125rem', fontWeight: 650, color: 'var(--text)',
+                            background: 'var(--bg-elevated)', padding: '0.35rem 0.65rem',
+                            borderRadius: '6px', border: '1px dashed var(--border)'
+                          }}>
+                            {form.name ? form.name : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Primary Customer</span>}
+                          </div>
+                        ) : (
+                          <>
+                            <input
+                              className="input"
+                              style={{ padding: '0.35rem 0.65rem', fontSize: '0.8125rem' }}
+                              placeholder={`e.g. Player ${i + 1} Name / Friend`}
+                              value={p.player_name || ''}
+                              onChange={e => handlePlayerNameChange(i, e.target.value)}
+                              autoComplete="off"
+                            />
+                            {suggestions.length > 0 && (
+                              <div style={{
+                                position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 30,
+                                background: 'var(--bg-card)', border: '1.5px solid var(--border)',
+                                boxShadow: '0 8px 20px rgba(0,0,0,0.35)', borderRadius: '8px',
+                                maxHeight: '160px', overflowY: 'auto'
+                              }}>
+                                {suggestions.map(c => (
+                                  <div
+                                    key={c.id}
+                                    onClick={() => selectPlayerCustomer(i, c)}
+                                    style={{
+                                      padding: '0.45rem 0.65rem', cursor: 'pointer',
+                                      fontSize: '0.8rem', borderBottom: '1px solid var(--border)',
+                                      display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                  >
+                                    <span style={{ fontWeight: 700, color: 'var(--text)' }}>{c.name}</span>
+                                    {c.mobile && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{c.mobile}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      {/* Own Controller Checkbox */}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.775rem', color: 'var(--text-muted)', fontWeight: 600, flexShrink: 0 }}>
+                        <input type="checkbox" style={{ cursor: 'pointer' }}
+                          checked={p.own_controller}
+                          onChange={() => toggleOwnController(i)} />
+                        <span>Own controller</span>
+                      </label>
+
+                      {/* Fee Breakdown */}
+                      <div style={{ textAlign: 'right', fontSize: '0.725rem', fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-faint)', display: 'flex', gap: '0.4rem', alignItems: 'center', marginLeft: 'auto' }}>
+                        {!p.own_controller && <span style={{ color: 'var(--text-muted)' }}>+{formatRupees(settings.controller_fee)}</span>}
+                        {i + 1 >= (settings.extra_person_from || 3) && (
+                          <span className="badge badge-warning" style={{ fontSize: '0.625rem' }}>+{formatRupees(settings.extra_person_fee)} seat</span>
+                        )}
+                      </div>
+
+                      {/* Remove Button (for Player 2+) */}
+                      {!isHost && (
+                        <button type="button" onClick={() => removePlayer(i)} className="btn-secondary btn-icon" style={{ width: '1.5rem', height: '1.5rem', padding: 0, borderRadius: '50%' }}>
+                          <X size={11} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  
-                  {players.length > 1 && (
-                    <button onClick={() => removePlayer(i)} className="btn-secondary btn-icon" style={{ width: '1.5rem', height: '1.5rem', padding: 0, borderRadius: '50%' }}>
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}

@@ -82,7 +82,7 @@ export default async function handler(req, res) {
             c.id, c.name, c.mobile, c.shop_name, c.address, c.client_type, c.pancafe_username, c.created_at,
             COUNT(DISTINCT s.id) AS session_count
           FROM customers c
-          JOIN sessions s ON s.customer_id = c.id
+          JOIN sessions s ON (s.customer_id = c.id OR s.id IN (SELECT session_id FROM session_players WHERE customer_id = c.id))
           WHERE s.is_deleted IS NULL OR s.is_deleted = FALSE
           GROUP BY c.id
           ORDER BY session_count DESC, c.name ASC

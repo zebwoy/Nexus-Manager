@@ -332,7 +332,12 @@ export default function SessionDetail() {
     const snackLines = (data.sales || []).flatMap(sa => (sa.items || []).map(it => `• ${it.name} x${it.qty} = ₹${it.unit_price * it.qty}`)).join('%0A')
     const orgTitle = encodeURIComponent(cafeName.toUpperCase())
     const orgFoot = encodeURIComponent(cafeName)
-    const text = `*${orgTitle} - Session Invoice*%0A--------------------------%0A*Session:* %23${s.id}%0A*Station:* ${s.device_label}%0A*Client:* ${s.name || 'Gamer'}%0A*Duration:* ${formatDuration(s.duration_mins)} (${formatTime(s.time_in)} - ${formatTime(s.time_out)})%0A*Gaming Charge:* ₹${s.charge}%0A${Number(s.controller_total) > 0 ? `*Controllers:* ₹${s.controller_total}%0A` : ''}${snackLines ? `*Cafeteria Items:*%0A${snackLines}%0A` : ''}--------------------------%0A*TOTAL BILL:* ₹${grandTotal}%0A*Total Paid:* ₹${totalPaid}%0A${creditRemaining > 0 ? `*Due Balance:* ₹${creditRemaining}%0A` : '*Status:* Fully Paid (Complete)%0A'}Thank you for playing at ${orgFoot}!`
+    const playerNames = (players || []).length > 1
+      ? (players || []).map(p => p.display_name || p.player_name || `Player ${p.player_number}`).join(', ')
+      : null
+    const playersLine = playerNames ? `*Players (${players.length}):* ${encodeURIComponent(playerNames)}%0A` : ''
+
+    const text = `*${orgTitle} - Session Invoice*%0A--------------------------%0A*Session:* %23${s.id}%0A*Station:* ${s.device_label}%0A*Client / Host:* ${s.name || 'Gamer'}%0A${playersLine}*Duration:* ${formatDuration(s.duration_mins)} (${formatTime(s.time_in)} - ${formatTime(s.time_out)})%0A*Gaming Charge:* ₹${s.charge}%0A${Number(s.controller_total) > 0 ? `*Controllers:* ₹${s.controller_total}%0A` : ''}${snackLines ? `*Cafeteria Items:*%0A${snackLines}%0A` : ''}--------------------------%0A*TOTAL BILL:* ₹${grandTotal}%0A*Total Paid:* ₹${totalPaid}%0A${creditRemaining > 0 ? `*Due Balance:* ₹${creditRemaining}%0A` : '*Status:* Fully Paid (Complete)%0A'}Thank you for playing at ${orgFoot}!`
     
     if (phone) {
       window.open(`https://wa.me/${phone}?text=${text}`, '_blank')
@@ -438,9 +443,17 @@ export default function SessionDetail() {
               <span style={{ fontWeight: 700 }}>#{s.id}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-              <span>Client:</span>
-              <span>{s.name || 'Walk-in Gamer'}</span>
+              <span>Client / Host:</span>
+              <span style={{ fontWeight: 700 }}>{s.name || 'Walk-in Gamer'}</span>
             </div>
+            {(players || []).length > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem', fontSize: '0.725rem' }}>
+                <span>Players ({players.length}):</span>
+                <span style={{ textAlign: 'right', maxWidth: '65%' }}>
+                  {players.map(p => p.display_name || p.player_name || `P${p.player_number}`).join(', ')}
+                </span>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
               <span>Station:</span>
               <span>{s.device_label}</span>
@@ -680,22 +693,43 @@ export default function SessionDetail() {
             </div>
           ))}
 
-          {players.length > 0 && sectionCard('Player Allocations', <Users size={14} />, (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              {players.map((p, i) => (
-                <div key={i} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '0.5rem 0.75rem', borderRadius: '8px',
-                  background: i % 2 === 0 ? 'var(--bg-input)' : 'transparent',
-                  fontSize: '0.8125rem'
-                }}>
-                  <span style={{ fontWeight: 650, color: 'var(--text)' }}>Player {p.player_number}</span>
-                  <div style={{ display: 'flex', gap: '0.4rem' }}>
-                    {!p.own_controller && <span className="badge badge-accent" style={{ fontSize: '0.65rem' }}>Rented controller</span>}
-                    {Number(p.extra_person_fee) > 0 && <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>Extra seat</span>}
+          {players.length > 0 && sectionCard(`Player Allocations (${players.length})`, <Users size={14} />, (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+              {players.map((p, i) => {
+                const isHost = p.player_number === 1
+                const nameStr = p.display_name || p.player_name || (isHost ? (s.name || 'Primary Host') : `Player ${p.player_number}`)
+
+                return (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '0.55rem 0.75rem', borderRadius: '8px',
+                    background: i % 2 === 0 ? 'var(--bg-input)' : 'transparent',
+                    border: '1px solid var(--border)', fontSize: '0.8125rem'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem' }}>{isHost ? '👑' : '🎮'}</span>
+                      <div>
+                        <span style={{ fontWeight: 750, color: 'var(--text)' }}>
+                          {nameStr}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: '0.4rem' }}>
+                          ({isHost ? 'Host' : `Player ${p.player_number}`})
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.35rem' }}>
+                      {p.own_controller ? (
+                        <span className="badge badge-neutral" style={{ fontSize: '0.65rem' }}>Own controller</span>
+                      ) : (
+                        <span className="badge badge-accent" style={{ fontSize: '0.65rem' }}>Rented controller</span>
+                      )}
+                      {Number(p.extra_person_fee) > 0 && (
+                        <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>Extra seat</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           ))}
         </div>
