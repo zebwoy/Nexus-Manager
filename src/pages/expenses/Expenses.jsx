@@ -430,27 +430,36 @@ export default function Expenses() {
                   </td>
 
                   {/* Reference Note / Cafeteria Details */}
-                  <td className="table-cell" style={{ maxWidth: '240px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                      {e.category === 'Cafeteria' && e.item_name && e.units && (
-                        <div style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-                          background: 'var(--accent-dim)', color: 'var(--accent-text)',
-                          border: '1px solid var(--accent-border)',
-                          borderRadius: '6px', padding: '0.15rem 0.45rem', fontSize: '0.7rem', fontWeight: 750, width: 'fit-content'
-                        }}>
-                          <Package size={11} />
-                          <span>Restocked {e.units}× {e.item_name}</span>
-                        </div>
-                      )}
-                      {e.note && (
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', lineHeight: 1.4 }}>
-                          {e.note}
+                  <td className="table-cell" style={{ minWidth: '180px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-start' }}>
+                      {e.category === 'Cafeteria' && e.item_name && (
+                        <span
+                          className="badge badge-accent"
+                          style={{
+                            whiteSpace: 'nowrap',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            fontSize: '0.75rem',
+                            fontWeight: 750,
+                            padding: '0.2rem 0.55rem'
+                          }}
+                        >
+                          <Package size={12} />
+                          <span>{e.units ? `${e.units}× ` : ''}{e.item_name}</span>
                         </span>
                       )}
-                      {!e.note && !e.item_name && (
-                        <span style={{ color: 'var(--text-faint)' }}>—</span>
-                      )}
+                      {(() => {
+                        if (!e.note) return !e.item_name ? <span style={{ color: 'var(--text-faint)' }}>—</span> : null
+                        // Suppress redundant auto-generated string if item badge is already rendered
+                        const isAutoRestockNote = e.category === 'Cafeteria' && /^(added and stocked|restocked)\s+\d+\s+units/i.test(e.note.trim())
+                        if (isAutoRestockNote && e.item_name) return null
+                        return (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', lineHeight: 1.4 }}>
+                            {e.note}
+                          </span>
+                        )
+                      })()}
                     </div>
                   </td>
 
