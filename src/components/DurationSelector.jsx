@@ -135,24 +135,18 @@ export default function DurationSelector({
         {/* Center Display */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          gap: '0.45rem', padding: '0 0.5rem', flex: 1
+          gap: '0.45rem', padding: '0 0.5rem', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden'
         }}>
           <span style={{
             fontSize: '0.875rem', fontWeight: 750, color: 'var(--text)',
-            letterSpacing: '-0.01em'
+            letterSpacing: '-0.01em', whiteSpace: 'nowrap'
           }}>
             {formatDuration(currentMins)}
           </span>
 
-          <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
             ({(currentMins / 60).toFixed(currentMins % 60 === 0 ? 0 : 1)}h)
           </span>
-
-          {price !== null && (
-            <span className="badge badge-accent" style={{ fontSize: '0.725rem', fontWeight: 800, padding: '0.1rem 0.45rem' }}>
-              {formatRupees(price)}
-            </span>
-          )}
         </div>
 
         {/* Increment Button */}
