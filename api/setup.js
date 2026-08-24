@@ -36,12 +36,30 @@ export default async function handler(req, res) {
         const { put } = await import('@vercel/blob')
         const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '-').toLowerCase()
         const blobPath = `${folder}/${orgSchema}/${Date.now()}-${safeName}`
-        const body = req.body
-        if (!body || (Buffer.isBuffer(body) && body.length === 0)) {
+        let fileBuffer = null
+        if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+          fileBuffer = req.body
+        } else if (typeof req.body === 'string' && req.body.length > 0) {
+          fileBuffer = Buffer.from(req.body, 'binary')
+        } else {
+          try {
+            const chunks = []
+            for await (const chunk of req) {
+              chunks.push(typeof chunk === 'string' ? Buffer.from(chunk, 'binary') : chunk)
+            }
+            if (chunks.length > 0) {
+              fileBuffer = Buffer.concat(chunks)
+            }
+          } catch (streamErr) {
+            console.warn('Stream read failed:', streamErr)
+          }
+        }
+
+        if (!fileBuffer || fileBuffer.length === 0) {
           return err(res, 'No file data received', 400)
         }
 
-        const blob = await put(blobPath, body, {
+        const blob = await put(blobPath, fileBuffer, {
           access: 'public',
           contentType,
           token: process.env.BLOB_READ_WRITE_TOKEN,
