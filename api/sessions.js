@@ -32,12 +32,25 @@ export default async function handler(req, res) {
       const amt = Number(b.amount)
       const method = b.payment_method || 'cash'
 
+      const sessR = await client.query('SELECT date, time_in FROM sessions WHERE id = $1', [sessionId])
+      if (sessR.rowCount === 0) {
+        await client.query('ROLLBACK')
+        return err(res, 'Session not found', 404)
+      }
+      const sess = sessR.rows[0]
+      const todayStr = (new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+      const sessDateStr = sess.date ? (typeof sess.date === 'string' ? sess.date : sess.date.toISOString().slice(0, 10)) : todayStr
+      const isPredated = sessDateStr < todayStr
+      const paymentCreatedAt = isPredated
+        ? (sess.time_in ? new Date(sess.time_in).toISOString() : new Date(`${sessDateStr}T12:00:00+05:30`).toISOString())
+        : new Date().toISOString()
+
       await client.query('BEGIN')
       try {
         await client.query(
-          `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [sessionId, amt, method, b.note || null, userId || null]
+          `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [sessionId, amt, method, b.note || null, userId || null, paymentCreatedAt]
         )
         const updated = await client.query(
           `UPDATE sessions
@@ -118,10 +131,17 @@ export default async function handler(req, res) {
         )
 
         if (collectNow > 0) {
+          const todayStr = (new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+          const sessDateStr = sess.date ? (typeof sess.date === 'string' ? sess.date : sess.date.toISOString().slice(0, 10)) : todayStr
+          const isPredated = sessDateStr < todayStr
+          const paymentCreatedAt = isPredated
+            ? (sess.time_in ? new Date(sess.time_in).toISOString() : new Date(`${sessDateStr}T12:00:00+05:30`).toISOString())
+            : new Date().toISOString()
+
           await client.query(
-            `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by)
-             VALUES ($1,$2,$3,$4,$5)`,
-            [sessionId, collectNow, payMethod, `Extension +${extraMins}min`, userId || null]
+            `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [sessionId, collectNow, payMethod, `Extension +${extraMins}min`, userId || null, paymentCreatedAt]
           )
         }
 

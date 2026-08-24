@@ -28,8 +28,30 @@ export default async function handler(req, res) {
           (SELECT COALESCE(SUM(amount_received), 0.00) FROM pancafe_sessions WHERE date = $1) AS pancafe_revenue,
           (SELECT COALESCE(SUM(credit), 0.00) FROM sessions WHERE credit > 0 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS total_outstanding_credit,
           -- Cash vs Online inflow breakdown
-          (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'cash' AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1) AS cash_gaming,
-          (SELECT COALESCE(SUM(amount), 0.00) FROM session_payments WHERE payment_method = 'online' AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1) AS online_gaming,
+          (SELECT COALESCE(SUM(sp.amount), 0.00)
+           FROM session_payments sp
+           JOIN sessions sess ON sess.id = sp.session_id
+           WHERE sp.payment_method = 'cash'
+             AND (sess.is_deleted IS NULL OR sess.is_deleted = FALSE)
+             AND (
+               CASE
+                 WHEN sess.date < (sp.created_at AT TIME ZONE 'Asia/Kolkata')::date THEN sess.date = $1
+                 ELSE (sp.created_at AT TIME ZONE 'Asia/Kolkata')::date = $1
+               END
+             )
+          ) AS cash_gaming,
+          (SELECT COALESCE(SUM(sp.amount), 0.00)
+           FROM session_payments sp
+           JOIN sessions sess ON sess.id = sp.session_id
+           WHERE sp.payment_method = 'online'
+             AND (sess.is_deleted IS NULL OR sess.is_deleted = FALSE)
+             AND (
+               CASE
+                 WHEN sess.date < (sp.created_at AT TIME ZONE 'Asia/Kolkata')::date THEN sess.date = $1
+                 ELSE (sp.created_at AT TIME ZONE 'Asia/Kolkata')::date = $1
+               END
+             )
+          ) AS online_gaming,
           (SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN payment_received ELSE 0 END), 0.00)
            FROM sales WHERE sale_type = 'walkin' AND date = $1 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS cash_sales,
           (SELECT COALESCE(SUM(CASE WHEN payment_method = 'online' THEN payment_received ELSE 0 END), 0.00)
