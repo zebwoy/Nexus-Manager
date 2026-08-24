@@ -26,6 +26,7 @@ export default async function handler(req, res) {
           (SELECT COALESCE(SUM(s.total), 0.00) FROM sales s LEFT JOIN sessions sess ON sess.id = s.session_id WHERE s.sale_type = 'session' AND s.date = $1 AND (s.is_deleted IS NULL OR s.is_deleted = FALSE) AND (sess.id IS NULL OR sess.is_deleted IS NULL OR sess.is_deleted = FALSE)) AS session_sales_revenue,
           (SELECT COALESCE(SUM(charge_price), 0.00) FROM recharges WHERE date = $1) AS rc_revenue,
           (SELECT COALESCE(SUM(amount_received), 0.00) FROM pancafe_sessions WHERE date = $1) AS pancafe_revenue,
+          (SELECT COALESCE(SUM(credit), 0.00) FROM sessions WHERE date = $1 AND credit > 0 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS day_outstanding_credit,
           (SELECT COALESCE(SUM(credit), 0.00) FROM sessions WHERE credit > 0 AND (is_deleted IS NULL OR is_deleted = FALSE)) AS total_outstanding_credit,
           -- Cash vs Online inflow breakdown
           (SELECT COALESCE(SUM(sp.amount), 0.00)

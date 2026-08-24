@@ -382,10 +382,10 @@ export default function EODReconciliation() {
               </div>
             </div>
 
-            {snapshot?.total_outstanding_credit > 0 && (
+            {snapshot?.day_outstanding_credit > 0 && (
               <div style={{ padding: '0.65rem 1rem', borderRadius: '10px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', fontFamily: "'JetBrains Mono', monospace" }}>
-                <span style={{ color: 'var(--danger)', fontWeight: 650 }}>Outstanding credits (not in drawer)</span>
-                <span style={{ color: 'var(--danger)', fontWeight: 800 }}>{formatRupees(snapshot.total_outstanding_credit)}</span>
+                <span style={{ color: 'var(--danger)', fontWeight: 650 }}>Day's uncollected credit (not in drawer)</span>
+                <span style={{ color: 'var(--danger)', fontWeight: 800 }}>{formatRupees(snapshot.day_outstanding_credit)}</span>
               </div>
             )}
 
