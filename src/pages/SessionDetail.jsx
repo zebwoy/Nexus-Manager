@@ -667,9 +667,10 @@ export default function SessionDetail() {
               {Number(s.extra_person_total) > 0 && <BillRow label="Extra Seat Fees" value={s.extra_person_total} />}
 
               {data.sales?.map((sale, i) => (
-                sale.items?.map((item, j) => (
-                  <BillRow key={`${i}-${j}`} label={`${item.name} ×${item.qty}`} value={item.unit_price * item.qty} muted />
-                ))
+                sale.items?.filter(item => item?.name != null && item?.id != null)
+                  .map((item, j) => (
+                    <BillRow key={`${i}-${j}`} label={`${item.name} ×${item.qty}`} value={item.unit_price * item.qty} muted />
+                  ))
               ))}
 
               <div style={{ borderTop: '1.5px dashed var(--border)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>

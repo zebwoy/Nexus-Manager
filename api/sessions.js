@@ -277,7 +277,11 @@ export default async function handler(req, res) {
             [sessionId]
           ),
           client.query(
-            `SELECT s.*, json_agg(json_build_object('id', ii.id, 'name', ii.name, 'qty', si.qty, 'unit_price', si.unit_price)) AS items
+            `SELECT s.*, COALESCE(
+               json_agg(json_build_object('id', ii.id, 'name', ii.name, 'qty', si.qty, 'unit_price', si.unit_price))
+               FILTER (WHERE ii.id IS NOT NULL),
+               '[]'
+             ) AS items
              FROM sales s
              LEFT JOIN sale_items si ON si.sale_id = s.id
              LEFT JOIN inventory_items ii ON ii.id = si.item_id
