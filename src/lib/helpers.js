@@ -148,5 +148,12 @@ export function validateMobile(mobile, required = false) {
 }
 
 
+// ─── Blob Image URL Helper ────────────────────────────────────
+export function getBlobUrl(url) {
+  if (!url) return ''
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url
+  return `/api/blob-proxy?url=${encodeURIComponent(url)}`
+}
+
 // ─── Toasts & Notifications ───────────────────────────────────
 export { showUndoToast } from './undoToast'

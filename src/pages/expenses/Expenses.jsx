@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
-import { formatRupees, formatDate, todayISO, showUndoToast } from '../../lib/helpers'
+import { formatRupees, formatDate, todayISO, showUndoToast, getBlobUrl } from '../../lib/helpers'
 import { PageLoader, EmptyState, ErrorMsg, FilterBar, DateInput, Modal, Field, Spinner } from '../../components/UI'
 import { TrendingDown, Plus, Edit3, Trash2, Image as ImageIcon, ExternalLink, MapPin, Building, UploadCloud, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -58,7 +58,7 @@ export default function Expenses() {
       receipt_url: exp.receipt_url || null
     })
     setEditReceiptFile(null)
-    setEditReceiptPreview(exp.receipt_url || '')
+    setEditReceiptPreview(exp.receipt_url ? getBlobUrl(exp.receipt_url) : '')
   }
 
   const handleEditReceiptSelect = (e) => {
@@ -168,7 +168,7 @@ export default function Expenses() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <a
-                  href={viewingReceipt.url}
+                  href={getBlobUrl(viewingReceipt.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-secondary btn-icon"
@@ -193,7 +193,7 @@ export default function Expenses() {
               maxHeight: '70vh', overflowY: 'auto', background: '#020617'
             }}>
               <img
-                src={viewingReceipt.url}
+                src={getBlobUrl(viewingReceipt.url)}
                 alt="Expense Receipt"
                 style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px' }}
               />
@@ -291,7 +291,7 @@ export default function Expenses() {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                     <img
-                      src={editReceiptPreview}
+                      src={getBlobUrl(editReceiptPreview)}
                       alt="Receipt"
                       style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px' }}
                     />

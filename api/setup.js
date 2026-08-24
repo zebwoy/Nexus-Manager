@@ -5,6 +5,7 @@ export default async function handler(req, res) {
   const pool = getPool()
   const rawUrl = req.url || ''
   const resource = req.query.resource || (
+    rawUrl.includes('blob-proxy') ? 'blob-proxy' :
     rawUrl.includes('blob-upload') ? 'blob-upload' :
     rawUrl.includes('profile-changes') ? 'profile-changes' :
     rawUrl.includes('devices') ? 'devices' :
@@ -15,6 +16,31 @@ export default async function handler(req, res) {
   )
 
   return withTenantClient(pool, req, res, async (client, schemaName) => {
+    // ─── BLOB PROXY (Secure Private Blob Streaming) ───────────
+    if (resource === 'blob-proxy') {
+      const targetUrl = req.query.url
+      if (!targetUrl) return err(res, 'Blob URL required', 400)
+
+      try {
+        const headers = {}
+        if (process.env.BLOB_READ_WRITE_TOKEN) {
+          headers['Authorization'] = `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`
+        }
+        const blobResp = await fetch(targetUrl, { headers })
+        if (!blobResp.ok) {
+          return err(res, `Failed to retrieve blob image (${blobResp.status})`, blobResp.status)
+        }
+        const contentType = blobResp.headers.get('content-type') || 'image/jpeg'
+        const arrayBuf = await blobResp.arrayBuffer()
+        res.setHeader('Content-Type', contentType)
+        res.setHeader('Cache-Control', 'private, max-age=86400')
+        return res.status(200).send(Buffer.from(arrayBuf))
+      } catch (e) {
+        console.error('Blob proxy error:', e)
+        return err(res, 'Proxy failed: ' + e.message, 500)
+      }
+    }
+
     // ─── BLOB UPLOAD (Logo Storage) ───────────────────────────
     if (resource === 'blob-upload') {
       if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
