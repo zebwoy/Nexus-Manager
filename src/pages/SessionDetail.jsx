@@ -246,7 +246,11 @@ export default function SessionDetail() {
 
   const isActive = s.time_out && new Date(s.time_out) > new Date()
   const gamingTotal = Number(s.charge || 0) + Number(s.controller_total || 0) + Number(s.extra_person_total || 0)
-  const cafeTotal = data.sales?.reduce((sum, sa) => sum + Number(sa.total), 0) || 0
+  const cafeTotal = (data.sales || []).reduce((sum, sa) => {
+    const validItems = (sa.items || []).filter(it => it?.name != null && it?.id != null)
+    const itemsSum = validItems.reduce((sSum, it) => sSum + Number(it.unit_price || 0) * Number(it.qty || 0), 0)
+    return sum + itemsSum
+  }, 0)
   const grandTotal = gamingTotal + cafeTotal
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
   const creditRemaining = Math.max(0, grandTotal - totalPaid)
@@ -372,7 +376,11 @@ export default function SessionDetail() {
   const handleWhatsAppReceipt = () => {
     const cleanMobile = (s.mobile || '').replace(/\D/g, '')
     const phone = cleanMobile.length === 10 ? `91${cleanMobile}` : cleanMobile
-    const snackLines = (data.sales || []).flatMap(sa => (sa.items || []).map(it => `• ${it.name} x${it.qty} = ₹${it.unit_price * it.qty}`)).join('%0A')
+    const validSales = (data.sales || []).map(sa => ({
+      ...sa,
+      items: (sa.items || []).filter(it => it?.name != null && it?.id != null)
+    })).filter(sa => sa.items.length > 0)
+    const snackLines = validSales.flatMap(sa => sa.items.map(it => `• ${it.name} x${it.qty} = ₹${it.unit_price * it.qty}`)).join('%0A')
     const orgTitle = encodeURIComponent(cafeName.toUpperCase())
     const orgFoot = encodeURIComponent(cafeName)
     const playerNames = (players || []).length > 1
