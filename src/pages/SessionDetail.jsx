@@ -245,8 +245,9 @@ export default function SessionDetail() {
   const { session: s, players, payments } = data
 
   const isActive = s.time_out && new Date(s.time_out) > new Date()
+  const gamingTotal = Number(s.charge || 0) + Number(s.controller_total || 0) + Number(s.extra_person_total || 0)
   const cafeTotal = data.sales?.reduce((sum, sa) => sum + Number(sa.total), 0) || 0
-  const grandTotal = Number(s.total) + cafeTotal
+  const grandTotal = gamingTotal + cafeTotal
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
   const creditRemaining = Math.max(0, grandTotal - totalPaid)
 

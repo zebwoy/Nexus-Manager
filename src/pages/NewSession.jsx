@@ -121,7 +121,8 @@ export default function NewSession() {
   })()
 
   const cafeTotal = cafeCart.reduce((sum, i) => sum + i.sell_price * i.qty, 0)
-  const total = charge + controllerTotal + extraPersonTotal + cafeTotal
+  const gamingTotal = charge + controllerTotal + extraPersonTotal
+  const total = gamingTotal + cafeTotal
 
   const addItemToCart = (item) => {
     setCafeCart(c => {
@@ -257,7 +258,7 @@ export default function NewSession() {
         charge,
         controller_total: controllerTotal,
         extra_person_total: extraPersonTotal,
-        total,
+        total: gamingTotal,
         credit,
         remark: form.remark,
         players: playersPayload,

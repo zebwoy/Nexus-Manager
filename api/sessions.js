@@ -553,8 +553,13 @@ export default async function handler(req, res) {
         : (payment_received !== null && payment_received !== undefined && payment_received !== '')
           ? Number(payment_received) : 0.00
 
+      const gamingTotal = Number(charge || 0) + Number(controller_total || 0) + Number(extra_person_total || 0)
+      const validItems = (items || []).filter(it => Number(it.qty) > 0)
+      const itemsTotal = validItems.reduce((sum, it) => sum + Number(it.unit_price || 0) * Number(it.qty || 0), 0)
+      const fullBill = gamingTotal + itemsTotal
+
       const finalCredit = (credit !== null && credit !== undefined && credit !== '')
-        ? Number(credit) : Math.max(0, total - finalPayment)
+        ? Number(credit) : Math.max(0, fullBill - finalPayment)
 
       let finalMethod
       if (hasSplit) {
@@ -603,7 +608,7 @@ export default async function handler(req, res) {
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
            RETURNING id`,
           [cid, device_id, duration_mins, time_in, time_out, date,
-           charge, controller_total || 0, extra_person_total || 0, total,
+           charge, controller_total || 0, extra_person_total || 0, gamingTotal,
            finalPayment, finalCredit, remark, finalMethod, userId || null]
         )
         const sessionId = result.rows[0].id
