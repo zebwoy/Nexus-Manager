@@ -105,6 +105,11 @@ export default function SessionDetail() {
   // Thermal Receipt modal
   const [showReceiptModal, setShowReceiptModal] = useState(false)
 
+  // Edit Refreshments modal
+  const [editRefSale, setEditRefSale] = useState(null)      // the sale being edited
+  const [editRefItems, setEditRefItems] = useState([])       // working copy of items
+  const [editRefSaving, setEditRefSaving] = useState(false)
+
   // Dynamic Cafe / Organization Name
   const [cafeName, setCafeName] = useState(() => localStorage.getItem('nexus_tenant_name') || 'Headshot Gaming Lounge')
 
@@ -292,6 +297,42 @@ export default function SessionDetail() {
     finally { setCartSaving(false) }
   }
 
+  // Open edit-refreshments modal for a specific sale
+  const openEditRef = (sale) => {
+    setEditRefSale(sale)
+    // Build working items list — include stock_qty for stepper cap
+    setEditRefItems(
+      (sale.items || []).map(it => ({
+        item_id: it.item_id ?? it.id,
+        id:      it.id,
+        name:    it.name,
+        unit_price: Number(it.unit_price),
+        qty:     Number(it.qty),
+        // available stock = current stock in inventory + qty already in this sale
+        max_qty: (inventory.find(inv => inv.id === (it.item_id ?? it.id))?.stock_qty ?? 0) + Number(it.qty)
+      }))
+    )
+  }
+
+  const handleEditRefSale = async () => {
+    if (!editRefSale) return
+    setEditRefSaving(true)
+    try {
+      const validItems = editRefItems.filter(it => it.qty > 0)
+      const newTotal = validItems.reduce((sum, it) => sum + it.qty * it.unit_price, 0)
+      await api.patch(`/sales/${editRefSale.id}`, {
+        items: validItems.map(it => ({ item_id: it.item_id, qty: it.qty, unit_price: it.unit_price })),
+        total: newTotal,
+        date: data?.session?.date || todayISO(),
+      })
+      toast.success('Refreshments updated successfully')
+      setEditRefSale(null)
+      setEditRefItems([])
+      load()
+    } catch (e) { setError(e.message) }
+    finally { setEditRefSaving(false) }
+  }
+
   const handleCollect = async () => {
     const cashAmt = Number(collectAmount || 0)
     const onlineAmt = Number(collectOnline || 0)
@@ -398,6 +439,97 @@ export default function SessionDetail() {
             <button onClick={() => setShowEditModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
           </div>
         </div>
+      </Modal>
+
+
+      {/* Edit Refreshments Modal */}
+      <Modal open={!!editRefSale} onClose={() => { setEditRefSale(null); setEditRefItems([]) }} title="Edit Refreshments">
+        {editRefSale && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Item steppers */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {editRefItems.map((it, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '0.6rem 0.85rem', borderRadius: '10px',
+                  background: 'var(--bg-input)', border: '1px solid var(--border)'
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: '0.825rem', fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {it.name}
+                    </p>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>
+                      {formatRupees(it.unit_price)} each
+                      {it.qty > 0 && <> &nbsp;·&nbsp; {formatRupees(it.qty * it.unit_price)}</>}
+                    </span>
+                  </div>
+                  {/* Stepper */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '0.4rem',
+                    background: 'var(--bg-card)', borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    padding: '0.2rem 0.35rem',
+                    boxShadow: 'var(--shadow-outset)'
+                  }}>
+                    <button type="button"
+                      onClick={() => setEditRefItems(prev => prev.map((x, j) => j === i ? { ...x, qty: Math.max(0, x.qty - 1) } : x))}
+                      style={{
+                        width: '1.5rem', height: '1.5rem', borderRadius: '5px', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'linear-gradient(180deg, var(--bg-card) 0%, var(--bg-elevated) 100%)',
+                        border: '1px solid var(--border)',
+                        borderTop: '1.5px solid var(--bevel-top)', borderBottom: '1.5px solid var(--bevel-bottom)',
+                        color: it.qty === 0 ? 'var(--text-faint)' : 'var(--danger)', padding: 0
+                      }}>
+                      <Minus size={11} strokeWidth={2.5} />
+                    </button>
+                    <span style={{
+                      fontFamily: "'JetBrains Mono', monospace", fontWeight: 800,
+                      fontSize: '0.875rem', minWidth: '1.5rem', textAlign: 'center',
+                      color: it.qty === 0 ? 'var(--text-faint)' : 'var(--accent-text)'
+                    }}>
+                      {it.qty}
+                    </span>
+                    <button type="button"
+                      disabled={it.qty >= it.max_qty}
+                      onClick={() => setEditRefItems(prev => prev.map((x, j) => j === i ? { ...x, qty: Math.min(x.max_qty, x.qty + 1) } : x))}
+                      style={{
+                        width: '1.5rem', height: '1.5rem', borderRadius: '5px',
+                        cursor: it.qty >= it.max_qty ? 'not-allowed' : 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'linear-gradient(180deg, var(--bg-card) 0%, var(--bg-elevated) 100%)',
+                        border: '1px solid var(--border)',
+                        borderTop: '1.5px solid var(--bevel-top)', borderBottom: '1.5px solid var(--bevel-bottom)',
+                        color: it.qty >= it.max_qty ? 'var(--text-faint)' : 'var(--success)', padding: 0,
+                        opacity: it.qty >= it.max_qty ? 0.4 : 1
+                      }}>
+                      <Plus size={11} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Running total */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              padding: '0.65rem 0.85rem', borderRadius: '10px',
+              background: 'var(--accent-dim)', border: '1px solid var(--accent-border)'
+            }}>
+              <span style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>New Total</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--accent-text)', fontSize: '0.925rem' }}>
+                {formatRupees(editRefItems.filter(it => it.qty > 0).reduce((sum, it) => sum + it.qty * it.unit_price, 0))}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1.5px solid var(--border)', paddingTop: '1rem' }}>
+              <button onClick={handleEditRefSale} disabled={editRefSaving} className="btn-primary" style={{ flex: 1 }}>
+                {editRefSaving ? <><Spinner size="sm" /> Saving...</> : 'Save Changes'}
+              </button>
+              <button onClick={() => { setEditRefSale(null); setEditRefItems([]) }} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+            </div>
+          </div>
+        )}
       </Modal>
 
 
@@ -666,12 +798,36 @@ export default function SessionDetail() {
               {Number(s.controller_total) > 0 && <BillRow label="Controller Rentals" value={s.controller_total} />}
               {Number(s.extra_person_total) > 0 && <BillRow label="Extra Seat Fees" value={s.extra_person_total} />}
 
-              {data.sales?.map((sale, i) => (
-                sale.items?.filter(item => item?.name != null && item?.id != null)
-                  .map((item, j) => (
-                    <BillRow key={`${i}-${j}`} label={`${item.name} ×${item.qty}`} value={item.unit_price * item.qty} muted />
-                  ))
-              ))}
+              {data.sales?.map((sale, i) => {
+                const saleItems = (sale.items || []).filter(item => item?.name != null && item?.id != null)
+                if (saleItems.length === 0) return null
+                return (
+                  <div key={i}>
+                    {/* Sale group header with edit button */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                      <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Add-on #{i + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openEditRef(sale)}
+                        title="Edit this refreshment order"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.2rem',
+                          padding: '0.15rem 0.4rem', borderRadius: '5px', cursor: 'pointer',
+                          fontSize: '0.65rem', fontWeight: 650, color: 'var(--accent-text)',
+                          background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+                        }}
+                      >
+                        <Edit3 size={9} strokeWidth={2.5} /> Edit
+                      </button>
+                    </div>
+                    {saleItems.map((item, j) => (
+                      <BillRow key={`${i}-${j}`} label={`${item.name} ×${item.qty}`} value={item.unit_price * item.qty} muted />
+                    ))}
+                  </div>
+                )
+              })}
 
               <div style={{ borderTop: '1.5px dashed var(--border)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
                 <BillRow label="TOTAL BILL" value={grandTotal} bold accent />

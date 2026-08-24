@@ -5,7 +5,7 @@ import { formatRupees, formatDate, formatTime, todayISO, validateFirstName, vali
 import { Field, ErrorMsg, TrialWarningModal, Modal, ConfirmModal, Spinner, Tabs, FilterBar, DateInput, EmptyState, PageLoader } from '../../components/UI'
 import SplitPayment from '../../components/SplitPayment'
 import { useAuth } from '../../context/AuthContext'
-import { ShoppingBag, Share2, Printer, CheckCircle, Plus, Edit3, Trash2, ArrowLeft } from 'lucide-react'
+import { ShoppingBag, Share2, Printer, CheckCircle, Plus, Minus, Edit3, Trash2, ArrowLeft } from 'lucide-react'
 import { toast } from 'react-toastify'
 
 export default function WalkInSale() {
@@ -40,6 +40,7 @@ export default function WalkInSale() {
   const [salesLoading, setSalesLoading] = useState(false)
   const [dateFilter, setDateFilter] = useState(todayISO())
   const [editSale, setEditSale] = useState(null)
+  const [editSaleItems, setEditSaleItems] = useState([])   // working copy of items for edit modal
   const [editSaleSaving, setEditSaleSaving] = useState(false)
   const [deleteSaleId, setDeleteSaleId] = useState(null)
   const [deleteSaleSaving, setDeleteSaleSaving] = useState(false)
@@ -214,19 +215,44 @@ export default function WalkInSale() {
   }
 
   // Edit & Delete Sales handlers
+  const openEditSale = (sale) => {
+    setEditSale(sale)
+    // Build working items list with max_qty for stepper cap
+    setEditSaleItems(
+      (sale.items || []).filter(it => it?.name != null && it?.id != null).map(it => ({
+        item_id: it.item_id ?? it.id,
+        id:      it.id,
+        name:    it.name,
+        unit_price: Number(it.unit_price),
+        qty:     Number(it.qty),
+        // available = current inv stock + qty already sold in this sale
+        max_qty: (items.find(inv => inv.id === (it.item_id ?? it.id))?.stock_qty ?? 0) + Number(it.qty)
+      }))
+    )
+  }
+
   const handleEditSale = async () => {
     if (!editSale) return
     setEditSaleSaving(true)
     try {
+      const validItems = editSaleItems.filter(it => it.qty > 0)
+      const itemsTotal = validItems.reduce((sum, it) => sum + it.qty * it.unit_price, 0)
+      // If items were changed, use recalculated total; otherwise keep manual value
+      const finalTotal = editSaleItems.length > 0 ? itemsTotal : Number(editSale.total)
       await api.patch(`/sales/${editSale.id}`, {
         date: editSale.date,
-        total: Number(editSale.total),
+        total: finalTotal,
         payment_received: Number(editSale.payment_received),
         payment_method: editSale.payment_method,
+        ...(editSaleItems.length > 0 && {
+          items: validItems.map(it => ({ item_id: it.item_id, qty: it.qty, unit_price: it.unit_price }))
+        })
       })
       toast.success('Sale record updated')
       setEditSale(null)
+      setEditSaleItems([])
       loadSales()
+      loadInventory()
     } catch (e) {
       setError(e.message)
     } finally {
@@ -259,9 +285,81 @@ export default function WalkInSale() {
       <TrialWarningModal open={trialModal.isOpen} actionName={trialModal.action} onClose={() => { setTrialModal({ isOpen: false, action: '' }); navigate('/inventory') }} />
 
       {/* Edit Sale Modal */}
-      <Modal open={!!editSale} onClose={() => setEditSale(null)} title="Edit Walk-in Sale Record">
+      <Modal open={!!editSale} onClose={() => { setEditSale(null); setEditSaleItems([]) }} title="Edit Walk-in Sale Record">
         {editSale && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+
+            {/* Item Steppers */}
+            {editSaleItems.length > 0 && (
+              <div>
+                <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>Items</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {editSaleItems.map((it, i) => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '0.5rem 0.75rem', borderRadius: '10px',
+                      background: 'var(--bg-input)', border: '1px solid var(--border)'
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {it.name}
+                        </p>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: "'JetBrains Mono', monospace" }}>
+                          {formatRupees(it.unit_price)}{it.qty > 0 ? <> &nbsp;·&nbsp; {formatRupees(it.qty * it.unit_price)}</> : ''}
+                        </span>
+                      </div>
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '0.35rem',
+                        background: 'var(--bg-card)', borderRadius: '7px',
+                        border: '1px solid var(--border)', padding: '0.15rem 0.3rem',
+                        boxShadow: 'var(--shadow-outset)'
+                      }}>
+                        <button type="button"
+                          onClick={() => setEditSaleItems(prev => prev.map((x, j) => j === i ? { ...x, qty: Math.max(0, x.qty - 1) } : x))}
+                          style={{
+                            width: '1.4rem', height: '1.4rem', borderRadius: '4px', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: 'linear-gradient(180deg, var(--bg-card) 0%, var(--bg-elevated) 100%)',
+                            border: '1px solid var(--border)',
+                            borderTop: '1.5px solid var(--bevel-top)', borderBottom: '1.5px solid var(--bevel-bottom)',
+                            color: it.qty === 0 ? 'var(--text-faint)' : 'var(--danger)', padding: 0
+                          }}>
+                          <Minus size={10} strokeWidth={2.5} />
+                        </button>
+                        <span style={{
+                          fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '0.8rem',
+                          minWidth: '1.4rem', textAlign: 'center',
+                          color: it.qty === 0 ? 'var(--text-faint)' : 'var(--accent-text)'
+                        }}>{it.qty}</span>
+                        <button type="button"
+                          disabled={it.qty >= it.max_qty}
+                          onClick={() => setEditSaleItems(prev => prev.map((x, j) => j === i ? { ...x, qty: Math.min(x.max_qty, x.qty + 1) } : x))}
+                          style={{
+                            width: '1.4rem', height: '1.4rem', borderRadius: '4px',
+                            cursor: it.qty >= it.max_qty ? 'not-allowed' : 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: 'linear-gradient(180deg, var(--bg-card) 0%, var(--bg-elevated) 100%)',
+                            border: '1px solid var(--border)',
+                            borderTop: '1.5px solid var(--bevel-top)', borderBottom: '1.5px solid var(--bevel-bottom)',
+                            color: it.qty >= it.max_qty ? 'var(--text-faint)' : 'var(--success)', padding: 0,
+                            opacity: it.qty >= it.max_qty ? 0.4 : 1
+                          }}>
+                          <Plus size={10} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Running total from items */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', padding: '0.5rem 0.75rem', borderRadius: '8px', background: 'var(--accent-dim)', border: '1px solid var(--accent-border)' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Items Total</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: 'var(--accent-text)' }}>
+                    {formatRupees(editSaleItems.filter(it => it.qty > 0).reduce((sum, it) => sum + it.qty * it.unit_price, 0))}
+                  </span>
+                </div>
+              </div>
+            )}
+
             <Field label="Sale Date">
               <DateInput
                 value={editSale.date || todayISO()}
@@ -660,7 +758,7 @@ export default function WalkInSale() {
                             {isRealAdmin && (
                               <>
                                 <button
-                                  onClick={() => setEditSale({ ...sa })}
+                                  onClick={() => openEditSale(sa)}
                                   className="btn-secondary btn-sm"
                                   style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem' }}
                                   title="Edit Sale"

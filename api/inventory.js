@@ -339,19 +339,105 @@ export default async function handler(req, res) {
       // ── Per-sale PATCH ────────────────────────────────────────
       if (saleId && req.method === 'PATCH') {
         const b = req.body || {}
-        const updates = []; const vals = []; let idx = 1
-        if (b.date             !== undefined) { updates.push(`date = $${idx++}`);             vals.push(b.date) }
-        if (b.total            !== undefined) { updates.push(`total = $${idx++}`);            vals.push(Number(b.total)) }
-        if (b.payment_received !== undefined) { updates.push(`payment_received = $${idx++}`); vals.push(Number(b.payment_received)) }
-        if (b.payment_method   !== undefined) { updates.push(`payment_method = $${idx++}`);   vals.push(b.payment_method) }
-        if (updates.length === 0) return err(res, 'No fields to update', 400)
-        vals.push(saleId)
-        await client.query(`UPDATE sales SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
-        await client.query(
-          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata) VALUES ($1,$2,'SALE_EDIT','cafeteria',$3,$4)`,
-          [userId || null, username || 'system', `Edited walk-in sale #${saleId}`, JSON.stringify(b)]
-        )
-        return ok(res, { success: true })
+        const newItems = Array.isArray(b.items) ? b.items : null
+
+        await client.query('BEGIN')
+        try {
+          // Fetch current sale for audit snapshot
+          const saleR = await client.query(`SELECT * FROM sales WHERE id = $1`, [saleId])
+          if (saleR.rowCount === 0) {
+            await client.query('ROLLBACK')
+            return err(res, 'Sale not found', 404)
+          }
+          const currentSale = saleR.rows[0]
+
+          let stockRestored = []
+          let stockDeducted = []
+          let beforeItems = []
+
+          if (newItems !== null) {
+            // Snapshot old items for audit
+            const oldItemsR = await client.query(
+              `SELECT si.item_id, si.qty, si.unit_price, ii.name
+               FROM sale_items si
+               LEFT JOIN inventory_items ii ON ii.id = si.item_id
+               WHERE si.sale_id = $1`, [saleId]
+            )
+            beforeItems = oldItemsR.rows
+
+            // 1. Restore stock for all old items
+            for (const { item_id, qty } of beforeItems) {
+              await client.query(
+                `UPDATE inventory_items SET stock_qty = stock_qty + $1 WHERE id = $2`,
+                [qty, item_id]
+              )
+              stockRestored.push({ item_id, qty })
+            }
+
+            // 2. Delete old sale_items
+            await client.query(`DELETE FROM sale_items WHERE sale_id = $1`, [saleId])
+
+            // 3. Insert new sale_items and deduct stock
+            const validItems = newItems.filter(it => Number(it.qty) > 0)
+            for (const it of validItems) {
+              await client.query(
+                `INSERT INTO sale_items (sale_id, item_id, qty, unit_price) VALUES ($1,$2,$3,$4)`,
+                [saleId, it.item_id, Number(it.qty), Number(it.unit_price)]
+              )
+              await client.query(
+                `UPDATE inventory_items SET stock_qty = GREATEST(0, stock_qty - $1) WHERE id = $2`,
+                [Number(it.qty), it.item_id]
+              )
+              stockDeducted.push({ item_id: it.item_id, qty: Number(it.qty) })
+            }
+
+            // Auto-recalculate total from new items unless explicitly provided
+            if (b.total === undefined) {
+              b.total = validItems.reduce((sum, it) => sum + Number(it.qty) * Number(it.unit_price), 0)
+            }
+          }
+
+          // Update top-level sale fields
+          const updates = []; const vals = []; let idx = 1
+          if (b.date             !== undefined) { updates.push(`date = $${idx++}`);             vals.push(b.date) }
+          if (b.total            !== undefined) { updates.push(`total = $${idx++}`);            vals.push(Number(b.total)) }
+          if (b.payment_received !== undefined) { updates.push(`payment_received = $${idx++}`); vals.push(Number(b.payment_received)) }
+          if (b.payment_method   !== undefined) { updates.push(`payment_method = $${idx++}`);   vals.push(b.payment_method) }
+          if (updates.length > 0) {
+            vals.push(saleId)
+            await client.query(`UPDATE sales SET ${updates.join(', ')} WHERE id = $${idx}`, vals)
+          }
+
+          // Audit log
+          const action = newItems !== null ? 'SALE_ITEMS_EDIT' : 'SALE_EDIT'
+          const module = currentSale.sale_type === 'session' ? 'sessions' : 'cafeteria'
+          const details = newItems !== null
+            ? `Edited items on ${currentSale.sale_type} sale #${saleId} — ${beforeItems.length} → ${stockDeducted.length} line items`
+            : `Edited ${currentSale.sale_type} sale #${saleId} fields`
+          await client.query(
+            `INSERT INTO audit_logs (user_id, username, action, module, details, metadata)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [
+              userId || null, username || 'system', action, module, details,
+              JSON.stringify({
+                sale_id: saleId,
+                sale_type: currentSale.sale_type,
+                session_id: currentSale.session_id || null,
+                before: { total: currentSale.total, items: beforeItems },
+                after:  { total: b.total ?? currentSale.total, items: newItems },
+                stock_restored: stockRestored,
+                stock_deducted: stockDeducted,
+                field_changes: { date: b.date, payment_received: b.payment_received, payment_method: b.payment_method }
+              })
+            ]
+          )
+
+          await client.query('COMMIT')
+          return ok(res, { success: true })
+        } catch (e) {
+          await client.query('ROLLBACK')
+          throw e
+        }
       }
 
       // ── Per-sale DELETE ───────────────────────────────────────
@@ -388,7 +474,17 @@ export default async function handler(req, res) {
         let q = `
           SELECT s.*, c.name AS customer_name, c.shop_name, c.mobile AS customer_mobile,
                  u.username AS created_by_username,
-                 json_agg(json_build_object('id', ii.id, 'name', ii.name, 'qty', si.qty, 'unit_price', si.unit_price)) AS items
+                 COALESCE(
+                   json_agg(json_build_object(
+                     'item_id', si.item_id,
+                     'id', ii.id,
+                     'name', ii.name,
+                     'qty', si.qty,
+                     'unit_price', si.unit_price,
+                     'stock_qty', ii.stock_qty
+                   )) FILTER (WHERE ii.id IS NOT NULL),
+                   '[]'
+                 ) AS items
           FROM sales s
           LEFT JOIN customers c ON c.id = s.customer_id
           LEFT JOIN users u ON u.id = s.created_by
