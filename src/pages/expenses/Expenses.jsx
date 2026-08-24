@@ -23,6 +23,8 @@ export default function Expenses() {
   const [editSaving, setEditSaving] = useState(false)
   const [editReceiptFile, setEditReceiptFile] = useState(null)
   const [editReceiptPreview, setEditReceiptPreview] = useState('')
+  const [vendorSuggestions, setVendorSuggestions] = useState([])
+  const [showVendorSuggestions, setShowVendorSuggestions] = useState(false)
   const editFileInputRef = useRef(null)
 
   // Receipt Viewer Modal State
@@ -59,6 +61,33 @@ export default function Expenses() {
     })
     setEditReceiptFile(null)
     setEditReceiptPreview(exp.receipt_url ? getBlobUrl(exp.receipt_url) : '')
+    setVendorSuggestions([])
+    setShowVendorSuggestions(false)
+  }
+
+  const handleVendorNameChange = async (val) => {
+    setEditExpense(x => ({ ...x, vendor_name: val }))
+    if (val.trim().length >= 1) {
+      try {
+        const d = await api.get(`/customers?search=${encodeURIComponent(val.trim())}&type=vendor`)
+        setVendorSuggestions(d.customers || [])
+        setShowVendorSuggestions(true)
+      } catch {
+        setVendorSuggestions([])
+      }
+    } else {
+      setVendorSuggestions([])
+      setShowVendorSuggestions(false)
+    }
+  }
+
+  const selectVendor = (v) => {
+    setEditExpense(x => ({
+      ...x,
+      vendor_name: v.name,
+      vendor_address: v.address || x.vendor_address || ''
+    }))
+    setShowVendorSuggestions(false)
   }
 
   const handleEditReceiptSelect = (e) => {
@@ -245,14 +274,52 @@ export default function Expenses() {
                   <option value="online">Online / UPI</option>
                 </select>
               </Field>
-              <Field label="Vendor / Payee">
-                <input
-                  className="input"
-                  placeholder="e.g. Reliance Fresh"
-                  value={editExpense.vendor_name}
-                  onChange={e => setEditExpense(x => ({ ...x, vendor_name: e.target.value }))}
-                />
-              </Field>
+              <div style={{ position: 'relative' }}>
+                <Field label="Vendor / Payee">
+                  <input
+                    className="input"
+                    placeholder="e.g. Reliance Fresh"
+                    value={editExpense.vendor_name}
+                    onChange={e => handleVendorNameChange(e.target.value)}
+                    onFocus={() => { if (vendorSuggestions.length > 0) setShowVendorSuggestions(true) }}
+                  />
+                </Field>
+
+                {showVendorSuggestions && vendorSuggestions.length > 0 && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                    background: 'var(--bg-card)', border: '1.5px solid var(--border)',
+                    borderRadius: '10px', boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+                    zIndex: 50, maxHeight: '200px', overflowY: 'auto'
+                  }}>
+                    {vendorSuggestions.map((v, i) => (
+                      <div
+                        key={v.id || i}
+                        onClick={() => selectVendor(v)}
+                        style={{
+                          padding: '0.55rem 0.85rem',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid var(--border)',
+                          fontSize: '0.8125rem'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <div style={{ fontWeight: 750, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <Building size={13} style={{ color: 'var(--accent)' }} />
+                          <span>{v.name}</span>
+                          {v.shop_name && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>({v.shop_name})</span>}
+                        </div>
+                        {v.address && (
+                          <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '2px' }}>
+                            <MapPin size={11} /> {v.address}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <Field label="Vendor Address / Location">

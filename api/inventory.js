@@ -22,14 +22,32 @@ export default async function handler(req, res) {
         if (search) {
           const clientType = req.query.type
           // Strict per-module isolation: each type only sees its own records.
-          // Legacy rows with NULL / 'customer' default are treated as 'session' for backward compat.
+          if (clientType === 'vendor') {
+            const r = await client.query(
+              `SELECT MIN(id) AS id, name, MAX(mobile) AS mobile, MAX(shop_name) AS shop_name, MAX(address) AS address, 'vendor' AS client_type
+               FROM (
+                 SELECT id, name, mobile, shop_name, address, client_type
+                 FROM customers
+                 WHERE (client_type = 'vendor' OR client_type IS NULL)
+                   AND (name ILIKE $1 OR address ILIKE $1 OR shop_name ILIKE $1)
+                 UNION
+                 SELECT NULL AS id, vendor_name AS name, NULL AS mobile, NULL AS shop_name, vendor_address AS address, 'vendor' AS client_type
+                 FROM expenses
+                 WHERE vendor_name IS NOT NULL AND vendor_name != ''
+                   AND (vendor_name ILIKE $1 OR vendor_address ILIKE $1)
+               ) v
+               GROUP BY name
+               ORDER BY name LIMIT 15`,
+              [`%${search.trim()}%`]
+            )
+            return ok(res, { customers: r.rows })
+          }
+
           let typeFilter = ''
           if (clientType === 'session') {
             typeFilter = `AND (client_type IS NULL OR client_type = 'customer' OR client_type = 'session')`
           } else if (clientType === 'recharge') {
             typeFilter = `AND (client_type IS NULL OR client_type = 'customer' OR client_type = 'recharge')`
-          } else if (clientType === 'vendor') {
-            typeFilter = `AND client_type = 'vendor'`
           } else if (clientType === 'walkin') {
             typeFilter = `AND (client_type = 'walkin' OR client_type = 'cafeteria')`
           } else if (clientType === 'pancafe') {
