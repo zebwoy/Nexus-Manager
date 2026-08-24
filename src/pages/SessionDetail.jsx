@@ -271,7 +271,8 @@ export default function SessionDetail() {
     try {
       await api.post('/sales', {
         session_id: Number(id), sale_type: 'session',
-        date: todayISO(), total: cartTotal,
+        date: data?.session?.date || todayISO(), // use session's actual business date, not today
+        total: cartTotal,
         payment_received: cartPayNow ? cartTotal : 0,
         payment_method: cartPayNow ? cartPayMethod : 'cash',
         items: cart.map(i => ({ item_id: i.id, qty: i.qty, unit_price: i.sell_price }))
