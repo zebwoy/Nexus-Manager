@@ -462,9 +462,11 @@ export default function Expenses() {
                             {unitBuy > 0 && (
                               <li>
                                 Cost: <strong style={{ color: 'var(--danger)' }}>{formatRupees(unitBuy.toFixed(2))}</strong> / unit
-                                {unitSell > 0 ? (
-                                  <span> • Sell: <strong style={{ color: 'var(--success)' }}>{formatRupees(unitSell.toFixed(2))}</strong> / unit</span>
-                                ) : null}
+                              </li>
+                            )}
+                            {unitSell > 0 && (
+                              <li>
+                                Sell: <strong style={{ color: 'var(--success)' }}>{formatRupees(unitSell.toFixed(2))}</strong> / unit
                               </li>
                             )}
                             {(() => {
