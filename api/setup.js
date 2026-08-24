@@ -59,12 +59,26 @@ export default async function handler(req, res) {
           return err(res, 'No file data received', 400)
         }
 
-        const blob = await put(blobPath, fileBuffer, {
-          access: 'public',
-          contentType,
-          token: process.env.BLOB_READ_WRITE_TOKEN,
-          addRandomSuffix: false,
-        })
+        let blob
+        try {
+          blob = await put(blobPath, fileBuffer, {
+            access: 'public',
+            contentType,
+            token: process.env.BLOB_READ_WRITE_TOKEN,
+            addRandomSuffix: false,
+          })
+        } catch (putErr) {
+          if (putErr.message && (putErr.message.includes('private') || putErr.message.includes('store is configured with private'))) {
+            blob = await put(blobPath, fileBuffer, {
+              access: 'private',
+              contentType,
+              token: process.env.BLOB_READ_WRITE_TOKEN,
+              addRandomSuffix: false,
+            })
+          } else {
+            throw putErr
+          }
+        }
 
         return ok(res, { url: blob.url, downloadUrl: blob.downloadUrl, pathname: blob.pathname })
       } catch (e) {
