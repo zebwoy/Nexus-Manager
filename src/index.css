@@ -653,27 +653,27 @@ input[type=number] { -moz-appearance: textfield; }
   z-index: 200;
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.3rem 0.45rem;
+  gap: 0.2rem;
+  padding: 0.28rem 0.4rem;
   border-radius: 14px;
   background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-elevated) 100%);
   border: 1px solid var(--border);
   border-top: 1.5px solid var(--bevel-top);
   border-bottom: 1.5px solid var(--bevel-bottom);
-  box-shadow: var(--shadow-outset), 0 4px 20px rgba(0,0,0,0.12);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-outset), 0 4px 20px rgba(0,0,0,0.10);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   transition: box-shadow 0.2s ease, transform 0.15s ease;
 }
 .top-right-panel:hover {
-  box-shadow: var(--shadow-outset), 0 6px 28px rgba(0,0,0,0.18);
+  box-shadow: var(--shadow-outset), 0 6px 26px rgba(0,0,0,0.15);
   transform: translateY(-1px);
 }
 
-/* Panel buttons */
+/* Base panel button */
 .trp-btn {
-  width: 2rem;
-  height: 2rem;
+  width: 1.9rem;
+  height: 1.9rem;
   border-radius: 9px;
   display: flex;
   align-items: center;
@@ -681,36 +681,69 @@ input[type=number] { -moz-appearance: textfield; }
   background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease,
+              transform 0.12s ease, box-shadow 0.15s ease, opacity 0.2s ease;
   position: relative;
 }
-.trp-btn:hover {
+.trp-btn:hover:not(:disabled) {
   background: var(--bg-hover);
   border-color: var(--border);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1), inset 0 1px 0 var(--bevel-top);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08), inset 0 1px 0 var(--bevel-top);
 }
 .trp-btn:active:not(:disabled) {
   transform: translateY(1px);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.15);
-}
-.trp-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.12);
 }
 
-/* Theme button — icon animation */
+/* ── Scroll-to-top button ─────────────────────────── */
+.trp-scroll-btn {
+  color: var(--text-faint);
+  opacity: 0.35;
+  cursor: default;
+}
+.trp-scroll-btn.active {
+  color: var(--accent);
+  opacity: 1;
+  cursor: pointer;
+}
+.trp-scroll-btn.active:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 25%, transparent),
+              inset 0 1px 0 var(--bevel-top);
+}
+.trp-scroll-btn:disabled {
+  pointer-events: none;
+}
+
+/* ── Theme toggle button ──────────────────────────── */
 .trp-theme-btn { overflow: hidden; }
 
 .trp-icon-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease;
+  transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.18s ease;
 }
-.trp-icon-wrap.dark { color: #38bdf8; }
+.trp-icon-wrap.dark { color: #60b4e8; }
 .trp-icon-wrap.light { color: var(--warning); }
+
 .trp-theme-btn:hover .trp-icon-wrap {
-  transform: rotate(20deg) scale(1.15);
+  transform: rotate(22deg) scale(1.2);
+}
+
+/* ── Notification bell ───────────────────────────── */
+.trp-bell-btn {
+  opacity: 0.45;
+  color: var(--text-muted);
+  transition: background 0.15s ease, border-color 0.15s ease,
+              transform 0.12s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+}
+.trp-bell-btn:hover {
+  opacity: 0.85;
+}
+.top-right-panel:hover .trp-bell-btn {
+  opacity: 0.6;
 }
 
 /* Notification badge */
@@ -718,39 +751,39 @@ input[type=number] { -moz-appearance: textfield; }
   position: absolute;
   top: 2px;
   right: 2px;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   background: var(--danger);
   color: #fff;
-  font-size: 0.525rem;
+  font-size: 0.5rem;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 1.5px solid var(--bg-card);
   box-shadow: 0 0 4px var(--danger);
-  animation: trp-pulse 2s ease-in-out infinite;
+  animation: trp-pulse 2.4s ease-in-out infinite;
 }
 @keyframes trp-pulse {
-  0%, 100% { box-shadow: 0 0 4px var(--danger); }
-  50% { box-shadow: 0 0 10px var(--danger), 0 0 20px var(--danger-dim); }
+  0%, 100% { box-shadow: 0 0 3px var(--danger); }
+  50% { box-shadow: 0 0 8px var(--danger), 0 0 16px var(--danger-dim, color-mix(in srgb, var(--danger) 40%, transparent)); }
 }
 
 /* Panel divider */
 .trp-divider {
   width: 1px;
-  height: 1.1rem;
+  height: 1rem;
   background: var(--border);
-  margin: 0 0.1rem;
+  margin: 0 0.08rem;
   border-radius: 1px;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 /* Popover base */
 .trp-popover {
   position: absolute;
-  top: calc(100% + 0.6rem);
+  top: calc(100% + 0.55rem);
   right: 0;
   min-width: 160px;
   background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-elevated) 100%);
@@ -758,43 +791,22 @@ input[type=number] { -moz-appearance: textfield; }
   border-top: 1.5px solid var(--bevel-top);
   border-bottom: 1.5px solid var(--bevel-bottom);
   border-radius: 14px;
-  padding: 0.85rem;
-  box-shadow: var(--shadow-outset), 0 8px 32px rgba(0,0,0,0.2);
-  animation: trp-popover-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  padding: 0.8rem;
+  box-shadow: var(--shadow-outset), 0 8px 32px rgba(0,0,0,0.18);
+  animation: trp-popover-in 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
   transform-origin: top right;
 }
 @keyframes trp-popover-in {
-  from { opacity: 0; transform: scale(0.92) translateY(-6px); }
+  from { opacity: 0; transform: scale(0.9) translateY(-5px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* Accent popover specifics */
-.trp-accent-popover { min-width: 140px; text-align: center; }
+/* Accent popover */
+.trp-accent-popover { min-width: 135px; text-align: center; }
 
 .trp-swatch {
-  width: 1.45rem;
-  height: 1.45rem;
+  width: 1.35rem;
+  height: 1.35rem;
 }
 
-/* ── GSAP MorphSVG Curtain fill ──────────────────────────────────────── */
-/* The SVG fill colour is determined by the TARGET theme (opposite of current) */
-[data-dark="true"] .theme-curtain-path {
-  /* Transitioning TO light — curtain is light-coloured */
-  fill: #eef2f6;
-}
-[data-dark="false"] .theme-curtain-path {
-  /* Transitioning TO dark — curtain is dark-coloured */
-  fill: #0e1118;
-}
-
-/* Inline SVG path fill via CSS variables for the curtain overlay */
-#theme-curtain-svg path {
-  fill: var(--curtain-fill, #0e1118);
-}
-[data-dark="true"] {
-  --curtain-fill: #eef2f6;
-}
-[data-dark="false"] {
-  --curtain-fill: #0e1118;
-}
 

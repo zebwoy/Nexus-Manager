@@ -1,52 +1,61 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTheme, ACCENTS } from '../context/ThemeContext'
-import { Sun, Moon, Bell } from 'lucide-react'
-import gsap from 'gsap'
+import { Sun, Moon, Bell, ArrowUp } from 'lucide-react'
 
 /**
  * TopRightPanel — Fixed top-right control cluster
  *
- * Contains:
- * - ThemeToggleButton: GSAP SVG curtain wipe for dark/light transition
- *   (uses gsap attr tween to morph SVG path coordinates — no Club plugin required)
- * - NotificationBell: placeholder for future notification system
- *
- * SVG curtain technique: a full-screen <svg> overlays the viewport.
- * A <path> is tweened through three d-attribute keyframes:
- *   1. Collapsed at bottom edge (invisible start)
- *   2. Wave sweeping up (power2.in — sinusoidal feel)
- *   3. Flat full coverage (power2.out)
- * toggleDark() fires at the midpoint (full coverage) so the swap is hidden.
- * Then the curtain recedes upward and fades out.
+ * Buttons (left → right):
+ *   1. Scroll-to-top — greyed/disabled until a <table> or <ul>/<ol> exists on
+ *      the page; becomes active, scrolls main content area to top on click.
+ *   2. Theme toggle — switches dark/light; in light mode hover reveals accent
+ *      colour picker.
+ *   3. Notification bell — translucent placeholder for future alerts.
  */
 
-// ── Path data (viewBox 0 0 100 100, bottom-to-top sweep) ─────────────────────
-const PATH_COLLAPSED  = 'M 0 100 V 100 Q 50 100 100 100 V 100 z'
-const PATH_WAVE       = 'M 0 100 V 60 Q 25 38 50 58 Q 75 78 100 60 V 100 z'
-const PATH_FULL       = 'M 0 100 V 0 Q 50 0 100 0 V 100 z'
-const PATH_RECEDE     = 'M 0 0 V -5 Q 50 12 100 -5 V 0 z'
+// ── Scroll-to-top button ──────────────────────────────────────────────────────
+function ScrollTopButton() {
+  const [hasContent, setHasContent] = useState(false)
 
-// ── Curtain SVG overlay ───────────────────────────────────────────────────────
-function ThemeCurtain({ curtainRef, pathRef }) {
+  // Detect tables/lists on the page (via MutationObserver + scroll)
+  useEffect(() => {
+    const check = () => {
+      const found = !!document.querySelector(
+        'table, ul.has-scroll-target, ol.has-scroll-target, [data-scroll-target], .data-table, .session-table, .inventory-table, tbody tr'
+      )
+      setHasContent(found)
+    }
+
+    // Initial check
+    check()
+
+    // Re-check on DOM mutations (route changes update content)
+    const observer = new MutationObserver(check)
+    observer.observe(document.body, { childList: true, subtree: true })
+
+    return () => observer.disconnect()
+  }, [])
+
+  const handleClick = useCallback(() => {
+    // Scroll the <main> element (Layout content area) to top
+    const main = document.querySelector('main')
+    if (main) {
+      main.scrollTo({ top: 0, behavior: 'smooth' })
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [])
+
   return (
-    <svg
-      ref={curtainRef}
-      id="theme-curtain-svg"
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        width: '100vw',
-        height: '100vh',
-        zIndex: 9999,
-        pointerEvents: 'none',
-        opacity: 0,
-      }}
+    <button
+      onClick={handleClick}
+      disabled={!hasContent}
+      className={`trp-btn trp-scroll-btn ${hasContent ? 'active' : ''}`}
+      aria-label="Scroll to top"
+      title={hasContent ? 'Scroll to top' : 'No scrollable content'}
     >
-      <path ref={pathRef} className="theme-curtain-path" d={PATH_COLLAPSED} />
-    </svg>
+      <ArrowUp size={14} strokeWidth={2.5} />
+    </button>
   )
 }
 
@@ -58,38 +67,35 @@ export function NotificationBell() {
     <div style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen(o => !o)}
-        className="trp-btn"
+        className="trp-btn trp-bell-btn"
         aria-label="Notifications"
         title="Notifications"
       >
-        <Bell size={16} strokeWidth={2.2} style={{ color: 'var(--text-muted)' }} />
-        {/* Uncomment and wire count when backend is ready:
-        <span className="trp-badge">3</span> */}
+        <Bell size={14} strokeWidth={2} />
       </button>
 
       {open && (
         <>
-          {/* Click-away backdrop */}
           <div
             style={{ position: 'fixed', inset: 0, zIndex: 49 }}
             onClick={() => setOpen(false)}
           />
-          <div className="trp-popover" style={{ zIndex: 50, width: '280px', right: 0 }}>
+          <div className="trp-popover" style={{ zIndex: 50, width: '260px', right: 0 }}>
             <p style={{
-              fontSize: '0.725rem', fontWeight: 700, textTransform: 'uppercase',
-              letterSpacing: '0.08em', color: 'var(--text-faint)', marginBottom: '0.75rem'
+              fontSize: '0.675rem', fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '0.09em', color: 'var(--text-faint)', marginBottom: '0.7rem'
             }}>
               Notifications
             </p>
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
-              gap: '0.5rem', padding: '1.25rem 0', color: 'var(--text-faint)'
+              gap: '0.4rem', padding: '1rem 0'
             }}>
-              <Bell size={24} strokeWidth={1.5} />
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+              <Bell size={20} strokeWidth={1.4} style={{ color: 'var(--text-faint)', opacity: 0.5 }} />
+              <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                 No new notifications
               </p>
-              <p style={{ fontSize: '0.7rem', color: 'var(--text-faint)', textAlign: 'center', maxWidth: '180px' }}>
+              <p style={{ fontSize: '0.675rem', color: 'var(--text-faint)', textAlign: 'center', maxWidth: '170px', lineHeight: 1.5 }}>
                 Alerts and activity updates will appear here
               </p>
             </div>
@@ -100,66 +106,11 @@ export function NotificationBell() {
   )
 }
 
-// ── Theme Toggle with GSAP SVG Curtain ────────────────────────────────────────
+// ── Theme Toggle (no animation) ───────────────────────────────────────────────
 export function ThemeToggleButton() {
   const { isDark, toggleDark, accentId, setAccentId } = useTheme()
   const [showAccents, setShowAccents] = useState(false)
-  const [isAnimating, setIsAnimating] = useState(false)
-
-  const curtainRef = useRef(null)
-  const pathRef = useRef(null)
-  const tlRef = useRef(null)
   const hoverTimerRef = useRef(null)
-  // Keep latest toggleDark in a ref so timeline .call() always has current version
-  const toggleDarkRef = useRef(toggleDark)
-  useEffect(() => { toggleDarkRef.current = toggleDark }, [toggleDark])
-
-  // Build the GSAP timeline once — uses attr tweens, no plugin required
-  useEffect(() => {
-    if (!curtainRef.current || !pathRef.current) return
-
-    const curtain = curtainRef.current
-    const path = pathRef.current
-
-    gsap.set(curtain, { opacity: 0 })
-    gsap.set(path, { attr: { d: PATH_COLLAPSED } })
-
-    const tl = gsap.timeline({
-      paused: true,
-      onStart: () => setIsAnimating(true),
-      onComplete: () => setIsAnimating(false),
-    })
-
-    tl
-      // Fade curtain in
-      .to(curtain, { opacity: 1, duration: 0.08, ease: 'none' })
-      // Wave sweeps up from bottom
-      .to(path, { attr: { d: PATH_WAVE }, duration: 0.3, ease: 'power2.in' })
-      // Wave flattens — covers full screen
-      .to(path, { attr: { d: PATH_FULL }, duration: 0.22, ease: 'power2.out' })
-      // ↑ Theme toggle fires here — hidden under full coverage
-      .call(() => toggleDarkRef.current())
-      // Brief pause at full coverage
-      .to({}, { duration: 0.07 })
-      // Curtain recedes upward with slight wave
-      .to(path, { attr: { d: PATH_RECEDE }, duration: 0.28, ease: 'power2.in' })
-      // Fade out
-      .to(curtain, { opacity: 0, duration: 0.1, ease: 'none' })
-      .call(() => {
-        // Reset path for next trigger
-        gsap.set(path, { attr: { d: PATH_COLLAPSED } })
-      })
-
-    tlRef.current = tl
-
-    return () => { tl.kill() }
-  }, []) // Build once; uses toggleDarkRef for current value
-
-  const handleToggle = useCallback(() => {
-    if (isAnimating || !tlRef.current) return
-    setShowAccents(false)
-    tlRef.current.restart()
-  }, [isAnimating])
 
   const handleMouseEnter = useCallback(() => {
     if (!isDark) {
@@ -173,77 +124,72 @@ export function ThemeToggleButton() {
   }, [])
 
   return (
-    <>
-      <ThemeCurtain curtainRef={curtainRef} pathRef={pathRef} />
-
-      <div
-        style={{ position: 'relative' }}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
+    <div
+      style={{ position: 'relative' }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <button
+        onClick={toggleDark}
+        className="trp-btn trp-theme-btn"
+        aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+        title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
       >
-        <button
-          onClick={handleToggle}
-          disabled={isAnimating}
-          className="trp-btn trp-theme-btn"
-          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-        >
-          <span className={`trp-icon-wrap ${isDark ? 'dark' : 'light'}`}>
-            {isDark
-              ? <Moon size={16} strokeWidth={2.2} />
-              : <Sun size={16} strokeWidth={2.2} />
-            }
-          </span>
-        </button>
+        <span className={`trp-icon-wrap ${isDark ? 'dark' : 'light'}`}>
+          {isDark
+            ? <Moon size={14} strokeWidth={2.2} />
+            : <Sun size={14} strokeWidth={2.2} />
+          }
+        </span>
+      </button>
 
-        {/* Accent Swatch Popover — light mode only, shows on hover */}
-        {showAccents && !isDark && (
-          <div className="trp-popover trp-accent-popover">
-            <p style={{
-              fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase',
-              letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: '0.6rem'
-            }}>
-              Console Tint
-            </p>
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {Object.entries(ACCENTS).map(([id, a]) => (
-                <button
-                  key={id}
-                  onClick={(e) => { e.stopPropagation(); setAccentId(id) }}
-                  title={a.label}
-                  className={`accent-swatch trp-swatch ${accentId === id ? 'selected' : ''}`}
-                  style={{ background: a.value }}
-                />
-              ))}
-            </div>
-            {/* Colour duo accent preview strip */}
-            <div style={{ marginTop: '0.65rem', display: 'flex', gap: '0.2rem', borderRadius: '6px', overflow: 'hidden' }}>
-              {Object.entries(ACCENTS).map(([id, a]) => (
-                <div
-                  key={id}
-                  title={a.label}
-                  onClick={() => setAccentId(id)}
-                  style={{
-                    flex: 1, height: '5px', cursor: 'pointer',
-                    background: `linear-gradient(90deg, ${a.value}, ${a.hover})`,
-                    borderRadius: '2px',
-                    opacity: accentId === id ? 1 : 0.45,
-                    transition: 'opacity 0.15s ease, transform 0.15s ease',
-                    transform: accentId === id ? 'scaleY(1.4)' : 'scaleY(1)',
-                  }}
-                />
-              ))}
-            </div>
-            <p style={{
-              fontSize: '0.575rem', color: 'var(--text-faint)', marginTop: '0.5rem',
-              textAlign: 'center', letterSpacing: '0.04em'
-            }}>
-              {ACCENTS[accentId]?.label}
-            </p>
+      {/* Accent swatch popover — light mode hover only */}
+      {showAccents && !isDark && (
+        <div className="trp-popover trp-accent-popover">
+          <p style={{
+            fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase',
+            letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: '0.55rem'
+          }}>
+            Console Tint
+          </p>
+          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {Object.entries(ACCENTS).map(([id, a]) => (
+              <button
+                key={id}
+                onClick={(e) => { e.stopPropagation(); setAccentId(id) }}
+                title={a.label}
+                className={`accent-swatch trp-swatch ${accentId === id ? 'selected' : ''}`}
+                style={{ background: a.value }}
+              />
+            ))}
           </div>
-        )}
-      </div>
-    </>
+          {/* Duo strip */}
+          <div style={{ marginTop: '0.6rem', display: 'flex', gap: '0.18rem', borderRadius: '4px', overflow: 'hidden' }}>
+            {Object.entries(ACCENTS).map(([id, a]) => (
+              <div
+                key={id}
+                title={a.label}
+                onClick={() => setAccentId(id)}
+                style={{
+                  flex: 1, height: '4px', cursor: 'pointer',
+                  background: `linear-gradient(90deg, ${a.value}, ${a.hover})`,
+                  borderRadius: '2px',
+                  opacity: accentId === id ? 1 : 0.38,
+                  transition: 'opacity 0.15s ease, transform 0.15s ease',
+                  transform: accentId === id ? 'scaleY(1.6)' : 'scaleY(1)',
+                }}
+              />
+            ))}
+          </div>
+          <p style={{
+            fontSize: '0.55rem', color: 'var(--text-faint)', marginTop: '0.45rem',
+            textAlign: 'center', letterSpacing: '0.04em'
+          }}>
+            {ACCENTS[accentId]?.label}
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -251,6 +197,8 @@ export function ThemeToggleButton() {
 export default function TopRightPanel() {
   return (
     <div className="top-right-panel" id="top-right-panel">
+      <ScrollTopButton />
+      <div className="trp-divider" />
       <ThemeToggleButton />
       <div className="trp-divider" />
       <NotificationBell />
