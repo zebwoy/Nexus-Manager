@@ -1,4 +1,5 @@
 import Sidebar from './Sidebar'
+import ThemeToggle from './ThemeToggle'
 import NotificationBell from './NotificationBell'
 import ScrollTopButton from './ScrollTopButton'
 
@@ -7,7 +8,7 @@ export default function Layout({ children }) {
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
       <Sidebar />
       <main style={{ flex: 1, minWidth: 0, overflowY: 'auto', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        {/* Top bar with subtle notification bell aligned with page container */}
+        {/* Top Header Utilities (Theme Toggle & Notification Bell) */}
         <div style={{
           width: '100%',
           maxWidth: '1100px',
@@ -16,8 +17,10 @@ export default function Layout({ children }) {
           display: 'flex',
           justifyContent: 'flex-end',
           alignItems: 'center',
+          gap: '0.45rem',
           boxSizing: 'border-box'
         }}>
+          <ThemeToggle />
           <NotificationBell />
         </div>
 

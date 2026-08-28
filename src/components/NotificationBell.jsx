@@ -11,7 +11,7 @@ export default function NotificationBell() {
     <div style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen(o => !o)}
-        className="top-header-bell-btn"
+        className="top-header-btn bell-btn"
         aria-label="Notifications"
         title="Notifications"
       >
