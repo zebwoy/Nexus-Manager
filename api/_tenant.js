@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(20) NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff', 'operator', 'super_admin', 'trial')),
     email VARCHAR(255),
     status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'invited')),
+    avatar_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -230,6 +231,7 @@ CREATE TABLE IF NOT EXISTS sales (
     total DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     payment_received DECIMAL(10, 2),
     payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed')),
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

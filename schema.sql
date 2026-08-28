@@ -1,16 +1,88 @@
--- Nexus Manager Database Schema
--- Canonical global schema — kept in sync with TENANT_SCHEMA_TEMPLATE in api/_tenant.js
--- Run this once in Neon PostgreSQL to set up the complete schema and indexes.
+-- Nexus Manager Database Schema — PUBLIC schema
+-- Canonical source of truth. Reflects ACTUAL production state.
+-- Run once on a fresh Neon DB. For existing DBs, use the migrations/ scripts.
+--
+-- NOTE on types: The public schema uses text/integer (not varchar/decimal) for
+-- historical reasons — this is the production reality and intentional.
+-- Tenant schemas use varchar/decimal(10,2) for precision — both work correctly.
 
--- 1. Users / Staff Accounts
+-- ─── GLOBAL PLATFORM TABLES ───────────────────────────────────────────────────
+
+-- G1. Registered Tenants (Gaming Cafe Organisations)
+CREATE TABLE IF NOT EXISTS tenants (
+    id SERIAL PRIMARY KEY,
+    org_id VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(200) NOT NULL,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    schema_name VARCHAR(100) NOT NULL UNIQUE,
+    admin_email VARCHAR(255) NOT NULL,
+    admin_name VARCHAR(200),
+    admin_clerk_id VARCHAR(255),
+    status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'pending')),
+    plan VARCHAR(50) NOT NULL DEFAULT 'pro',
+    max_devices INT NOT NULL DEFAULT 20,
+    phone VARCHAR(50),
+    logo_url TEXT,
+    created_by VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- G2. Organisation Staff Invitation Registry
+CREATE TABLE IF NOT EXISTS organization_staff (
+    id SERIAL PRIMARY KEY,
+    org_id VARCHAR(100),
+    schema_name VARCHAR(100) NOT NULL,
+    staff_email VARCHAR(255) NOT NULL,
+    staff_name VARCHAR(100),
+    pin CHAR(4) DEFAULT '1234',
+    role VARCHAR(20) DEFAULT 'operator',
+    avatar_url TEXT,
+    status VARCHAR(20) DEFAULT 'invited' CHECK (status IN ('invited', 'active', 'suspended', 'pending_approval', 'declined')),
+    invited_by VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (schema_name, staff_email)
+);
+
+-- G3. Super Admin Audit Log
+CREATE TABLE IF NOT EXISTS super_admin_audit_logs (
+    id SERIAL PRIMARY KEY,
+    super_admin_id VARCHAR(255),
+    super_admin_email VARCHAR(255),
+    action VARCHAR(100) NOT NULL,
+    target_org_id VARCHAR(100),
+    details TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- G4. Tenant Profile Change Requests (Pending Approval Workflow)
+CREATE TABLE IF NOT EXISTS tenant_profile_changes (
+    id SERIAL PRIMARY KEY,
+    schema_name VARCHAR(100) NOT NULL REFERENCES tenants(schema_name) ON DELETE CASCADE,
+    field VARCHAR(50) NOT NULL CHECK (field IN ('cafe_name', 'counter_phone', 'cafe_logo')),
+    old_value TEXT,
+    new_value TEXT NOT NULL,
+    logo_filename VARCHAR(255),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    requested_by VARCHAR(255) NOT NULL,
+    requested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    reviewed_by VARCHAR(255),
+    reviewed_at TIMESTAMP WITH TIME ZONE,
+    reject_reason TEXT
+);
+
+-- ─── PER-TENANT SHARED / GLOBAL LOOKUP TABLES ─────────────────────────────────
+
+-- 1. Users / Staff Accounts (public schema — global/legacy)
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
-    full_name VARCHAR(100) NOT NULL,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    pin CHAR(4) NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'operator' CHECK (role IN ('admin', 'operator', 'staff', 'super_admin', 'trial')),
+    full_name TEXT NOT NULL,
+    username TEXT UNIQUE NOT NULL,
+    pin CHAR(4) NOT NULL CHECK (pin ~ '^\d{4}$'),
+    role VARCHAR(20) DEFAULT 'staff' CHECK (role IN ('admin', 'operator', 'staff', 'super_admin', 'trial')),
     email VARCHAR(255),
-    status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'invited')),
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'invited')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -23,10 +95,10 @@ CREATE TABLE IF NOT EXISTS operator_sessions (
     logout_at TIMESTAMP WITH TIME ZONE
 );
 
--- 3. Audit Logs (Immutable Security Log)
+-- 3. Audit Logs
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES users(id),
+    user_id INT,
     username VARCHAR(100),
     action VARCHAR(100) NOT NULL,
     module VARCHAR(50),
@@ -35,34 +107,35 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Device Stations (PCs, PlayStations, Xboxes)
+-- 4. Device Stations
 CREATE TABLE IF NOT EXISTS devices (
     id SERIAL PRIMARY KEY,
-    label VARCHAR(50) NOT NULL,
-    type VARCHAR(20) NOT NULL CHECK (type IN ('PC', 'XBOX', 'PS')),
-    is_active BOOLEAN DEFAULT TRUE
+    label TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('PC', 'XBOX', 'PS')),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 5. Session Pricing Rules
 CREATE TABLE IF NOT EXISTS pricing (
     id SERIAL PRIMARY KEY,
-    device_type VARCHAR(20) NOT NULL CHECK (device_type IN ('PC', 'XBOX', 'PS')),
+    device_type TEXT NOT NULL CHECK (device_type IN ('PC', 'XBOX', 'PS')),
     duration_mins INT NOT NULL,
-    price DECIMAL(10, 2) NOT NULL,
+    price INT NOT NULL,
     UNIQUE (device_type, duration_mins)
 );
 
--- 6. System Configurations (Fees, Limits, Settings)
+-- 6. System Settings
 CREATE TABLE IF NOT EXISTS settings (
-    key VARCHAR(100) PRIMARY KEY,
-    value VARCHAR(255) NOT NULL
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
 -- 7. Customers & Vendor Registry
 CREATE TABLE IF NOT EXISTS customers (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    mobile VARCHAR(20),
+    name TEXT NOT NULL,
+    mobile TEXT,
     shop_name VARCHAR(100),
     pancafe_username VARCHAR(100),
     address TEXT,
@@ -76,23 +149,23 @@ CREATE TABLE IF NOT EXISTS sessions (
     customer_id INT REFERENCES customers(id),
     device_id INT NOT NULL REFERENCES devices(id),
     duration_mins INT NOT NULL,
-    time_in TIMESTAMP WITH TIME ZONE NOT NULL,
-    time_out TIMESTAMP WITH TIME ZONE NOT NULL,
+    time_in TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    time_out TIMESTAMP WITH TIME ZONE,
     date DATE NOT NULL DEFAULT CURRENT_DATE,
-    charge DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    controller_total DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    extra_person_total DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    total DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    payment_received DECIMAL(10, 2),
-    credit DECIMAL(10, 2),
+    charge INT NOT NULL DEFAULT 0,
+    controller_total INT NOT NULL DEFAULT 0,
+    extra_person_total INT NOT NULL DEFAULT 0,
+    total INT NOT NULL DEFAULT 0,
+    payment_received INT,
+    credit INT,
     remark TEXT,
-    payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed')),
+    payment_method VARCHAR(20) DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed')),
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. Session Players & Controller/Add-on Logging
+-- 9. Session Players & Controller Logging
 CREATE TABLE IF NOT EXISTS session_players (
     id SERIAL PRIMARY KEY,
     session_id INT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -100,16 +173,16 @@ CREATE TABLE IF NOT EXISTS session_players (
     customer_id INT REFERENCES customers(id),
     player_name VARCHAR(100),
     own_controller BOOLEAN DEFAULT FALSE,
-    controller_fee DECIMAL(10, 2) DEFAULT 0.00,
-    extra_person_fee DECIMAL(10, 2) DEFAULT 0.00
+    controller_fee INT DEFAULT 0,
+    extra_person_fee INT DEFAULT 0
 );
 
--- 10. Session Payments (Append-only Ledger)
+-- 10. Session Payments Ledger
 CREATE TABLE IF NOT EXISTS session_payments (
     id SERIAL PRIMARY KEY,
     session_id INT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     amount DECIMAL(10, 2) NOT NULL,
-    payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online')),
+    payment_method VARCHAR(20) DEFAULT 'cash',
     note TEXT,
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -130,16 +203,16 @@ CREATE TABLE IF NOT EXISTS pancafe_plans (
 CREATE TABLE IF NOT EXISTS pancafe_sessions (
     id SERIAL PRIMARY KEY,
     customer_id INT REFERENCES customers(id),
-    pancafe_username VARCHAR(100) NOT NULL,
+    pancafe_username TEXT NOT NULL,
     device_id INT REFERENCES devices(id),
     plan_id INT REFERENCES pancafe_plans(id),
     date DATE NOT NULL DEFAULT CURRENT_DATE,
     time_in TIMESTAMP WITH TIME ZONE,
     time_out TIMESTAMP WITH TIME ZONE,
-    amount_received DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    amount_spent DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    margin DECIMAL(10, 2) GENERATED ALWAYS AS (amount_received - amount_spent) STORED,
-    payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit')),
+    amount_received INT NOT NULL DEFAULT 0,
+    amount_spent INT NOT NULL DEFAULT 0,
+    margin INT GENERATED ALWAYS AS (amount_received - amount_spent) STORED,
+    payment_method VARCHAR(20) DEFAULT 'cash',
     remark TEXT,
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -159,12 +232,12 @@ CREATE TABLE IF NOT EXISTS recharges (
     id SERIAL PRIMARY KEY,
     customer_id INT REFERENCES customers(id),
     date DATE NOT NULL DEFAULT CURRENT_DATE,
-    game_platform VARCHAR(100),
-    cost_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    charge_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    margin DECIMAL(10, 2) GENERATED ALWAYS AS (charge_price - cost_price) STORED,
-    payment_received DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online')),
+    game_platform TEXT,
+    cost_price INT NOT NULL DEFAULT 0,
+    charge_price INT NOT NULL DEFAULT 0,
+    margin INT GENERATED ALWAYS AS (charge_price - cost_price) STORED,
+    payment_received INT,
+    payment_method VARCHAR(20) DEFAULT 'cash',
     note TEXT,
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -174,8 +247,8 @@ CREATE TABLE IF NOT EXISTS recharges (
 CREATE TABLE IF NOT EXISTS expenses (
     id SERIAL PRIMARY KEY,
     date DATE NOT NULL DEFAULT CURRENT_DATE,
-    category VARCHAR(50) NOT NULL CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Cafeteria', 'Other')),
-    amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    category TEXT NOT NULL CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Cafeteria', 'Other')),
+    amount INT NOT NULL,
     vendor_name VARCHAR(200),
     vendor_address TEXT,
     note TEXT,
@@ -186,7 +259,7 @@ CREATE TABLE IF NOT EXISTS expenses (
     unit_buy_price DECIMAL(10, 2),
     unit_sell_price DECIMAL(10, 2),
     receipt_url TEXT,
-    payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed')),
+    payment_method VARCHAR(20) DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed')),
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -194,26 +267,28 @@ CREATE TABLE IF NOT EXISTS expenses (
 -- 16. Shop / Cafeteria Inventory Items
 CREATE TABLE IF NOT EXISTS inventory_items (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    category VARCHAR(50) NOT NULL CHECK (category IN ('Drinks', 'Snacks', 'Other')),
-    buy_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    sell_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL CHECK (category IN ('Drinks', 'Snacks', 'Other')),
+    buy_price INT NOT NULL DEFAULT 0,
+    sell_price INT NOT NULL DEFAULT 0,
     initial_stock INT NOT NULL DEFAULT 0,
     stock_qty INT NOT NULL DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_by INT REFERENCES users(id)
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by INT REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 17. Inventory Sales (Invoices)
 CREATE TABLE IF NOT EXISTS sales (
     id SERIAL PRIMARY KEY,
-    session_id INT REFERENCES sessions(id) ON DELETE SET NULL,
+    session_id INT REFERENCES sessions(id),
     customer_id INT REFERENCES customers(id),
-    sale_type VARCHAR(20) NOT NULL CHECK (sale_type IN ('walkin', 'session')),
+    sale_type TEXT NOT NULL DEFAULT 'walkin' CHECK (sale_type IN ('walkin', 'session')),
     date DATE NOT NULL DEFAULT CURRENT_DATE,
-    total DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    payment_received DECIMAL(10, 2),
-    payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed')),
+    total INT NOT NULL DEFAULT 0,
+    payment_received INT,
+    payment_method VARCHAR(20) DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed')),
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -223,14 +298,14 @@ CREATE TABLE IF NOT EXISTS sale_items (
     id SERIAL PRIMARY KEY,
     sale_id INT NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
     item_id INT NOT NULL REFERENCES inventory_items(id),
-    qty INT NOT NULL CHECK (qty > 0),
-    unit_price DECIMAL(10, 2) NOT NULL
+    qty INT NOT NULL DEFAULT 1,
+    unit_price INT NOT NULL
 );
 
 -- 19. Day Opening Cash (BOD Balance)
 CREATE TABLE IF NOT EXISTS day_openings (
     id SERIAL PRIMARY KEY,
-    date DATE NOT NULL UNIQUE DEFAULT CURRENT_DATE,
+    date DATE NOT NULL UNIQUE,
     opening_cash DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     denominations JSONB,
     note TEXT,
@@ -257,21 +332,42 @@ CREATE TABLE IF NOT EXISTS shift_closings (
 );
 
 
--- ─── DATABASE PERFORMANCE INDEXES ───────────────────────────────────────
+-- ─── VIEWS ────────────────────────────────────────────────────────────────────
+
+CREATE OR REPLACE VIEW daily_revenue AS
+    SELECT
+        date,
+        COALESCE(SUM(total), 0) AS gaming_revenue,
+        COALESCE(SUM(credit), 0) AS total_credit
+    FROM sessions
+    GROUP BY date;
+
+
+-- ─── PERFORMANCE INDEXES ──────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_sessions_date_status ON sessions (date, time_out, is_deleted);
+CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions (date);
 CREATE INDEX IF NOT EXISTS idx_sessions_customer_id ON sessions (customer_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_device_id ON sessions (device_id);
 CREATE INDEX IF NOT EXISTS idx_sales_date_type ON sales (date, sale_type);
+CREATE INDEX IF NOT EXISTS idx_sales_date ON sales (date);
+CREATE INDEX IF NOT EXISTS idx_sales_type ON sales (sale_type);
+CREATE INDEX IF NOT EXISTS idx_sales_session_id ON sales (session_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses (date);
+CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses (category);
 CREATE INDEX IF NOT EXISTS idx_recharges_date ON recharges (date);
 CREATE INDEX IF NOT EXISTS idx_session_payments_session_id ON session_payments (session_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_customers_search ON customers (name, mobile, shop_name);
+CREATE INDEX IF NOT EXISTS idx_customers_name ON customers (name);
+CREATE INDEX IF NOT EXISTS idx_customers_mobile ON customers (mobile);
+CREATE INDEX IF NOT EXISTS idx_pancafe_date ON pancafe_sessions (date);
+CREATE INDEX IF NOT EXISTS idx_pancafe_customer_id ON pancafe_sessions (customer_id);
+CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items (sale_id);
+CREATE INDEX IF NOT EXISTS idx_session_players_session ON session_players (session_id);
 
 
--- ─── SEED DATA ────────────────────────────────────────────────────────
+-- ─── SEED DATA ────────────────────────────────────────────────────────────────
 
--- Initial Default System Settings
 INSERT INTO settings (key, value) VALUES
 ('controller_fee', '25'),
 ('extra_person_fee', '15'),
@@ -282,42 +378,6 @@ INSERT INTO settings (key, value) VALUES
 ('org_slug', 'org')
 ON CONFLICT (key) DO NOTHING;
 
--- Initial Setup of Devices
-INSERT INTO devices (label, type) VALUES
-('PC Station 1', 'PC'),
-('PC Station 2', 'PC'),
-('PC Station 3', 'PC'),
-('Xbox One A', 'XBOX'),
-('Xbox One B', 'XBOX'),
-('PS5 Console X', 'PS'),
-('PS5 Console Y', 'PS')
-ON CONFLICT DO NOTHING;
-
--- Default Users (Trial Admin: trial / PIN: 1234)
-INSERT INTO users (full_name, username, pin, role) VALUES
-('Trial Administrator', 'trial', '1234', 'admin')
-ON CONFLICT (username) DO NOTHING;
-
--- Default Pricing Rules
-INSERT INTO pricing (device_type, duration_mins, price) VALUES
-('PC', 30, 20.00), ('PC', 60, 40.00), ('PC', 90, 60.00), ('PC', 120, 80.00),
-('PC', 150, 100.00), ('PC', 180, 120.00), ('PC', 240, 160.00), ('PC', 300, 200.00),
-('PC', 360, 240.00), ('PC', 420, 280.00), ('PC', 480, 320.00),
-('XBOX', 30, 30.00), ('XBOX', 60, 50.00), ('XBOX', 90, 75.00), ('XBOX', 120, 100.00),
-('XBOX', 150, 125.00), ('XBOX', 180, 150.00), ('XBOX', 240, 200.00), ('XBOX', 300, 250.00),
-('XBOX', 360, 300.00), ('XBOX', 420, 350.00), ('XBOX', 480, 400.00),
-('PS', 30, 40.00), ('PS', 60, 70.00), ('PS', 90, 100.00), ('PS', 120, 130.00),
-('PS', 150, 160.00), ('PS', 180, 190.00), ('PS', 240, 250.00), ('PS', 300, 310.00),
-('PS', 360, 370.00), ('PS', 420, 430.00), ('PS', 480, 490.00)
-ON CONFLICT DO NOTHING;
-
--- Default PanCafe Plans
-INSERT INTO pancafe_plans (label, hours, price, is_signup_plan) VALUES
-('Signup Plan (6H)', 6.0, 500.00, TRUE),
-('Recharge 7H', 7.0, 420.00, FALSE)
-ON CONFLICT DO NOTHING;
-
--- Default Recharge Platforms
 INSERT INTO recharge_platforms (name, description) VALUES
 ('PSN', 'PlayStation Network'),
 ('Xbox Live', 'Xbox/Microsoft Gaming'),
