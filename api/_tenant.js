@@ -149,13 +149,23 @@ CREATE TABLE IF NOT EXISTS pancafe_sessions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 13. Recharges (In-Game / Mobile RC)
+-- 13. Recharge Platforms Master
+CREATE TABLE IF NOT EXISTS recharge_platforms (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 14. Recharges (In-Game / Mobile RC)
 CREATE TABLE IF NOT EXISTS recharges (
     id SERIAL PRIMARY KEY,
     customer_id INT REFERENCES customers(id),
     game_platform VARCHAR(100),
     cost_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     charge_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    margin DECIMAL(10, 2) GENERATED ALWAYS AS (charge_price - cost_price) STORED,
     payment_received DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online')),
     note TEXT,
@@ -164,17 +174,19 @@ CREATE TABLE IF NOT EXISTS recharges (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 14. Day Openings (EOD Cash Drawer Opening)
+-- 15. Day Openings (BOD Cash Drawer)
 CREATE TABLE IF NOT EXISTS day_openings (
     id SERIAL PRIMARY KEY,
-    date DATE NOT NULL UNIQUE,
+    date DATE NOT NULL UNIQUE DEFAULT CURRENT_DATE,
     opening_cash DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     denominations JSONB,
+    note TEXT,
     opened_by INT REFERENCES users(id),
+    created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 15. Expenses
+-- 16. Expenses
 CREATE TABLE IF NOT EXISTS expenses (
     id SERIAL PRIMARY KEY,
     date DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -195,7 +207,7 @@ CREATE TABLE IF NOT EXISTS expenses (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 16. Inventory Items
+-- 17. Inventory Items
 CREATE TABLE IF NOT EXISTS inventory_items (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -208,7 +220,7 @@ CREATE TABLE IF NOT EXISTS inventory_items (
     created_by INT REFERENCES users(id)
 );
 
--- 17. Sales
+-- 18. Sales
 CREATE TABLE IF NOT EXISTS sales (
     id SERIAL PRIMARY KEY,
     session_id INT REFERENCES sessions(id) ON DELETE SET NULL,
@@ -222,23 +234,13 @@ CREATE TABLE IF NOT EXISTS sales (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 18. Sale Items
+-- 19. Sale Items
 CREATE TABLE IF NOT EXISTS sale_items (
     id SERIAL PRIMARY KEY,
     sale_id INT NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
     item_id INT NOT NULL REFERENCES inventory_items(id),
     qty INT NOT NULL CHECK (qty > 0),
     unit_price DECIMAL(10, 2) NOT NULL
-);
-
--- 19. Day Openings (BOD)
-CREATE TABLE IF NOT EXISTS day_openings (
-    id SERIAL PRIMARY KEY,
-    date DATE NOT NULL UNIQUE DEFAULT CURRENT_DATE,
-    opening_cash DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    note TEXT,
-    created_by INT REFERENCES users(id),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 20. Shift Closings (EOD)

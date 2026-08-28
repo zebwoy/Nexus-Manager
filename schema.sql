@@ -1,4 +1,5 @@
 -- Nexus Manager Database Schema
+-- Canonical global schema — kept in sync with TENANT_SCHEMA_TEMPLATE in api/_tenant.js
 -- Run this once in Neon PostgreSQL to set up the complete schema and indexes.
 
 -- 1. Users / Staff Accounts
@@ -7,7 +8,9 @@ CREATE TABLE IF NOT EXISTS users (
     full_name VARCHAR(100) NOT NULL,
     username VARCHAR(50) UNIQUE NOT NULL,
     pin CHAR(4) NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'operator' CHECK (role IN ('admin', 'operator', 'super_admin', 'trial')),
+    role VARCHAR(20) NOT NULL DEFAULT 'operator' CHECK (role IN ('admin', 'operator', 'staff', 'super_admin', 'trial')),
+    email VARCHAR(255),
+    status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'invited')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -26,7 +29,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     user_id INT REFERENCES users(id),
     username VARCHAR(100),
     action VARCHAR(100) NOT NULL,
+    module VARCHAR(50),
     details TEXT,
+    metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -53,13 +58,15 @@ CREATE TABLE IF NOT EXISTS settings (
     value VARCHAR(255) NOT NULL
 );
 
--- 7. Customers Database
+-- 7. Customers & Vendor Registry
 CREATE TABLE IF NOT EXISTS customers (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     mobile VARCHAR(20),
     shop_name VARCHAR(100),
     pancafe_username VARCHAR(100),
+    address TEXT,
+    client_type VARCHAR(30) DEFAULT 'customer',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -90,6 +97,8 @@ CREATE TABLE IF NOT EXISTS session_players (
     id SERIAL PRIMARY KEY,
     session_id INT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     player_number INT NOT NULL,
+    customer_id INT REFERENCES customers(id),
+    player_name VARCHAR(100),
     own_controller BOOLEAN DEFAULT FALSE,
     controller_fee DECIMAL(10, 2) DEFAULT 0.00,
     extra_person_fee DECIMAL(10, 2) DEFAULT 0.00
@@ -154,7 +163,7 @@ CREATE TABLE IF NOT EXISTS recharges (
     cost_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     charge_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     margin DECIMAL(10, 2) GENERATED ALWAYS AS (charge_price - cost_price) STORED,
-    payment_received DECIMAL(10, 2),
+    payment_received DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online')),
     note TEXT,
     created_by INT REFERENCES users(id),
@@ -168,7 +177,15 @@ CREATE TABLE IF NOT EXISTS expenses (
     category VARCHAR(50) NOT NULL CHECK (category IN ('Marketing', 'Employee', 'Inventory', 'Cafeteria', 'Other')),
     amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     vendor_name VARCHAR(200),
+    vendor_address TEXT,
     note TEXT,
+    item_id INT,
+    units INT DEFAULT 0,
+    packs_count INT DEFAULT 1,
+    pack_size INT DEFAULT 1,
+    unit_buy_price DECIMAL(10, 2),
+    unit_sell_price DECIMAL(10, 2),
+    receipt_url TEXT,
     payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'online', 'credit', 'split', 'mixed')),
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -181,6 +198,7 @@ CREATE TABLE IF NOT EXISTS inventory_items (
     category VARCHAR(50) NOT NULL CHECK (category IN ('Drinks', 'Snacks', 'Other')),
     buy_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     sell_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    initial_stock INT NOT NULL DEFAULT 0,
     stock_qty INT NOT NULL DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
     created_by INT REFERENCES users(id)
@@ -214,7 +232,9 @@ CREATE TABLE IF NOT EXISTS day_openings (
     id SERIAL PRIMARY KEY,
     date DATE NOT NULL UNIQUE DEFAULT CURRENT_DATE,
     opening_cash DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    denominations JSONB,
     note TEXT,
+    opened_by INT REFERENCES users(id),
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -255,7 +275,11 @@ CREATE INDEX IF NOT EXISTS idx_customers_search ON customers (name, mobile, shop
 INSERT INTO settings (key, value) VALUES
 ('controller_fee', '25'),
 ('extra_person_fee', '15'),
-('extra_person_from', '3')
+('extra_person_from', '3'),
+('cafe_name', 'Gaming Lounge'),
+('cafe_logo', ''),
+('counter_phone', ''),
+('org_slug', 'org')
 ON CONFLICT (key) DO NOTHING;
 
 -- Initial Setup of Devices

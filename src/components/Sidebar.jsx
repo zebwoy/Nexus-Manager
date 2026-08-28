@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { useTheme, ACCENTS } from '../context/ThemeContext'
 import { api } from '../lib/api'
 import { Modal, Spinner } from './UI'
 import {
   LayoutDashboard, Monitor, Coffee, Package,
   Zap, TrendingDown, Users, BarChart2, Settings,
-  Sun, Moon, LogOut, Menu, X, FileCheck, Trash2, Shield
+  LogOut, Menu, X, FileCheck, Trash2, Shield
 } from 'lucide-react'
 import { SignedIn, SignedOut, UserButton, useClerk, useUser } from '@clerk/clerk-react'
 
@@ -27,7 +26,6 @@ const NAV = [
 
 export default function Sidebar() {
   const { user, logout, isAdmin, isSuperAdmin, activeTenant, setActiveTenant } = useAuth()
-  const { isDark, toggleDark, accentId, setAccentId } = useTheme()
   const { signOut } = useClerk()
   const { user: clerkUser } = useUser()
   const navigate = useNavigate()
@@ -191,45 +189,6 @@ export default function Sidebar() {
 
         </nav>
 
-        {/* Theme Settings Panel */}
-        <div style={{
-          padding: '0.95rem 1rem',
-          borderTop: '1.5px solid var(--bevel-top)',
-          borderBottom: '1.5px solid var(--bevel-bottom)',
-          background: 'rgba(0,0,0,0.02)'
-        }}>
-          {/* Light / Dark Mode switch */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: (!isDark ? '0.75rem' : '0') }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              {isDark
-                ? <Moon size={15} style={{ color: 'var(--text-muted)' }} />
-                : <Sun size={15} style={{ color: 'var(--text-muted)' }} />}
-              <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                {isDark ? 'Dark Mode' : 'Light Mode'}
-              </span>
-            </div>
-            <button onClick={toggleDark} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-              aria-label="Toggle dark/light system theme">
-              <div className={`toggle-track ${isDark ? 'on' : ''}`}>
-                <div className="toggle-thumb" />
-              </div>
-            </button>
-          </div>
-
-          {/* Accent Color picker */}
-          {!isDark && (
-            <div>
-              <p style={{ fontSize: '0.675rem', color: 'var(--text-faint)', fontWeight: 700, marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Console Tint</p>
-              <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                {Object.entries(ACCENTS).map(([id, a]) => (
-                  <button key={id} onClick={() => setAccentId(id)} title={a.label}
-                    className={`accent-swatch ${accentId === id ? 'selected' : ''}`}
-                    style={{ background: a.value }} />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* System Operator & Log Out */}
         <div style={{
@@ -355,35 +314,6 @@ export default function Sidebar() {
               ))}
             </div>
 
-            {/* Config & Toggles */}
-            <div style={{ background: 'var(--bg-input)', padding: '1rem', borderRadius: '14px', border: '1px solid var(--border)', marginBottom: '1.5rem' }}>
-              {/* Dark/Light mode switch */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: (!isDark ? '0.75rem' : '0') }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  {isDark ? <Moon size={16} style={{ color: 'var(--text-muted)' }} /> : <Sun size={16} style={{ color: 'var(--text-muted)' }} />}
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>Theme Mode</span>
-                </div>
-                <button onClick={toggleDark} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                  <div className={`toggle-track ${isDark ? 'on' : ''}`}>
-                    <div className="toggle-thumb" />
-                  </div>
-                </button>
-              </div>
-
-              {/* Accent Picker */}
-              {!isDark && (
-                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
-                  <p style={{ fontSize: '0.675rem', color: 'var(--text-faint)', fontWeight: 700, marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Console Tint</p>
-                  <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                    {Object.entries(ACCENTS).map(([id, a]) => (
-                      <button key={id} onClick={() => setAccentId(id)} title={a.label}
-                        className={`accent-swatch ${accentId === id ? 'selected' : ''}`}
-                        style={{ background: a.value }} />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Operator Box & Sign Out */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
