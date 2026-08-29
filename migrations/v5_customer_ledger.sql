@@ -3,9 +3,11 @@
 -- Adds the unified customer_ledger table and safely seeds it
 -- from all existing historical financial transactions.
 --
--- Run per-tenant (set search_path before executing):
---   SET search_path TO tenant_<schema>, public;
+-- Target schema: tenant_hgc  (change below if running on another tenant)
 -- ============================================================
+
+-- ⚠ Set this to your tenant schema before running
+SET search_path TO tenant_hgc, public;
 
 -- ─── 1. Create table ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS customer_ledger (
