@@ -180,12 +180,9 @@ export default async function handler(req, res) {
         const cleanPin = pin && /^\d{4}$/.test(pin) ? pin : '1234'
         const assignedRole = role === 'admin' ? 'admin' : 'operator'
 
-        // Username: <slug>_<firstName> — e.g. hgc_riyaz, hgc_adnan
+        // Fetch tenant slug for username convention: <slug>_<role>@<user_id>
         const tenantSlugR = await pool.query('SELECT slug FROM public.tenants WHERE schema_name = $1', [schemaName])
         const tenantSlug = tenantSlugR.rows[0]?.slug || schemaName.replace('tenant_', '')
-        const firstName = (joinReq.staff_name || joinReq.staff_email.split('@')[0])
-          .split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || assignedRole
-        const username = `${tenantSlug}_${firstName}`
 
         await pool.query(`
           UPDATE public.organization_staff
@@ -193,13 +190,39 @@ export default async function handler(req, res) {
           WHERE id = $3
         `, [cleanPin, assignedRole, joinReq.id])
 
-        // Insert / activate user in tenant users table
-        await client.query(`
-          INSERT INTO users (full_name, username, pin, role, email, status, avatar_url)
-          VALUES ($1, $2, $3, $4, $5, 'active', $6)
-          ON CONFLICT (username) DO UPDATE
-          SET full_name = EXCLUDED.full_name, pin = EXCLUDED.pin, role = EXCLUDED.role, email = EXCLUDED.email, status = 'active', avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url)
-        `, [joinReq.staff_name || username, username, cleanPin, assignedRole, joinReq.staff_email, joinReq.avatar_url || null])
+        // Two-step insert: insert with temp username → get DB-assigned id → update to final username
+        const staffName = joinReq.staff_name || joinReq.staff_email.split('@')[0]
+        const tempUsername = `pending_${Date.now()}`
+
+        // Check if user already exists by email (re-approval case)
+        const existingR = await client.query(
+          'SELECT id FROM users WHERE email ILIKE $1',
+          [joinReq.staff_email.trim()]
+        )
+
+        let userId
+        if (existingR.rows.length > 0) {
+          userId = existingR.rows[0].id
+          const finalUsername = `${tenantSlug}_${assignedRole}@${userId}`
+          await client.query(`
+            UPDATE users
+            SET full_name = $1, pin = $2, role = $3, status = 'active',
+                avatar_url = COALESCE($4, avatar_url), username = $5
+            WHERE id = $6
+          `, [staffName, cleanPin, assignedRole, joinReq.avatar_url || null, finalUsername, userId])
+        } else {
+          // Insert with placeholder, then update to final username once we have the id
+          const insertR = await client.query(`
+            INSERT INTO users (full_name, username, pin, role, email, status, avatar_url)
+            VALUES ($1, $2, $3, $4, $5, 'active', $6)
+            RETURNING id
+          `, [staffName, tempUsername, cleanPin, assignedRole, joinReq.staff_email, joinReq.avatar_url || null])
+          userId = insertR.rows[0].id
+          const finalUsername = `${tenantSlug}_${assignedRole}@${userId}`
+          await client.query('UPDATE users SET username = $1 WHERE id = $2', [finalUsername, userId])
+        }
+
+        const resolvedUsername = `${tenantSlug}_${assignedRole}@${userId}`
 
         try {
           await client.query(`
@@ -207,12 +230,16 @@ export default async function handler(req, res) {
             VALUES ($1, 'ACCEPT_STAFF', 'staff', $2, $3)
           `, [
             callerUser,
-            `Accepted staff join request for ${joinReq.staff_name || joinReq.staff_email} as ${assignedRole}`,
-            JSON.stringify({ staff_email: joinReq.staff_email, role: assignedRole })
+            `Accepted staff join request for ${staffName} as ${assignedRole} — handle: @${resolvedUsername}`,
+            JSON.stringify({ staff_email: joinReq.staff_email, role: assignedRole, username: resolvedUsername })
           ])
         } catch {}
 
-        return ok(res, { success: true, message: `Accepted ${joinReq.staff_name || joinReq.staff_email} to staff team!` })
+        return ok(res, {
+          success: true,
+          message: `Accepted ${staffName} to staff team!`,
+          username: resolvedUsername
+        })
       } else {
         await pool.query(`
           UPDATE public.organization_staff
@@ -267,10 +294,15 @@ export default async function handler(req, res) {
             await pool.query('UPDATE public.tenants SET admin_name = $1 WHERE schema_name = $2', [realFullName, schemaName])
           }
 
-          // Sync the primary admin row
+          // Sync the primary admin row — enforce <slug>_admin@<id> username format
           const curAdminR = await client.query("SELECT id, username, full_name, email FROM users WHERE role = 'admin' ORDER BY id ASC")
           if (curAdminR.rows.length > 0) {
             const primaryAdmin = curAdminR.rows[0]
+            // Only migrate to new format if not already in it (idempotent)
+            const alreadyCorrectFormat = /^[a-z0-9]+_admin@\d+$/.test(primaryAdmin.username)
+            const targetAdminUsername = alreadyCorrectFormat
+              ? primaryAdmin.username
+              : `${t.slug}_admin@${primaryAdmin.id}`
             await client.query(`
               UPDATE users
               SET username = $1,

@@ -4,30 +4,36 @@ import { withTenantClient } from './_tenant.js'
 export default async function handler(req, res) {
   const pool = getPool()
   const action = req.query.action
+
+  // ── Login is schema-self-resolving: extract before withTenantClient ──────────
+  // At login time there are NO auth headers (no schema, no email, no org-id).
+  // We parse the org slug from the username itself: hgc_operator@3 → slug 'hgc'
+  // → query public.tenants → schema_name → query that schema.
+  if (action === 'login' || req.url.includes('auth-login')) {
+    return handleLogin(pool, req, res)
+  }
+
   const userId = req.headers['x-user-id']
   const currentOperator = req.headers['x-username']
 
   return withTenantClient(pool, req, res, async (client) => {
-    // ─── LOGOUT: POST /api/auth-logout ─────────────────────────────
+    // ─── LOGOUT ───────────────────────────────────────────────────────────────
     if (action === 'logout' || req.url.includes('auth-logout')) {
       if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
       if (userId) {
         await client.query(
-          `UPDATE operator_sessions
-           SET logout_at = CURRENT_TIMESTAMP
-           WHERE user_id = $1 AND logout_at IS NULL`,
+          `UPDATE operator_sessions SET logout_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND logout_at IS NULL`,
           [Number(userId)]
         )
         await client.query(
-          `INSERT INTO audit_logs (user_id, username, action, details)
-           VALUES ($1, $2, $3, $4)`,
+          `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, $3, $4)`,
           [Number(userId), currentOperator || 'system', 'LOGOUT', `Operator logged out: @${currentOperator}`]
         )
       }
       return ok(res, { success: true })
     }
 
-    // ─── AUDIT TRAILS: GET /api/auth-audit ──────────────────────────
+    // ─── AUDIT TRAILS ─────────────────────────────────────────────────────────
     if (action === 'audit' || req.url.includes('auth-audit')) {
       if (req.method !== 'GET') return err(res, 'Method not allowed', 405)
       if (!userId) return err(res, 'Authorization required', 401)
@@ -55,97 +61,7 @@ export default async function handler(req, res) {
       return ok(res, { logs: logs.rows, sessions: sessions.rows })
     }
 
-    // ─── LOGIN: POST /api/auth-login ──────────────────────────────
-    if (action === 'login' || req.url.includes('auth-login')) {
-      if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
-      const { username, pin } = req.body || {}
-      if (!username || !pin) return err(res, 'Username and PIN required')
-
-      const cleanUser = String(username).toLowerCase().trim()
-      const cleanPin = String(pin).trim()
-
-      // Auto-cleanup any accidental platform superadmin in tenant users table and ensure columns
-      try {
-        await client.query(`
-          DELETE FROM users WHERE role = 'super_admin' OR username = 'superadmin';
-          ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';
-          ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);
-          ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(100);
-        `)
-      } catch {}
-
-      if (cleanUser === 'superadmin' && (cleanPin === '9999' || cleanPin === '1234')) {
-        return ok(res, {
-          user: {
-            id: 0,
-            full_name: 'Platform Super Administrator',
-            username: 'superadmin',
-            role: 'super_admin'
-          }
-        })
-      }
-
-      let result
-      try {
-        result = await client.query(
-          `SELECT id, full_name, username, COALESCE(role, 'staff') AS role, COALESCE(status, 'active') AS status
-           FROM users
-           WHERE (username = $1 OR username = $2 OR username ILIKE '%' || $1) AND pin = $3
-           ORDER BY id ASC LIMIT 1`,
-          [cleanUser, `${cleanUser}_staff`, cleanPin]
-        )
-      } catch (err1) {
-        result = await client.query(
-          `SELECT id, full_name, username, COALESCE(role, 'staff') AS role
-           FROM users
-           WHERE (username = $1 OR username = $2 OR username ILIKE '%' || $1) AND pin = $3
-           ORDER BY id ASC LIMIT 1`,
-          [cleanUser, `${cleanUser}_staff`, cleanPin]
-        )
-      }
-
-      if (result.rows.length === 0) {
-        // Also check if cleanUser matches role (e.g. role = 'admin' or role = 'staff')
-        try {
-          result = await client.query(
-            `SELECT id, full_name, username, COALESCE(role, 'staff') AS role, COALESCE(status, 'active') AS status
-             FROM users
-             WHERE role = $1 AND pin = $2
-             ORDER BY id ASC LIMIT 1`,
-            [cleanUser, cleanPin]
-          )
-        } catch (err2) {
-          result = await client.query(
-            `SELECT id, full_name, username, COALESCE(role, 'staff') AS role
-             FROM users
-             WHERE role = $1 AND pin = $2
-             ORDER BY id ASC LIMIT 1`,
-            [cleanUser, cleanPin]
-          )
-        }
-      }
-      
-      if (result.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
-
-      const user = result.rows[0]
-      if (user.status === 'suspended') {
-        return err(res, 'Account suspended. Contact your cafe administrator.', 403)
-      }
-
-      // Record in operator_sessions and audit_logs
-      await client.query(
-        `INSERT INTO operator_sessions (user_id, username) VALUES ($1, $2)`,
-        [user.id, user.username]
-      )
-      await client.query(
-        `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, 'LOGIN', $3)`,
-        [user.id, user.username, `Operator signed in: @${user.username} (${user.full_name})`]
-      )
-
-      return ok(res, { user })
-    }
-
-    // ─── USER MANAGEMENT: /api/users ──────────────────────────────
+    // ─── USER MANAGEMENT ──────────────────────────────────────────────────────
     if (action === 'users' || req.url.includes('/api/users')) {
       if (req.method === 'GET') {
         const r = await client.query('SELECT id, full_name, username, role, created_at FROM users ORDER BY id')
@@ -156,7 +72,7 @@ export default async function handler(req, res) {
         const { full_name, username, pin, role } = req.body || {}
         if (!full_name || !username || !pin) return err(res, 'Full name, username and 4-digit PIN required')
         if (String(pin).length !== 4) return err(res, 'PIN must be exactly 4 digits')
-        
+
         const cleanUser = String(username).toLowerCase().trim()
         const existing = await client.query('SELECT id FROM users WHERE username = $1', [cleanUser])
         if (existing.rows.length > 0) return err(res, 'Username already exists', 409)
@@ -165,12 +81,10 @@ export default async function handler(req, res) {
           `INSERT INTO users (full_name, username, pin, role) VALUES ($1, $2, $3, $4) RETURNING id, full_name, username, role, created_at`,
           [full_name.trim(), cleanUser, String(pin), role || 'operator']
         )
-        
         await client.query(
           `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, 'CREATE_USER', $3)`,
           [userId ? Number(userId) : null, currentOperator || 'system', `Created staff account: @${cleanUser} (${role || 'operator'})`]
         )
-
         return ok(res, { user: r.rows[0] }, 201)
       }
 
@@ -189,14 +103,13 @@ export default async function handler(req, res) {
           `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, 'RESET_PIN', $3)`,
           [userId ? Number(userId) : null, currentOperator || 'system', `Reset security PIN for user @${targetUsername}`]
         )
-
         return ok(res, { success: true, message: 'PIN updated successfully' })
       }
 
       if (req.method === 'DELETE') {
         const id = req.query.id
         if (!id) return err(res, 'User ID required', 400)
-        
+
         const targetUserR = await client.query('SELECT username FROM users WHERE id = $1', [Number(id)])
         const targetUsername = targetUserR.rows[0]?.username || `#${id}`
 
@@ -212,3 +125,126 @@ export default async function handler(req, res) {
     return err(res, 'Invalid auth endpoint or method', 400)
   })
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// handleLogin — SaaS-aware, no headers required
+//
+// Username convention: <slug>_<role>@<user_id>  e.g.  hgc_operator@3
+// The slug is parsed from the username, used to look up the tenant schema,
+// and the login query is scoped to that schema. Works for any tenant.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleLogin(pool, req, res) {
+  if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
+  const { username, pin } = req.body || {}
+  if (!username || !pin) return err(res, 'Username and PIN required')
+
+  const cleanUser = String(username).toLowerCase().trim()
+  const cleanPin = String(pin).trim()
+
+  // ── Platform super-admin bypass (no schema) ────────────────────────────────
+  if (cleanUser === 'superadmin' && (cleanPin === '9999' || cleanPin === '1234')) {
+    return ok(res, {
+      user: {
+        id: 0,
+        full_name: 'Platform Super Administrator',
+        username: 'superadmin',
+        role: 'super_admin'
+      }
+    })
+  }
+
+  // ── Trial / sandbox user bypass ────────────────────────────────────────────
+  if (cleanUser === 'trial' && cleanPin === '0000') {
+    const { getTenantClient, DEMO_SANDBOX_SCHEMA, provisionDemoSandbox } = await import('./_tenant.js')
+    const client2 = await pool.connect()
+    try {
+      await client2.query(`SET search_path TO "${DEMO_SANDBOX_SCHEMA}", public`)
+      const r = await client2.query(
+        `SELECT id, full_name, username, role, status FROM users WHERE username = 'trial' AND pin = '0000' LIMIT 1`
+      )
+      if (r.rows.length === 0) {
+        // Provision sandbox first time
+        client2.release()
+        await provisionDemoSandbox(pool)
+        // Re-fetch
+        const client3 = await pool.connect()
+        await client3.query(`SET search_path TO "${DEMO_SANDBOX_SCHEMA}", public`)
+        const r2 = await client3.query(
+          `SELECT id, full_name, username, role FROM users WHERE username = 'trial' LIMIT 1`
+        )
+        client3.release()
+        const trialUser = r2.rows[0] || { id: 0, full_name: 'Demo Operator', username: 'trial', role: 'admin' }
+        return ok(res, { user: { ...trialUser, schema_name: DEMO_SANDBOX_SCHEMA } })
+      }
+      return ok(res, { user: { ...r.rows[0], schema_name: DEMO_SANDBOX_SCHEMA } })
+    } finally {
+      try { client2.release() } catch {}
+    }
+  }
+
+  // ── Parse slug from username: hgc_operator@3 → 'hgc' ─────────────────────
+  const slugMatch = cleanUser.match(/^([a-z0-9]+)_/)
+  if (!slugMatch) {
+    return err(res, 'Invalid username. Use the handle assigned by your admin (e.g. hgc_operator@3).', 401)
+  }
+  const slug = slugMatch[1]
+
+  // ── Resolve schema from slug ───────────────────────────────────────────────
+  let schemaName
+  try {
+    const tenantR = await pool.query(
+      `SELECT schema_name, status FROM public.tenants WHERE slug = $1 LIMIT 1`,
+      [slug]
+    )
+    if (tenantR.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
+    if (tenantR.rows[0].status === 'suspended') {
+      return err(res, 'This organization account is suspended. Contact support.', 403)
+    }
+    schemaName = tenantR.rows[0].schema_name
+  } catch {
+    return err(res, 'Unable to reach the server. Please try again.', 500)
+  }
+
+  // ── Query the correct tenant schema ───────────────────────────────────────
+  const client = await pool.connect()
+  try {
+    await client.query(`SET search_path TO "${schemaName}", public`)
+
+    // Patch missing columns defensively (safe no-op if already exist)
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'active';
+    `).catch(() => {})
+
+    const result = await client.query(
+      `SELECT id, full_name, username, COALESCE(role, 'staff') AS role, COALESCE(status, 'active') AS status
+       FROM users
+       WHERE username = $1 AND pin = $2
+       LIMIT 1`,
+      [cleanUser, cleanPin]
+    )
+
+    if (result.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
+    const user = result.rows[0]
+    if (user.status === 'suspended') {
+      return err(res, 'Account suspended. Contact your cafe administrator.', 403)
+    }
+
+    // Record login
+    await client.query(
+      `INSERT INTO operator_sessions (user_id, username) VALUES ($1, $2)`,
+      [user.id, user.username]
+    ).catch(() => {})
+    await client.query(
+      `INSERT INTO audit_logs (user_id, username, action, details) VALUES ($1, $2, 'LOGIN', $3)`,
+      [user.id, user.username, `Operator signed in: @${user.username} (${user.full_name})`]
+    ).catch(() => {})
+
+    // Return schema_name so frontend stores it for subsequent requests
+    return ok(res, { user: { ...user, schema_name: schemaName } })
+  } catch {
+    return err(res, 'Unable to reach the server. Please try again.', 500)
+  } finally {
+    client.release()
+  }
+}
+

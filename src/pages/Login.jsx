@@ -27,14 +27,6 @@ export default function Login() {
   const { user: clerkUser, isSignedIn, isLoaded } = useUser()
   const navigate = useNavigate()
 
-  // Bootstrap tenant schema into localStorage so PIN login always sends x-tenant-schema header.
-  // VITE_DEFAULT_TENANT_SCHEMA is set per-deployment (e.g. 'tenant_hgc').
-  useEffect(() => {
-    const defaultSchema = import.meta.env.VITE_DEFAULT_TENANT_SCHEMA
-    if (defaultSchema && !localStorage.getItem('nexus_tenant_schema')) {
-      localStorage.setItem('nexus_tenant_schema', defaultSchema)
-    }
-  }, [])
 
   useEffect(() => {
     if (isLoaded && isSignedIn && clerkUser && !user) {
@@ -150,14 +142,18 @@ export default function Login() {
     setError('')
     try {
       const data = await api.post('/auth-login', { username: targetUser, pin: pinStr })
+      // Store schema from login response so all subsequent API calls carry x-tenant-schema header
+      if (data.user?.schema_name) {
+        localStorage.setItem('nexus_tenant_schema', data.user.schema_name)
+      }
       login(data.user)
       if (data.user?.role === 'super_admin') {
         navigate('/super-admin')
       } else {
         navigate('/')
       }
-    } catch (err) {
-      setError(err.message || 'Invalid username or PIN')
+    } catch (e) {
+      setError(e.message || 'Invalid username or PIN')
     } finally {
       setLoading(false)
     }
