@@ -16,6 +16,34 @@ function calculateDynamicTariff(hourlyRate, durationMins) {
   return total
 }
 
+/**
+ * Post a single entry to customer_ledger and update running_balance.
+ * Safe no-op if the table doesn't exist yet (pre-migration).
+ * @param {object} client  - pg transaction client
+ * @param {object} entry   - { customer_id, module, reference_id, reference_module, amount, description, created_by }
+ */
+async function postLedger(client, entry) {
+  if (!entry.customer_id) return
+  try {
+    await client.query(
+      `INSERT INTO customer_ledger
+         (customer_id, module, reference_id, reference_module, amount, description, running_balance, created_by)
+       SELECT $1, $2, $3, $4, $5, $6,
+         COALESCE((SELECT running_balance FROM customer_ledger WHERE customer_id = $1 ORDER BY id DESC LIMIT 1), 0) + $5,
+         $7`,
+      [
+        entry.customer_id, entry.module, entry.reference_id ?? null,
+        entry.reference_module ?? null, entry.amount, entry.description,
+        entry.created_by ?? null
+      ]
+    )
+  } catch (e) {
+    // Table may not exist yet on first deploy — fail silently so existing
+    // session flows are never blocked
+    if (!e.message?.includes('customer_ledger')) throw e
+  }
+}
+
 export default async function handler(req, res) {
   const pool = getPool()
   const userId = req.headers['x-user-id']
@@ -47,9 +75,9 @@ export default async function handler(req, res) {
 
       await client.query('BEGIN')
       try {
-        await client.query(
+        const payR = await client.query(
           `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by, created_at)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
+           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
           [sessionId, amt, method, b.note || null, userId || null, paymentCreatedAt]
         )
         const updated = await client.query(
@@ -57,36 +85,59 @@ export default async function handler(req, res) {
            SET payment_received = COALESCE(payment_received, 0) + $1,
                credit = GREATEST(0, credit - $1)
            WHERE id = $2
-           RETURNING payment_received, credit`,
+           RETURNING customer_id, payment_received, credit`,
           [amt, sessionId]
         )
         if (updated.rowCount === 0) {
           await client.query('ROLLBACK')
           return err(res, 'Session not found', 404)
         }
+        // Post to customer ledger (payment = negative amount)
+        await postLedger(client, {
+          customer_id:      updated.rows[0].customer_id,
+          module:           'payment',
+          reference_id:     payR.rows[0].id,
+          reference_module: 'session_payments',
+          amount:           -amt,
+          description:      `Payment for Session #${sessionId} (${method})`,
+          created_by:       userId || null
+        })
         await client.query('COMMIT')
-        return ok(res, { success: true, ...updated.rows[0] })
+        return ok(res, { success: true, payment_received: updated.rows[0].payment_received, credit: updated.rows[0].credit })
       } catch (e) {
         await client.query('ROLLBACK')
         throw e
       }
     }
 
-    // ─── Route: /api/sessions/:id/extend ─────────────────────────
-    const extendMatch = subPath.match(/(\d+)\/extend/) || rawUrl.match(/\/sessions\/(\d+)\/extend/)
-    if (extendMatch && req.method === 'PATCH') {
-      const sessionId = Number(extendMatch[1])
+    // ─── Route: /api/sessions/:id/adjust ─────────────────────────
+    // Unified time adjustment: supports extend (delta_mins > 0) and
+    // reduce (delta_mins < 0) with 10-minute slot leeway validation.
+    // Legacy /extend route is aliased here for backward compat.
+    const adjustMatch  = subPath.match(/(\d+)\/adjust/)  || rawUrl.match(/\/sessions\/(\d+)\/adjust/)
+    const legacyExtend = subPath.match(/(\d+)\/extend/)  || rawUrl.match(/\/sessions\/(\d+)\/extend/)
+    if ((adjustMatch || legacyExtend) && req.method === 'PATCH') {
+      const sessionId = Number((adjustMatch || legacyExtend)[1])
       const b = req.body || {}
-      const packets = Number(b.packets) || 1
-      const extraMins = packets * 30
+
+      // Legacy /extend used `packets` (multiples of 30); /adjust uses delta_mins directly
+      const deltaMins = legacyExtend && b.packets !== undefined
+        ? (Number(b.packets) || 1) * 30
+        : Number(b.delta_mins)
+
+      if (!deltaMins || deltaMins === 0 || deltaMins % 30 !== 0) {
+        return err(res, 'delta_mins must be a non-zero multiple of 30', 400)
+      }
+
       const collectNow = Number(b.collect_now) || 0
-      const payMethod = b.payment_method || 'cash'
+      const payMethod  = b.payment_method || 'cash'
+      const isReduce   = deltaMins < 0
 
       await client.query('BEGIN')
       try {
         const sessR = await client.query(
-          `SELECT s.*, d.type AS device_type FROM sessions s
-           JOIN devices d ON d.id = s.device_id WHERE s.id = $1`,
+          `SELECT s.*, d.type AS device_type, d.label AS device_label
+           FROM sessions s JOIN devices d ON d.id = s.device_id WHERE s.id = $1`,
           [sessionId]
         )
         if (sessR.rowCount === 0) {
@@ -94,17 +145,51 @@ export default async function handler(req, res) {
           return err(res, 'Session not found', 404)
         }
         const sess = sessR.rows[0]
-        const newDuration = Number(sess.duration_mins) + extraMins
-        const newTimeOut = new Date(new Date(sess.time_out).getTime() + extraMins * 60000).toISOString()
+        const now = new Date()
 
-        const priceR = await client.query(
-          `SELECT price FROM pricing WHERE device_type = $1 AND duration_mins = $2`,
-          [sess.device_type, newDuration]
-        )
-        let newCharge
-        if (priceR.rowCount > 0) {
-          newCharge = Number(priceR.rows[0].price)
-        } else {
+        // ── Validation 1: session must still be active ──────────
+        if (new Date(sess.time_out) <= now) {
+          await client.query('ROLLBACK')
+          return err(res, 'Session has already ended — adjustments not allowed', 400)
+        }
+
+        // ── Validation 2: new time_out must be in the future ────
+        const newTimeOut = new Date(new Date(sess.time_out).getTime() + deltaMins * 60000)
+        if (newTimeOut <= now) {
+          await client.query('ROLLBACK')
+          return err(res, 'Reduction would set time-out in the past', 400)
+        }
+
+        // ── Validation 3: new duration must be at least 30 mins ─
+        const newDuration = Number(sess.duration_mins) + deltaMins
+        if (newDuration < 30) {
+          await client.query('ROLLBACK')
+          return err(res, 'Session duration cannot go below 30 minutes', 400)
+        }
+
+        // ── Validation 4 (reduce only): 10-minute slot leeway ───
+        // A slot is 30 mins. Leeway = how many minutes into the current slot
+        // the client has been playing. If >= 10, that slot is "consumed".
+        if (isReduce) {
+          const timeIn = new Date(sess.time_in)
+          const elapsedMins = (now - timeIn) / 60000
+          const elapsedInCurrentSlot = elapsedMins % 30
+          if (elapsedInCurrentSlot >= 10) {
+            await client.query('ROLLBACK')
+            return err(res,
+              `Cannot reduce: client has used ${Math.floor(elapsedInCurrentSlot)} min of the current 30-min slot (leeway is 10 min)`,
+              400
+            )
+          }
+        }
+
+        // ── Pricing ─────────────────────────────────────────────
+        const resolveCharge = async (duration) => {
+          const priceR = await client.query(
+            `SELECT price FROM pricing WHERE device_type = $1 AND duration_mins = $2`,
+            [sess.device_type, duration]
+          )
+          if (priceR.rowCount > 0) return Number(priceR.rows[0].price)
           const oneHrR = await client.query(
             `SELECT price FROM pricing WHERE device_type = $1 AND duration_mins = 60`,
             [sess.device_type]
@@ -112,41 +197,109 @@ export default async function handler(req, res) {
           const hRate = oneHrR.rowCount > 0
             ? Number(oneHrR.rows[0].price)
             : (sess.device_type === 'PC' ? 70 : sess.device_type === 'XBOX' ? 100 : 120)
-          newCharge = calculateDynamicTariff(hRate, newDuration)
+          return calculateDynamicTariff(hRate, duration)
         }
 
-        const newTotal = newCharge + Number(sess.controller_total) + Number(sess.extra_person_total)
-        const additionalCharge = newTotal - Number(sess.total)
+        const oldCharge = Number(sess.charge)
+        const newCharge = await resolveCharge(newDuration)
+        const deltaCharge = newCharge - oldCharge   // negative = refund
 
-        let newPaymentReceived = Number(sess.payment_received || 0) + collectNow
-        let newCredit = Math.max(0, newTotal - newPaymentReceived)
+        const newTotal = newCharge + Number(sess.controller_total || 0) + Number(sess.extra_person_total || 0)
+
+        // For reductions: lower payment_received if bill is unsettled (most common).
+        // For extensions: add collectNow on top.
+        let newPaymentReceived = Number(sess.payment_received || 0)
+        let newCredit
+
+        if (isReduce) {
+          // If client was overcharged, reduce payment_received proportionally
+          // (but never below 0) and let credit = 0 since bill is lowered
+          newPaymentReceived = Math.min(newPaymentReceived, newTotal)
+          newCredit = Math.max(0, newTotal - newPaymentReceived)
+        } else {
+          newPaymentReceived = newPaymentReceived + collectNow
+          newCredit = Math.max(0, newTotal - newPaymentReceived)
+        }
 
         const updated = await client.query(
           `UPDATE sessions SET
              duration_mins = $1, time_out = $2, charge = $3, total = $4,
              payment_received = $5, credit = $6
            WHERE id = $7
-           RETURNING duration_mins, time_out, charge, total, payment_received, credit`,
-          [newDuration, newTimeOut, newCharge, newTotal, newPaymentReceived, newCredit, sessionId]
+           RETURNING duration_mins, time_out, charge, total, payment_received, credit, customer_id`,
+          [newDuration, newTimeOut.toISOString(), newCharge, newTotal, newPaymentReceived, newCredit, sessionId]
         )
 
-        if (collectNow > 0) {
+        // ── session_payments entry (extension payment collected now) ─
+        if (!isReduce && collectNow > 0) {
           const todayStr = (new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-          const sessDateStr = sess.date ? (typeof sess.date === 'string' ? sess.date : sess.date.toISOString().slice(0, 10)) : todayStr
-          const isPredated = sessDateStr < todayStr
-          const paymentCreatedAt = isPredated
+          const sessDateStr = sess.date
+            ? (typeof sess.date === 'string' ? sess.date : sess.date.toISOString().slice(0, 10))
+            : todayStr
+          const payCreatedAt = sessDateStr < todayStr
             ? (sess.time_in ? new Date(sess.time_in).toISOString() : new Date(`${sessDateStr}T12:00:00+05:30`).toISOString())
             : new Date().toISOString()
 
-          await client.query(
+          const payR = await client.query(
             `INSERT INTO session_payments (session_id, amount, payment_method, note, created_by, created_at)
-             VALUES ($1,$2,$3,$4,$5,$6)`,
-            [sessionId, collectNow, payMethod, `Extension +${extraMins}min`, userId || null, paymentCreatedAt]
+             VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+            [sessionId, collectNow, payMethod, `Time extension +${deltaMins} min`, userId || null, payCreatedAt]
           )
+          await postLedger(client, {
+            customer_id:      updated.rows[0].customer_id,
+            module:           'payment',
+            reference_id:     payR.rows[0].id,
+            reference_module: 'session_payments',
+            amount:           -collectNow,
+            description:      `Payment for Session #${sessionId} extension (${payMethod})`,
+            created_by:       userId || null
+          })
         }
 
+        // ── Ledger adjustment entry for the charge delta ─────────
+        if (deltaCharge !== 0) {
+          await postLedger(client, {
+            customer_id:      updated.rows[0].customer_id,
+            module:           'adjustment',
+            reference_id:     sessionId,
+            reference_module: 'sessions',
+            amount:           deltaCharge,
+            description:      isReduce
+              ? `Time reduction −${Math.abs(deltaMins)} min on Session #${sessionId} (refund −₹${Math.abs(deltaCharge)})`
+              : `Time extension +${deltaMins} min on Session #${sessionId} (+₹${deltaCharge})`,
+            created_by:       userId || null
+          })
+        }
+
+        // ── Audit log ────────────────────────────────────────────
+        await client.query(
+          `INSERT INTO audit_logs (user_id, username, action, module, details, metadata)
+           VALUES ($1,$2,$3,'sessions',$4,$5)`,
+          [
+            userId ? Number(userId) : null,
+            req.headers['x-username'] || 'staff',
+            isReduce ? 'SESSION_REDUCE' : 'SESSION_EXTEND',
+            `${isReduce ? 'Reduced' : 'Extended'} session #${sessionId} by ${Math.abs(deltaMins)} min | ` +
+              `${sess.device_label} | Δcharge: ${deltaCharge >= 0 ? '+' : ''}₹${deltaCharge}`,
+            JSON.stringify({
+              sessionId,
+              delta_mins:   deltaMins,
+              delta_charge: deltaCharge,
+              before: { duration_mins: sess.duration_mins, time_out: sess.time_out, charge: oldCharge, total: sess.total },
+              after:  { duration_mins: newDuration, time_out: newTimeOut.toISOString(), charge: newCharge, total: newTotal },
+              collect_now: collectNow,
+              adjusted_at: now.toISOString()
+            })
+          ]
+        )
+
         await client.query('COMMIT')
-        return ok(res, { success: true, additional_charge: additionalCharge, ...updated.rows[0] })
+        return ok(res, {
+          success:          true,
+          delta_mins:       deltaMins,
+          delta_charge:     deltaCharge,
+          ...updated.rows[0]
+        })
       } catch (e) {
         await client.query('ROLLBACK')
         throw e
@@ -272,7 +425,7 @@ export default async function handler(req, res) {
     const idMatch = subPath.match(/^(\d+)(\?|$)/) || rawUrl.match(/\/sessions\/(\d+)(\?|$)/)
     const sessionId = idMatch ? Number(idMatch[1]) : queryId
 
-    if (sessionId && !subPath.includes('payments') && !subPath.includes('extend') && !subPath.includes('end-early') && !subPath.includes('switch-station') && !rawUrl.includes('/payments') && !rawUrl.includes('/extend') && !rawUrl.includes('/end-early') && !rawUrl.includes('/switch-station')) {
+    if (sessionId && !subPath.includes('payments') && !subPath.includes('extend') && !subPath.includes('adjust') && !subPath.includes('end-early') && !subPath.includes('switch-station') && !rawUrl.includes('/payments') && !rawUrl.includes('/extend') && !rawUrl.includes('/adjust') && !rawUrl.includes('/end-early') && !rawUrl.includes('/switch-station')) {
 
 
       if (req.method === 'GET') {
@@ -731,6 +884,31 @@ export default async function handler(req, res) {
           ]
         )
 
+
+        // ── Customer ledger: session charge entry ────────────────
+        if (cid) {
+          await postLedger(client, {
+            customer_id:      cid,
+            module:           'session',
+            reference_id:     sessionId,
+            reference_module: 'sessions',
+            amount:           fullBill,
+            description:      `Session #${sessionId} — ${duration_mins} min`,
+            created_by:       userId || null
+          })
+          // If payment was made at booking, record it as a negative ledger entry
+          if (finalPayment > 0) {
+            await postLedger(client, {
+              customer_id:      cid,
+              module:           'payment',
+              reference_id:     sessionId,
+              reference_module: 'sessions',
+              amount:           -finalPayment,
+              description:      `Initial payment for Session #${sessionId} (${finalMethod})`,
+              created_by:       userId || null
+            })
+          }
+        }
 
         await client.query('COMMIT')
         return ok(res, { id: sessionId, is_predated: isPredated }, 201)

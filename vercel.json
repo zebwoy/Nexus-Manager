@@ -18,6 +18,8 @@
     { "source": "/api/profile-changes",       "destination": "/api/setup?resource=profile-changes" },
     { "source": "/api/profile-changes/(.*)",  "destination": "/api/setup?resource=profile-changes&id=$1" },
 
+    { "source": "/api/customers/:id/ledger",  "destination": "/api/inventory?resource=customers&id=:id&action=ledger" },
+    { "source": "/api/customers/:id/settle",  "destination": "/api/inventory?resource=customers&id=:id&action=settle" },
     { "source": "/api/customers",             "destination": "/api/inventory?resource=customers" },
     { "source": "/api/customers/(.*)",        "destination": "/api/inventory?resource=customers&id=$1" },
     { "source": "/api/expenses",              "destination": "/api/inventory?resource=expenses" },

@@ -128,6 +128,105 @@ export default async function handler(req, res) {
         return ok(res, { customers: r.rows })
       }
 
+      // ─── GET /customers/:id/ledger ──────────────────────────────
+      const customerId = req.query.id ? Number(req.query.id) : null
+      const action = req.query.action
+
+      if (customerId && action === 'ledger' && req.method === 'GET') {
+        const [custR, ledgerR] = await Promise.all([
+          client.query(`SELECT * FROM customers WHERE id = $1`, [customerId]),
+          client.query(
+            `SELECT cl.*, u.username AS created_by_username
+             FROM customer_ledger cl
+             LEFT JOIN users u ON u.id = cl.created_by
+             WHERE cl.customer_id = $1
+             ORDER BY cl.id DESC`,
+            [customerId]
+          )
+        ])
+        if (custR.rowCount === 0) return err(res, 'Customer not found', 404)
+
+        const entries = ledgerR.rows
+        const totalCharged = entries.filter(e => e.amount > 0).reduce((s, e) => s + Number(e.amount), 0)
+        const totalPaid    = entries.filter(e => e.amount < 0).reduce((s, e) => s + Math.abs(Number(e.amount)), 0)
+        const balance      = entries.length > 0 ? Number(entries[0].running_balance) : 0
+
+        return ok(res, {
+          customer: custR.rows[0],
+          ledger:   entries,
+          summary: {
+            total_charged: totalCharged,
+            total_paid:    totalPaid,
+            balance,          // positive = owes cafe, negative = cafe owes customer
+            entry_count: entries.length
+          }
+        })
+      }
+
+      // ─── POST /customers/:id/settle ─────────────────────────────
+      // Lump-sum payment from a customer that applies across open items.
+      // Posts a single negative ledger entry; running_balance auto-updates.
+      if (customerId && action === 'settle' && req.method === 'POST') {
+        const b = req.body || {}
+        const amount = Number(b.amount)
+        if (!amount || amount <= 0) return err(res, 'Amount must be positive', 400)
+        const method = b.payment_method || 'cash'
+        const note   = b.note || null
+
+        const custR = await client.query(`SELECT * FROM customers WHERE id = $1`, [customerId])
+        if (custR.rowCount === 0) return err(res, 'Customer not found', 404)
+
+        await client.query('BEGIN')
+        try {
+          await client.query(
+            `INSERT INTO customer_ledger
+               (customer_id, module, reference_id, reference_module, amount, description, running_balance, created_by, note)
+             SELECT $1, 'payment', NULL, 'manual_settle', $2,
+               $3,
+               COALESCE((SELECT running_balance FROM customer_ledger WHERE customer_id = $1 ORDER BY id DESC LIMIT 1), 0) + $2,
+               $4, $5`,
+            [
+              customerId, -amount,
+              `Manual settlement — ${custR.rows[0].name} (${method})`,
+              userId || null, note
+            ]
+          )
+          await client.query(
+            `INSERT INTO audit_logs (user_id, username, action, module, details, metadata)
+             VALUES ($1,$2,'CUSTOMER_SETTLE','customers',$3,$4)`,
+            [
+              userId ? Number(userId) : null,
+              req.headers?.['x-username'] || 'staff',
+              `Settled ₹${amount} for customer #${customerId} (${custR.rows[0].name})`,
+              JSON.stringify({ customerId, amount, method, note })
+            ]
+          )
+          await client.query('COMMIT')
+
+          const balR = await client.query(
+            `SELECT running_balance FROM customer_ledger WHERE customer_id = $1 ORDER BY id DESC LIMIT 1`,
+            [customerId]
+          )
+          return ok(res, {
+            success: true,
+            amount_settled: amount,
+            new_balance: balR.rows[0]?.running_balance ?? 0
+          })
+        } catch (e) {
+          await client.query('ROLLBACK')
+          throw e
+        }
+      }
+
+      // ─── GET /customers/:id/balance (quick balance check) ───────
+      if (customerId && action === 'balance' && req.method === 'GET') {
+        const balR = await client.query(
+          `SELECT running_balance FROM customer_ledger WHERE customer_id = $1 ORDER BY id DESC LIMIT 1`,
+          [customerId]
+        )
+        return ok(res, { balance: Number(balR.rows[0]?.running_balance ?? 0) })
+      }
+
       if (req.method === 'POST') {
         const b = req.body || {}
         const { name, mobile, shop_name, pancafe_username, address, client_type } = b

@@ -1,6 +1,26 @@
 import { getPool, ok, err } from './_db.js'
 import { withTenantClient } from './_tenant.js'
 
+async function postLedger(client, entry) {
+  if (!entry.customer_id) return
+  try {
+    await client.query(
+      `INSERT INTO customer_ledger
+         (customer_id, module, reference_id, reference_module, amount, description, running_balance, created_by)
+       SELECT $1, $2, $3, $4, $5, $6,
+         COALESCE((SELECT running_balance FROM customer_ledger WHERE customer_id = $1 ORDER BY id DESC LIMIT 1), 0) + $5,
+         $7`,
+      [
+        entry.customer_id, entry.module, entry.reference_id ?? null,
+        entry.reference_module ?? null, entry.amount, entry.description,
+        entry.created_by ?? null
+      ]
+    )
+  } catch (e) {
+    if (!e.message?.includes('customer_ledger')) throw e
+  }
+}
+
 export default async function handler(req, res) {
   const pool = getPool()
   const rawUserId = req.headers['x-user-id']
@@ -126,6 +146,33 @@ export default async function handler(req, res) {
         )
 
         await client.query('COMMIT')
+
+        // ── Customer ledger ──────────────────────────────────────────
+        if (cid) {
+          const chargePrice = Number(charge_price)
+          const payReceived = r.rows[0].payment_received !== null ? Number(r.rows[0].payment_received) : chargePrice
+          await postLedger(client, {
+            customer_id:      cid,
+            module:           'recharge',
+            reference_id:     r.rows[0].id,
+            reference_module: 'recharges',
+            amount:           chargePrice,
+            description:      `Recharge — ${game_platform || 'Platform'} #${r.rows[0].id}`,
+            created_by:       userId
+          })
+          if (payReceived > 0) {
+            await postLedger(client, {
+              customer_id:      cid,
+              module:           'payment',
+              reference_id:     r.rows[0].id,
+              reference_module: 'recharges',
+              amount:           -payReceived,
+              description:      `Payment for Recharge #${r.rows[0].id} (${payment_method || 'cash'})`,
+              created_by:       userId
+            })
+          }
+        }
+
         return ok(res, { recharge: r.rows[0] }, 201)
       } catch (e) {
         await client.query('ROLLBACK')

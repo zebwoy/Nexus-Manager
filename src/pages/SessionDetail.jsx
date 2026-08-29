@@ -83,9 +83,9 @@ export default function SessionDetail() {
   const [collectOnline, setCollectOnline] = useState('')
   const [collectSaving, setCollectSaving] = useState(false)
 
-  // Extension
-  const [extMins, setExtMins] = useState(30)
-  const [extSaving, setExtSaving] = useState(false)
+  // Time adjustment (extend or reduce)
+  const [adjMins, setAdjMins] = useState(30)   // positive = extend, negative = reduce
+  const [adjSaving, setAdjSaving] = useState(false)
 
   // Right slide panel
   const [panelOpen, setPanelOpen] = useState(false)
@@ -255,13 +255,6 @@ export default function SessionDetail() {
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
   const creditRemaining = Math.max(0, grandTotal - totalPaid)
 
-  // Extension preview
-  const currentEnd = s.time_out ? new Date(s.time_out) : new Date()
-  const newEnd = addMinutes(currentEnd, extMins)
-  const newEndTimeStr = newEnd.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-  const perMinRate = Number(s.charge) / Number(s.duration_mins || 60)
-  const extCharge = perMinRate * extMins
-  const newOutstanding = creditRemaining + extCharge
 
   // Cart helpers
   const addToCart = (item) => setCart(c => {
@@ -359,18 +352,19 @@ export default function SessionDetail() {
     finally { setCollectSaving(false) }
   }
 
-  const handleExtend = async () => {
-    setExtSaving(true)
+  const handleAdjust = async () => {
+    setAdjSaving(true)
     try {
-      await api.patch(`/sessions/${id}/extend`, {
-        packets: extMins / 30,
+      const result = await api.patch(`/sessions/${id}/adjust`, {
+        delta_mins: adjMins,
         payment_method: 'cash'
       })
-      toast.success(`Extended by ${extMins} mins`)
+      const verb = adjMins > 0 ? `Extended +${adjMins}m` : `Reduced ${adjMins}m`
+      toast.success(`${verb} · Δ${result.delta_charge >= 0 ? '+' : ''}₹${result.delta_charge}`)
       setPanelOpen(false)
       load()
     } catch (e) { setError(e.message) }
-    finally { setExtSaving(false) }
+    finally { setAdjSaving(false) }
   }
 
   const handleWhatsAppReceipt = () => {
@@ -700,26 +694,127 @@ export default function SessionDetail() {
           </div>
         </PanelSection>
 
-        {isActive && (
-          <PanelSection title="Extend Station Time" icon={<Clock size={15} />}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem' }}>
-                {[30, 60, 90].map(mins => (
-                  <button key={mins} onClick={() => setExtMins(mins)}
-                    className={extMins === mins ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'} style={{ padding: '0.4rem' }}>
-                    +{mins}m
-                  </button>
-                ))}
+        {isActive && (() => {
+          const now = new Date()
+          const timeIn = s.time_in ? new Date(s.time_in) : now
+          const elapsedMins = (now - timeIn) / 60000
+          const elapsedInSlot = elapsedMins % 30
+          const canReduce = elapsedInSlot < 10
+
+          // Price delta preview
+          const currentEnd = s.time_out ? new Date(s.time_out) : now
+          const newEnd = new Date(currentEnd.getTime() + adjMins * 60000)
+          const newEndStr = newEnd.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+          const perMinRate = Number(s.charge) / Number(s.duration_mins || 60)
+          // Approximate delta — server will use exact pricing table
+          const approxDelta = Math.round(perMinRate * adjMins)
+          const isReduce = adjMins < 0
+
+          return (
+            <PanelSection title="Adjust Session Time" icon={<Clock size={15} />}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+
+                {/* Reduce / Extend chip row */}
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  {/* Reduce side */}
+                  <div style={{ display: 'flex', gap: '0.3rem', flex: 1 }}>
+                    {[-90, -60, -30].map(mins => {
+                      const disabled = !canReduce
+                      return (
+                        <button key={mins}
+                          onClick={() => !disabled && setAdjMins(mins)}
+                          disabled={disabled}
+                          title={disabled ? `Leeway exceeded (${Math.floor(elapsedInSlot)}m into slot)` : `Reduce by ${Math.abs(mins)}m`}
+                          style={{
+                            flex: 1, padding: '0.35rem 0', borderRadius: '8px', fontSize: '0.75rem',
+                            fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
+                            border: `1.5px solid ${adjMins === mins ? 'var(--danger)' : 'var(--border)'}`,
+                            background: adjMins === mins ? 'rgba(239,68,68,0.12)' : 'var(--bg-input)',
+                            color: disabled ? 'var(--text-faint)' : adjMins === mins ? 'var(--danger)' : 'var(--text-muted)',
+                            opacity: disabled ? 0.45 : 1,
+                            transition: 'all 0.12s'
+                          }}>
+                          {mins}m
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Divider */}
+                  <div style={{ width: '1px', height: '28px', background: 'var(--border)', flexShrink: 0 }} />
+
+                  {/* Extend side */}
+                  <div style={{ display: 'flex', gap: '0.3rem', flex: 1 }}>
+                    {[30, 60, 90].map(mins => (
+                      <button key={mins}
+                        onClick={() => setAdjMins(mins)}
+                        style={{
+                          flex: 1, padding: '0.35rem 0', borderRadius: '8px', fontSize: '0.75rem',
+                          fontWeight: 700, cursor: 'pointer',
+                          border: `1.5px solid ${adjMins === mins ? 'var(--accent)' : 'var(--border)'}`,
+                          background: adjMins === mins ? 'var(--accent-dim)' : 'var(--bg-input)',
+                          color: adjMins === mins ? 'var(--accent-text)' : 'var(--text-muted)',
+                          transition: 'all 0.12s'
+                        }}>
+                        +{mins}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Labels */}
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-faint)', fontWeight: 600 }}>REDUCE</span>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-faint)', fontWeight: 600 }}>EXTEND</span>
+                </div>
+
+                {/* Leeway warning */}
+                {!canReduce && (
+                  <div style={{
+                    padding: '0.45rem 0.65rem', borderRadius: '8px',
+                    background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
+                    fontSize: '0.7rem', color: '#b45309', fontWeight: 600, display: 'flex', gap: '0.35rem'
+                  }}>
+                    ⚠ Reduction locked — {Math.floor(elapsedInSlot)}m into current slot (10m leeway)
+                  </div>
+                )}
+
+                {/* Preview */}
+                <div style={{
+                  padding: '0.6rem 0.75rem', borderRadius: '10px',
+                  background: 'var(--bg-input)', border: '1px solid var(--border)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>New end time</span>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text)', fontFamily: "'JetBrains Mono', monospace" }}>{newEndStr}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.3rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Est. charge Δ</span>
+                    <span style={{
+                      fontSize: '0.8rem', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace",
+                      color: isReduce ? 'var(--danger)' : 'var(--success)'
+                    }}>
+                      {isReduce ? '−' : '+'}₹{Math.abs(approxDelta)}{isReduce ? ' refund' : ''}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleAdjust}
+                  disabled={adjSaving || (isReduce && !canReduce)}
+                  className={isReduce ? 'btn-danger' : 'btn-primary'}
+                  style={{ width: '100%' }}>
+                  {adjSaving
+                    ? 'Applying...'
+                    : isReduce
+                      ? `Confirm −${Math.abs(adjMins)}m Reduction`
+                      : `Confirm +${adjMins}m Extension`
+                  }
+                </button>
               </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                New Time Out: <strong>{newEndTimeStr}</strong> (+{formatRupees(extCharge)})
-              </p>
-              <button onClick={handleExtend} disabled={extSaving} className="btn-primary" style={{ width: '100%' }}>
-                {extSaving ? 'Extending...' : `Confirm +${extMins}m Extension`}
-              </button>
-            </div>
-          </PanelSection>
-        )}
+            </PanelSection>
+          )
+        })()}
       </SlidePanel>
 
       {/* Header */}
