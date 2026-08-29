@@ -321,16 +321,29 @@ export default async function handler(req, res) {
       if (req.method === 'GET') {
         // Auto-sync real organization name and admin email from public.tenants if available
         try {
-          const tRes = await pool.query('SELECT name, admin_email FROM public.tenants WHERE schema_name = $1', [schemaName])
+          const tRes = await pool.query('SELECT name, logo_url, admin_email FROM public.tenants WHERE schema_name = $1', [schemaName])
           if (tRes.rows.length > 0 && tRes.rows[0].name) {
             const orgName = tRes.rows[0].name
+            const orgLogo = tRes.rows[0].logo_url
             const curSetting = await client.query("SELECT value FROM settings WHERE key = 'cafe_name'")
-            if (curSetting.rows.length === 0 || curSetting.rows[0].value === 'Nexus Gaming Lounge' || !curSetting.rows[0].value) {
+            const curValue = curSetting.rows[0]?.value
+            const placeholderNames = ['Nexus Gaming Lounge', 'Gaming Lounge', 'Nexus Manager', 'Nexus Console', '']
+            if (curSetting.rows.length === 0 || placeholderNames.includes(curValue)) {
               await client.query(`
                 INSERT INTO settings (key, value)
                 VALUES ('cafe_name', $1)
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
               `, [orgName])
+            }
+            if (orgLogo) {
+              const curLogo = await client.query("SELECT value FROM settings WHERE key = 'cafe_logo'")
+              if (curLogo.rows.length === 0 || !curLogo.rows[0].value) {
+                await client.query(`
+                  INSERT INTO settings (key, value)
+                  VALUES ('cafe_logo', $1)
+                  ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                `, [orgLogo])
+              }
             }
           }
         } catch (e) {

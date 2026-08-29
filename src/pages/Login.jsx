@@ -67,6 +67,8 @@ export default function Login() {
               // Store schema so subsequent API calls (including PIN re-login) resolve correctly
               localStorage.setItem('nexus_tenant_schema', org.schema_name)
               localStorage.setItem('nexus_org_id', org.org_id || '')
+              localStorage.setItem('nexus_tenant_name', org.name || '')
+              if (org.logo_url) localStorage.setItem('nexus_tenant_logo', org.logo_url)
               const userData = {
                 id: 1,
                 username: adminUsername,
@@ -87,6 +89,8 @@ export default function Login() {
               // Store schema so PIN login works next time
               localStorage.setItem('nexus_tenant_schema', activeS.schema_name)
               localStorage.setItem('nexus_org_id', activeS.org_id || '')
+              localStorage.setItem('nexus_tenant_name', activeS.tenant_name || '')
+              if (activeS.tenant_logo) localStorage.setItem('nexus_tenant_logo', activeS.tenant_logo)
               const userData = {
                 id: activeS.invite_id || 1,
                 username: operatorUsername,
@@ -142,9 +146,18 @@ export default function Login() {
     setError('')
     try {
       const data = await api.post('/auth-login', { username: targetUser, pin: pinStr })
-      // Store schema from login response so all subsequent API calls carry x-tenant-schema header
+      // Store schema and branding from login response
       if (data.user?.schema_name) {
         localStorage.setItem('nexus_tenant_schema', data.user.schema_name)
+      }
+      if (data.user?.tenant_name) {
+        localStorage.setItem('nexus_tenant_name', data.user.tenant_name)
+      }
+      if (data.user?.tenant_logo) {
+        localStorage.setItem('nexus_tenant_logo', data.user.tenant_logo)
+      }
+      if (data.user?.org_slug) {
+        localStorage.setItem('nexus_org_slug', data.user.org_slug)
       }
       login(data.user)
       if (data.user?.role === 'super_admin') {

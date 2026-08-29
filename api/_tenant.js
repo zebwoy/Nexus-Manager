@@ -680,11 +680,11 @@ export async function resolveTenantSchema(req, pool) {
     return explicitSchema
   }
 
-  // 3. Check for Clerk Org ID or custom x-org-id header
+  // 3. Check for Clerk Org ID or custom x-org-id header (supports Clerk org_id, slug, or schema_name)
   const orgId = req.headers['x-org-id'] || req.query?.org_id
   if (orgId) {
     const res = await pool.query(
-      'SELECT schema_name, status FROM public.tenants WHERE org_id = $1 OR slug = $1',
+      'SELECT schema_name, status FROM public.tenants WHERE org_id = $1 OR slug = $1 OR schema_name = $1',
       [orgId]
     )
     if (res.rows.length > 0) {

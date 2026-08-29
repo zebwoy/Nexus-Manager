@@ -190,17 +190,18 @@ async function handleLogin(pool, req, res) {
   const slug = slugMatch[1]
 
   // ── Resolve schema from slug ───────────────────────────────────────────────
-  let schemaName
+  let tenantInfo = null
   try {
     const tenantR = await pool.query(
-      `SELECT schema_name, status FROM public.tenants WHERE slug = $1 LIMIT 1`,
+      `SELECT name, slug, logo_url, schema_name, status FROM public.tenants WHERE slug = $1 LIMIT 1`,
       [slug]
     )
     if (tenantR.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
     if (tenantR.rows[0].status === 'suspended') {
       return err(res, 'This organization account is suspended. Contact support.', 403)
     }
-    schemaName = tenantR.rows[0].schema_name
+    tenantInfo = tenantR.rows[0]
+    schemaName = tenantInfo.schema_name
   } catch {
     return err(res, 'Unable to reach the server. Please try again.', 500)
   }
@@ -239,8 +240,16 @@ async function handleLogin(pool, req, res) {
       [user.id, user.username, `Operator signed in: @${user.username} (${user.full_name})`]
     ).catch(() => {})
 
-    // Return schema_name so frontend stores it for subsequent requests
-    return ok(res, { user: { ...user, schema_name: schemaName } })
+    // Return tenant info so frontend stores it for branding and header display
+    return ok(res, {
+      user: {
+        ...user,
+        schema_name: schemaName,
+        tenant_name: tenantInfo?.name || '',
+        tenant_logo: tenantInfo?.logo_url || '',
+        org_slug: tenantInfo?.slug || slug
+      }
+    })
   } catch {
     return err(res, 'Unable to reach the server. Please try again.', 500)
   } finally {

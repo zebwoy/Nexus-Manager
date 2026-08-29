@@ -32,14 +32,25 @@ export default function Sidebar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [showSignOutModal, setShowSignOutModal] = useState(false)
   const [isPurging, setIsPurging] = useState(false)
-  const [cafeName, setCafeName] = useState(() => localStorage.getItem('nexus_tenant_name') || '')
-  const [cafeLogo, setCafeLogo] = useState(() => localStorage.getItem('nexus_tenant_logo') || '')
+  const [cafeName, setCafeName] = useState(() => localStorage.getItem('nexus_tenant_name') || user?.tenant_name || user?.org_name || '')
+  const [cafeLogo, setCafeLogo] = useState(() => localStorage.getItem('nexus_tenant_logo') || user?.tenant_logo || '')
 
   useEffect(() => {
+    // If user object has tenant name, initialize immediately
+    if (user?.tenant_name || user?.org_name) {
+      const name = user.tenant_name || user.org_name
+      setCafeName(name)
+      localStorage.setItem('nexus_tenant_name', name)
+    }
+    if (user?.tenant_logo) {
+      setCafeLogo(user.tenant_logo)
+      localStorage.setItem('nexus_tenant_logo', user.tenant_logo)
+    }
+
     api.get('/settings').then(res => {
       const nameSetting = res.settings?.find(s => s.key === 'cafe_name')?.value
       const logoSetting = res.settings?.find(s => s.key === 'cafe_logo')?.value
-      if (nameSetting) {
+      if (nameSetting && !['Nexus Gaming Lounge', 'Gaming Lounge', 'Nexus Manager'].includes(nameSetting)) {
         setCafeName(nameSetting)
         localStorage.setItem('nexus_tenant_name', nameSetting)
       }
@@ -48,7 +59,7 @@ export default function Sidebar() {
         localStorage.setItem('nexus_tenant_logo', logoSetting)
       }
     }).catch(() => {})
-  }, [activeTenant])
+  }, [activeTenant, user?.username, user?.tenant_name, user?.org_name])
 
   const handleConfirmSignOut = async () => {
     setIsPurging(true)
@@ -76,8 +87,9 @@ export default function Sidebar() {
   const activeMobileNav = visibleNav.slice(0, 4)
   const moreMobileNav = visibleNav.slice(4)
 
-  const currentDisplayName = cafeName || activeTenant?.name || 'Nexus Console'
-  const initials = currentDisplayName.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase() || 'NC'
+  const currentDisplayName = cafeName || activeTenant?.name || user?.tenant_name || user?.org_name || 'Headshot Gaming Cafe'
+  const initials = currentDisplayName.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase() || 'HGC'
+
 
   return (
     <>
