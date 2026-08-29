@@ -289,6 +289,23 @@ CREATE TABLE IF NOT EXISTS shift_closings (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 21. Unified Customer Ledger
+CREATE TABLE IF NOT EXISTS customer_ledger (
+    id               SERIAL PRIMARY KEY,
+    customer_id      INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    module           VARCHAR(30) NOT NULL CHECK (module IN ('session','sale','recharge','payment','adjustment','pancafe')),
+    reference_id     INT,
+    reference_module VARCHAR(30),
+    amount           DECIMAL(10, 2) NOT NULL,
+    running_balance  DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    description      TEXT NOT NULL,
+    note             TEXT,
+    is_charge        BOOLEAN GENERATED ALWAYS AS (amount > 0) STORED,
+    is_payment       BOOLEAN GENERATED ALWAYS AS (amount < 0) STORED,
+    created_by       INT REFERENCES users(id) ON DELETE SET NULL,
+    created_at       TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_sessions_date_status ON sessions (date, time_out, is_deleted);
 CREATE INDEX IF NOT EXISTS idx_sessions_customer_id ON sessions (customer_id);
@@ -299,6 +316,10 @@ CREATE INDEX IF NOT EXISTS idx_recharges_date ON recharges (date);
 CREATE INDEX IF NOT EXISTS idx_session_payments_session_id ON session_payments (session_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_customers_search ON customers (name, mobile, shop_name);
+CREATE INDEX IF NOT EXISTS idx_cl_customer ON customer_ledger (customer_id);
+CREATE INDEX IF NOT EXISTS idx_cl_created_at ON customer_ledger (customer_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_cl_reference ON customer_ledger (reference_module, reference_id);
+CREATE INDEX IF NOT EXISTS idx_cl_module ON customer_ledger (module);
 
 -- Default Settings (org_slug populated by super admin provisioning)
 INSERT INTO settings (key, value) VALUES
@@ -408,10 +429,26 @@ async function ensureTenantMigrations(client, schemaName) {
       ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'operator', 'trial'));
       ALTER TABLE users ALTER COLUMN role SET DEFAULT 'operator';
 
-      -- v5 patch: customer_ledger (created by v5_customer_ledger.sql migration)
-      -- The table itself is created by the migration script. This just ensures
-      -- the index exists if the migration was run without the index block.
-      CREATE INDEX IF NOT EXISTS idx_cl_customer ON customer_ledger (customer_id);
+      -- v5 patch: customer_ledger
+      CREATE TABLE IF NOT EXISTS customer_ledger (
+          id               SERIAL PRIMARY KEY,
+          customer_id      INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          module           VARCHAR(30) NOT NULL CHECK (module IN ('session','sale','recharge','payment','adjustment','pancafe')),
+          reference_id     INT,
+          reference_module VARCHAR(30),
+          amount           DECIMAL(10, 2) NOT NULL,
+          running_balance  DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+          description      TEXT NOT NULL,
+          note             TEXT,
+          is_charge        BOOLEAN GENERATED ALWAYS AS (amount > 0) STORED,
+          is_payment       BOOLEAN GENERATED ALWAYS AS (amount < 0) STORED,
+          created_by       INT REFERENCES users(id) ON DELETE SET NULL,
+          created_at       TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_cl_customer   ON customer_ledger (customer_id);
+      CREATE INDEX IF NOT EXISTS idx_cl_created_at ON customer_ledger (customer_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_cl_reference  ON customer_ledger (reference_module, reference_id);
+      CREATE INDEX IF NOT EXISTS idx_cl_module     ON customer_ledger (module);
     `)
     _migratedSchemas.add(schemaName)
   } catch (e) {
