@@ -27,6 +27,15 @@ export default function Login() {
   const { user: clerkUser, isSignedIn, isLoaded } = useUser()
   const navigate = useNavigate()
 
+  // Bootstrap tenant schema into localStorage so PIN login always sends x-tenant-schema header.
+  // VITE_DEFAULT_TENANT_SCHEMA is set per-deployment (e.g. 'tenant_hgc').
+  useEffect(() => {
+    const defaultSchema = import.meta.env.VITE_DEFAULT_TENANT_SCHEMA
+    if (defaultSchema && !localStorage.getItem('nexus_tenant_schema')) {
+      localStorage.setItem('nexus_tenant_schema', defaultSchema)
+    }
+  }, [])
+
   useEffect(() => {
     if (isLoaded && isSignedIn && clerkUser && !user) {
       const email = clerkUser.primaryEmailAddress?.emailAddress
@@ -63,6 +72,9 @@ export default function Login() {
             if (res.admin_organizations?.length > 0) {
               const org = res.admin_organizations[0]
               const adminUsername = `${org.slug}_admin`
+              // Store schema so subsequent API calls (including PIN re-login) resolve correctly
+              localStorage.setItem('nexus_tenant_schema', org.schema_name)
+              localStorage.setItem('nexus_org_id', org.org_id || '')
               const userData = {
                 id: 1,
                 username: adminUsername,
@@ -71,7 +83,8 @@ export default function Login() {
                 avatar_url: avatarUrl,
                 role: 'admin',
                 org_slug: org.slug,
-                org_name: org.name
+                org_name: org.name,
+                schema_name: org.schema_name
               }
               setRedirectMsg('Loading admin console...')
               login(userData)
@@ -79,6 +92,9 @@ export default function Login() {
             } else if (res.staff_invites?.some(s => s.membership_status === 'active')) {
               const activeS = res.staff_invites.find(s => s.membership_status === 'active')
               const operatorUsername = `${activeS.tenant_slug || 'org'}_operator`
+              // Store schema so PIN login works next time
+              localStorage.setItem('nexus_tenant_schema', activeS.schema_name)
+              localStorage.setItem('nexus_org_id', activeS.org_id || '')
               const userData = {
                 id: activeS.invite_id || 1,
                 username: operatorUsername,
@@ -87,7 +103,8 @@ export default function Login() {
                 avatar_url: avatarUrl,
                 role: 'operator',
                 org_slug: activeS.tenant_slug,
-                org_name: activeS.tenant_name
+                org_name: activeS.tenant_name,
+                schema_name: activeS.schema_name
               }
               setRedirectMsg('Entering operator console...')
               login(userData)
@@ -104,6 +121,7 @@ export default function Login() {
       }
     }
   }, [isLoaded, isSignedIn, clerkUser, user, login, navigate])
+
 
   const handleKeyPress = (num) => {
     if (pin.length < 4) {

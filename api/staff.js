@@ -179,7 +179,13 @@ export default async function handler(req, res) {
       if (decision === 'accept') {
         const cleanPin = pin && /^\d{4}$/.test(pin) ? pin : '1234'
         const assignedRole = role === 'admin' ? 'admin' : 'operator'
-        const username = joinReq.staff_email.split('@')[0].replace(/[^a-z0-9_]/gi, '').toLowerCase()
+
+        // Username: <slug>_<firstName> — e.g. hgc_riyaz, hgc_adnan
+        const tenantSlugR = await pool.query('SELECT slug FROM public.tenants WHERE schema_name = $1', [schemaName])
+        const tenantSlug = tenantSlugR.rows[0]?.slug || schemaName.replace('tenant_', '')
+        const firstName = (joinReq.staff_name || joinReq.staff_email.split('@')[0])
+          .split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || assignedRole
+        const username = `${tenantSlug}_${firstName}`
 
         await pool.query(`
           UPDATE public.organization_staff
