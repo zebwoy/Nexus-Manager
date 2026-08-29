@@ -113,6 +113,13 @@ DO $$ BEGIN RAISE NOTICE 'tenant_hgc.users schema patched.'; END $$;
 -- Match by username. Insert any missing users. Record the ID mapping.
 -- ===========================================================================
 
+-- Patch public.users to ensure all expected columns exist on the source side
+-- (v3 migration added email+status, but avatar_url was never backported to public)
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS email      VARCHAR(255);
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
+DO $$ BEGIN RAISE NOTICE 'public.users source patched. Beginning user migration...'; END $$;
+
 CREATE TEMP TABLE _user_map (
   pub_id  INT NOT NULL,
   hgc_id  INT NOT NULL
