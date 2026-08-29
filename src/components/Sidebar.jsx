@@ -212,9 +212,9 @@ export default function Sidebar() {
           gap: '0.75rem'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
-            {user?.avatar_url || localStorage.getItem('nexus_user_avatar') ? (
+            {user?.avatar_url ? (
               <img
-                src={user?.avatar_url || localStorage.getItem('nexus_user_avatar')}
+                src={user.avatar_url}
                 alt={user?.full_name || 'Operator'}
                 style={{
                   width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
@@ -343,9 +343,9 @@ export default function Sidebar() {
             {/* Operator Box & Sign Out */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                {user?.avatar_url || localStorage.getItem('nexus_user_avatar') ? (
+                {user?.avatar_url ? (
                   <img
-                    src={user?.avatar_url || localStorage.getItem('nexus_user_avatar')}
+                    src={user.avatar_url}
                     alt={user?.full_name || 'Operator'}
                     style={{
                       width: '2.25rem', height: '2.25rem', borderRadius: '50%',

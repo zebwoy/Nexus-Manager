@@ -20,14 +20,24 @@ export function AuthProvider({ children }) {
 
   const login = (userData) => {
     localStorage.setItem('nexus_user', JSON.stringify(userData))
+    if (userData?.avatar_url) {
+      localStorage.setItem('nexus_user_avatar', userData.avatar_url)
+    } else {
+      localStorage.removeItem('nexus_user_avatar')
+    }
     setUser(userData)
   }
 
   const logout = () => {
     localStorage.removeItem('nexus_user')
     localStorage.removeItem('nexus_user_email')
+    localStorage.removeItem('nexus_user_name')
+    localStorage.removeItem('nexus_user_avatar')
     localStorage.removeItem('nexus_tenant_schema')
     localStorage.removeItem('nexus_tenant_name')
+    localStorage.removeItem('nexus_tenant_logo')
+    localStorage.removeItem('nexus_org_slug')
+    localStorage.removeItem('nexus_org_id')
     setUser(null)
   }
 

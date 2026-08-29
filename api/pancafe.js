@@ -1,14 +1,15 @@
 import { getPool, ok, err } from './_db.js'
-import { withTenantClient } from './_tenant.js'
+import { withTenantClient, resolveEffectiveUserId } from './_tenant.js'
 
 export default async function handler(req, res) {
   const pool = getPool()
-  const userId = req.headers['x-user-id']
   const rawUrl = req.url || ''
   const subPath = String(req.query.path || rawUrl.replace(/^\/api\/pancafe\/?/, ''))
   const isPlans = req.query.resource === 'plans' || rawUrl.includes('pancafe-plans')
 
   return withTenantClient(pool, req, res, async (client) => {
+    const userId = await resolveEffectiveUserId(client, req)
+
     // ─── PANCAFE PLANS ──────────────────────────────────────────
     if (isPlans) {
       if (req.method === 'GET') {

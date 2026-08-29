@@ -1,10 +1,8 @@
 import { getPool, ok, err } from './_db.js'
-import { withTenantClient } from './_tenant.js'
+import { withTenantClient, resolveEffectiveUserId } from './_tenant.js'
 
 export default async function handler(req, res) {
   const pool = getPool()
-  const rawUserId = req.headers['x-user-id']
-  const userId = rawUserId && !isNaN(Number(rawUserId)) ? Number(rawUserId) : null
   const url = req.url || ''
   const resource = req.query.resource || (
     url.includes('sales') ? 'sales' :
@@ -13,6 +11,8 @@ export default async function handler(req, res) {
   )
 
   return withTenantClient(pool, req, res, async (client) => {
+    const userId = await resolveEffectiveUserId(client, req)
+
     // ─── CUSTOMERS ──────────────────────────────────────────────
     if (resource === 'customers') {
       if (req.method === 'GET') {

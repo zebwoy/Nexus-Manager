@@ -786,3 +786,22 @@ export async function withTenantClient(pool, req, res, callback) {
     }
   }
 }
+
+/**
+ * Validates and resolves the user ID within the active tenant schema.
+ * Ensures foreign keys referencing users(id) never fail with non-existent or 0 values.
+ */
+export async function resolveEffectiveUserId(client, req) {
+  const rawId = Number(req?.headers?.['x-user-id'])
+  if (rawId > 0) {
+    const check = await client.query('SELECT id FROM users WHERE id = $1 LIMIT 1', [rawId]).catch(() => ({ rows: [] }))
+    if (check.rows.length > 0) return check.rows[0].id
+  }
+  const rawUser = req?.headers?.['x-username']
+  if (rawUser) {
+    const check2 = await client.query('SELECT id FROM users WHERE username = $1 LIMIT 1', [rawUser]).catch(() => ({ rows: [] }))
+    if (check2.rows.length > 0) return check2.rows[0].id
+  }
+  return null
+}
+

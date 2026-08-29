@@ -1,5 +1,5 @@
 import { getPool, ok, err } from './_db.js'
-import { withTenantClient } from './_tenant.js'
+import { withTenantClient, resolveEffectiveUserId } from './_tenant.js'
 
 async function postLedger(client, entry) {
   if (!entry.customer_id) return
@@ -23,13 +23,13 @@ async function postLedger(client, entry) {
 
 export default async function handler(req, res) {
   const pool = getPool()
-  const rawUserId = req.headers['x-user-id']
-  const userId = rawUserId && !isNaN(Number(rawUserId)) ? Number(rawUserId) : null
   const username = req.headers['x-username']
   const rawUrl = req.url || ''
   const subPath = String(req.query.path || rawUrl.replace(/^\/api\/recharges\/?/, ''))
 
   return withTenantClient(pool, req, res, async (client) => {
+    const userId = await resolveEffectiveUserId(client, req)
+
     // ─── Route: PATCH / DELETE /api/recharges/:id or ?id=X ────────
     const queryId = req.query.id ? Number(req.query.id) : null
     const idMatch = subPath.match(/^(\d+)(\?|$)/) || rawUrl.match(/\/recharges\/(\d+)(\?|$)/)

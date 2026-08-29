@@ -1,5 +1,5 @@
 import { getPool, ok, err } from './_db.js'
-import { withTenantClient } from './_tenant.js'
+import { withTenantClient, resolveEffectiveUserId } from './_tenant.js'
 
 function calculateDynamicTariff(hourlyRate, durationMins) {
   const rate = Number(hourlyRate) || 0
@@ -46,11 +46,12 @@ async function postLedger(client, entry) {
 
 export default async function handler(req, res) {
   const pool = getPool()
-  const userId = req.headers['x-user-id']
   const rawUrl = req.url || ''
   const subPath = String(req.query.path || rawUrl.replace(/^\/api\/sessions\/?/, ''))
 
   return withTenantClient(pool, req, res, async (client) => {
+    const userId = await resolveEffectiveUserId(client, req)
+
     // ─── Route: /api/sessions/:id/payments ───────────────────────
     const paymentsMatch = subPath.match(/(\d+)\/payments/) || rawUrl.match(/\/sessions\/(\d+)\/payments/)
     if (paymentsMatch && req.method === 'POST') {
