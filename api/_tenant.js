@@ -3,6 +3,13 @@ import { getPool } from './_db.js'
 export const DEMO_SANDBOX_SCHEMA = 'tenant_demo_sandbox'
 
 /**
+ * In-memory set of schema names that have already had their incremental
+ * DDL migrations applied this process lifetime. Prevents the ALTER TABLE
+ * block from executing on every API request (hot-path DDL is expensive).
+ */
+const _migratedSchemas = new Set()
+
+/**
  * SQL DDL template executed inside every new tenant schema
  */
 export const TENANT_SCHEMA_TEMPLATE = `
@@ -320,6 +327,46 @@ ON CONFLICT (name) DO NOTHING;
 `
 
 /**
+ * Applies incremental DDL patches to a tenant schema.
+ * Cached per process: runs at most once per schema per server instance.
+ * Safe to call on every cold start; a no-op on subsequent requests.
+ */
+async function ensureTenantMigrations(client, schemaName) {
+  if (_migratedSchemas.has(schemaName)) return
+  try {
+    await client.query(`
+      -- v1 patches: columns added in early versions
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE session_players ADD COLUMN IF NOT EXISTS customer_id INT REFERENCES customers(id);
+      ALTER TABLE session_players ADD COLUMN IF NOT EXISTS player_name VARCHAR(100);
+      ALTER TABLE sales ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS item_id INT;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS units INT DEFAULT 0;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS packs_count INT DEFAULT 1;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS pack_size INT DEFAULT 1;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS unit_buy_price DECIMAL(10, 2);
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS unit_sell_price DECIMAL(10, 2);
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS vendor_address TEXT;
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS client_type VARCHAR(30) DEFAULT 'customer';
+      ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS initial_stock INT NOT NULL DEFAULT 0;
+      UPDATE inventory_items SET initial_stock = stock_qty WHERE initial_stock = 0;
+
+      -- v5 patch: customer_ledger (created by v5_customer_ledger.sql migration)
+      -- The table itself is created by the migration script. This just ensures
+      -- the index exists if the migration was run without the index block.
+      CREATE INDEX IF NOT EXISTS idx_cl_customer ON customer_ledger (customer_id);
+    `)
+    _migratedSchemas.add(schemaName)
+  } catch (e) {
+    // Non-fatal: log and continue. The ALTER TABLE IFs are defensive anyway.
+    console.warn(`[tenant] Migration patch warning for schema "${schemaName}":`, e.message)
+  }
+}
+
+
+/**
  * Initialize public global registry tables
  */
 export async function ensureGlobalRegistry(pool) {
@@ -429,53 +476,106 @@ export async function provisionDemoSandbox(pool) {
     await client.query(`SET search_path TO "${DEMO_SANDBOX_SCHEMA}", public`)
     await client.query(TENANT_SCHEMA_TEMPLATE)
 
-    // 1. Seed Demo Staff (PIN 0000)
+    // 1. Seed Demo Staff
     await client.query(`
-      INSERT INTO users (full_name, username, pin, role) VALUES
-      ('Demo Operator', 'trial', '0000', 'admin'),
-      ('Store Owner', 'admin', '1234', 'admin'),
-      ('Shift Staff', 'operator', '5678', 'operator')
+      INSERT INTO users (full_name, username, pin, role, status) VALUES
+      ('Demo Operator', 'trial',    '0000', 'admin',    'active'),
+      ('Store Owner',   'admin',    '1234', 'admin',    'active'),
+      ('Shift Staff',   'operator', '5678', 'operator', 'active')
       ON CONFLICT (username) DO NOTHING;
     `)
 
-    // 2. Seed Realistic Cafeteria Snacks
+    // 2. Seed Cafeteria Inventory
     await client.query(`
-      INSERT INTO inventory_items (name, category, buy_price, sell_price, stock_qty) VALUES
-      ('Red Bull Energy Drink (250ml)', 'Drinks', 95.00, 125.00, 18),
-      ('Monster Energy Ultra White', 'Drinks', 105.00, 140.00, 12),
-      ('Mountain Dew (300ml)', 'Drinks', 30.00, 40.00, 20),
-      ('Doritos Nacho Cheese (60g)', 'Snacks', 35.00, 50.00, 25),
-      ('Lays Classic Salted', 'Snacks', 15.00, 20.00, 30),
-      ('KitKat Chunky Bar', 'Snacks', 25.00, 40.00, 15)
+      INSERT INTO inventory_items (name, category, buy_price, sell_price, stock_qty, initial_stock) VALUES
+      ('Red Bull Energy Drink (250ml)',  'Drinks', 95.00,  125.00, 18, 18),
+      ('Monster Energy Ultra White',    'Drinks', 105.00, 140.00, 12, 12),
+      ('Mountain Dew (300ml)',           'Drinks',  30.00,  40.00, 20, 20),
+      ('Doritos Nacho Cheese (60g)',    'Snacks',  35.00,  50.00, 25, 25),
+      ('Lays Classic Salted',           'Snacks',  15.00,  20.00, 30, 30),
+      ('KitKat Chunky Bar',             'Snacks',  25.00,  40.00, 15, 15)
       ON CONFLICT DO NOTHING;
     `)
 
     // 3. Seed Customers
     await client.query(`
-      INSERT INTO customers (name, mobile) VALUES
-      ('Aarav Sharma', '9876543210'),
-      ('Rohan Verma', '9123456780'),
-      ('Kabir Mehta', '9988776655')
+      INSERT INTO customers (name, mobile, client_type) VALUES
+      ('Aarav Sharma',  '9876543210', 'session'),
+      ('Rohan Verma',   '9123456780', 'session'),
+      ('Kabir Mehta',   '9988776655', 'session')
       ON CONFLICT DO NOTHING;
     `)
 
-    // 4. Seed Active Live Gaming Sessions
-    const now = new Date()
-    const pc1In = new Date(now.getTime() - 30 * 60000).toISOString()
-    const pc1Out = new Date(now.getTime() + 30 * 60000).toISOString()
-    const psIn = new Date(now.getTime() - 15 * 60000).toISOString()
-    const psOut = new Date(now.getTime() + 75 * 60000).toISOString()
+    // 4. Seed 2 live sessions (active right now) + 1 historical
+    const now        = new Date()
+    const pc1In      = new Date(now.getTime() - 30  * 60000).toISOString()
+    const pc1Out     = new Date(now.getTime() + 30  * 60000).toISOString()
+    const psIn       = new Date(now.getTime() - 15  * 60000).toISOString()
+    const psOut      = new Date(now.getTime() + 75  * 60000).toISOString()
+    const histIn     = new Date(now.getTime() - 180 * 60000).toISOString()
+    const histOut    = new Date(now.getTime() - 60  * 60000).toISOString()
+    const histDate   = new Date(now.getTime() - 180 * 60000).toISOString().slice(0, 10)
 
     await client.query(`
-      INSERT INTO sessions (customer_id, device_id, duration_mins, time_in, time_out, date, charge, total, payment_received, credit, payment_method)
-      SELECT c.id, 1, 60, '${pc1In}', '${pc1Out}', CURRENT_DATE, 40.00, 40.00, 40.00, 0.00, 'cash'
-      FROM customers c WHERE c.mobile = '9876543210'
+      -- Active session 1: Aarav on PC, half-paid (credit outstanding)
+      INSERT INTO sessions
+        (customer_id, device_id, duration_mins, time_in, time_out, date,
+         charge, total, payment_received, credit, payment_method, created_by)
+      SELECT c.id, 1, 60, $1, $2, CURRENT_DATE,
+             40.00, 40.00, 20.00, 20.00, 'cash', u.id
+      FROM customers c, users u
+      WHERE c.mobile = '9876543210' AND u.username = 'operator'
       LIMIT 1;
 
-      INSERT INTO sessions (customer_id, device_id, duration_mins, time_in, time_out, date, charge, controller_total, total, payment_received, credit, payment_method)
-      SELECT c.id, 5, 90, '${psIn}', '${psOut}', CURRENT_DATE, 100.00, 25.00, 125.00, 125.00, 0.00, 'online'
-      FROM customers c WHERE c.mobile = '9123456780'
+      -- Active session 2: Rohan on PS5, fully paid
+      INSERT INTO sessions
+        (customer_id, device_id, duration_mins, time_in, time_out, date,
+         charge, controller_total, total, payment_received, credit, payment_method, created_by)
+      SELECT c.id, 5, 90, $3, $4, CURRENT_DATE,
+             100.00, 25.00, 125.00, 125.00, 0.00, 'online', u.id
+      FROM customers c, users u
+      WHERE c.mobile = '9123456780' AND u.username = 'admin'
       LIMIT 1;
+
+      -- Historical session: Kabir yesterday (closed, for dashboard data)
+      INSERT INTO sessions
+        (customer_id, device_id, duration_mins, time_in, time_out, date,
+         charge, total, payment_received, credit, payment_method, created_by)
+      SELECT c.id, 2, 120, $5, $6, $7::date,
+             80.00, 80.00, 80.00, 0.00, 'cash', u.id
+      FROM customers c, users u
+      WHERE c.mobile = '9988776655' AND u.username = 'operator'
+      LIMIT 1;
+    `, [pc1In, pc1Out, psIn, psOut, histIn, histOut, histDate])
+
+    // 5. Add a session_payment for Aarav's partial payment
+    await client.query(`
+      INSERT INTO session_payments (session_id, amount, payment_method, note, created_by)
+      SELECT s.id, 20.00, 'cash', 'Partial initial payment', u.id
+      FROM sessions s
+      JOIN customers c ON c.id = s.customer_id
+      JOIN users u ON u.username = 'operator'
+      WHERE c.mobile = '9876543210'
+      ORDER BY s.id DESC LIMIT 1;
+    `)
+
+    // 6. Seed a sample recharge (demonstrates the recharge module)
+    await client.query(`
+      INSERT INTO recharges
+        (customer_id, game_platform, cost_price, charge_price, payment_received, payment_method, note, date, created_by)
+      SELECT c.id, 'PSN', 450.00, 500.00, 500.00, 'online',
+             'PS Plus 1-month top-up', CURRENT_DATE, u.id
+      FROM customers c, users u
+      WHERE c.mobile = '9123456780' AND u.username = 'admin'
+      LIMIT 1;
+    `)
+
+    // 7. Seed today's day opening
+    await client.query(`
+      INSERT INTO day_openings (date, opening_cash, note, created_by)
+      SELECT CURRENT_DATE, 500.00, 'Demo sandbox opening balance', u.id
+      FROM users u WHERE u.username = 'admin'
+      ON CONFLICT (date) DO NOTHING;
     `)
 
     await client.query('COMMIT')
@@ -568,8 +668,14 @@ export async function resolveTenantSchema(req, pool) {
     }
   }
 
-  // Default fallback for single-tenant local mode
-  return 'public'
+  // Default fallback — only permitted in non-production environments (local dev)
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('[tenant] resolveTenantSchema: falling back to public schema (local dev mode)')
+    return 'public'
+  }
+
+  // In production, every request MUST resolve to a real tenant schema.
+  throw new Error('TENANT_NOT_RESOLVED: Unable to determine tenant schema. Ensure x-org-id, x-user-email, or x-tenant-schema headers are present.')
 }
 
 /**
@@ -580,25 +686,8 @@ export async function getTenantClient(pool, req) {
   const client = await pool.connect()
   try {
     await client.query(`SET search_path TO "${schemaName}", public`)
-    await client.query(`
-      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
-      ALTER TABLE session_players ADD COLUMN IF NOT EXISTS customer_id INT REFERENCES customers(id);
-      ALTER TABLE session_players ADD COLUMN IF NOT EXISTS player_name VARCHAR(100);
-      ALTER TABLE sales ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
-      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS item_id INT;
-      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS units INT DEFAULT 0;
-      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS packs_count INT DEFAULT 1;
-      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS pack_size INT DEFAULT 1;
-      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS unit_buy_price DECIMAL(10, 2);
-      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS unit_sell_price DECIMAL(10, 2);
-      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS vendor_address TEXT;
-      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT;
-      ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT;
-      ALTER TABLE customers ADD COLUMN IF NOT EXISTS client_type VARCHAR(30) DEFAULT 'customer';
-      ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS initial_stock INT NOT NULL DEFAULT 0;
-      UPDATE inventory_items SET initial_stock = 20 WHERE name ILIKE '%lahori%' AND initial_stock = 0;
-      UPDATE inventory_items SET initial_stock = stock_qty WHERE initial_stock = 0;
-    `).catch(() => {})
+    // Apply incremental DDL patches — cached, runs at most once per schema per process
+    await ensureTenantMigrations(client, schemaName)
     return { client, schemaName }
   } catch (err) {
     client.release()
