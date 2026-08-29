@@ -21,6 +21,8 @@ export default function NewSession() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [customerSuggestions, setCustomerSuggestions] = useState([])
+  const [customerCredit, setCustomerCredit] = useState(null)  // null=unknown, 0=settled, neg=cafe owes
+  const [creditApplied, setCreditApplied] = useState(false)
 
   // Form state
   const [form, setForm] = useState({
@@ -158,6 +160,8 @@ export default function NewSession() {
 
   const handleNameChange = async (val) => {
     setForm(f => ({ ...f, name: val, customer_id: null }))
+    setCustomerCredit(null)
+    setCreditApplied(false)
     if (val.length >= 2) {
       try {
         const data = await api.get(`/customers?search=${encodeURIComponent(val)}&type=session`)
@@ -168,9 +172,20 @@ export default function NewSession() {
     }
   }
 
-  const selectCustomer = (c) => {
+  const selectCustomer = async (c) => {
     setForm(f => ({ ...f, name: c.name, mobile: c.mobile || '', customer_id: c.id }))
     setCustomerSuggestions([])
+    setCustomerCredit(null)
+    setCreditApplied(false)
+    // Check if this customer has a credit balance on their account
+    try {
+      const data = await api.get(`/customers/${c.id}/balance`)
+      const bal = Number(data.balance ?? 0)
+      // Negative balance = cafe owes them (they have credit)
+      setCustomerCredit(bal < 0 ? Math.abs(bal) : 0)
+    } catch {
+      setCustomerCredit(0)
+    }
   }
 
   const [playerSuggestions, setPlayerSuggestions] = useState({})
@@ -362,6 +377,79 @@ export default function NewSession() {
                 value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: e.target.value.replace(/\D/g, '') }))} />
             </Field>
           </div>
+
+            {/* Credit carry-forward banner — shown when a known customer has credit */}
+            {form.customer_id && customerCredit > 0 && !creditApplied && (
+              <div style={{
+                padding: '0.75rem 1rem',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(251,191,36,0.06) 100%)',
+                border: '1.5px solid rgba(245,158,11,0.35)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
+                  <span style={{ fontSize: '1rem' }}>💳</span>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 700, color: '#92400e' }}>
+                      {form.name} has ₹{customerCredit.toLocaleString('en-IN')} credit on account
+                    </p>
+                    <p style={{ margin: 0, fontSize: '0.7rem', color: '#b45309', marginTop: '0.15rem' }}>
+                      This may have been paid in advance or from a previous session
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Apply credit: pre-fill cash payment to offset it
+                      const applyAmt = Math.min(customerCredit, total)
+                      setCashAmount(String(applyAmt))
+                      setCreditApplied(true)
+                    }}
+                    style={{
+                      padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                      background: '#d97706', border: 'none', color: '#fff',
+                      fontSize: '0.78rem', fontWeight: 700
+                    }}>
+                    Apply ₹{Math.min(customerCredit, total).toLocaleString('en-IN')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomerCredit(0)}
+                    style={{
+                      padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                      background: 'transparent', border: '1.5px solid rgba(245,158,11,0.4)',
+                      color: '#92400e', fontSize: '0.78rem', fontWeight: 600
+                    }}>
+                    Bill Normally
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Credit applied confirmation */}
+            {creditApplied && customerCredit > 0 && (
+              <div style={{
+                padding: '0.6rem 0.9rem',
+                borderRadius: '10px',
+                background: 'rgba(34,197,94,0.08)',
+                border: '1.5px solid rgba(34,197,94,0.3)',
+                display: 'flex', alignItems: 'center', gap: '0.5rem'
+              }}>
+                <span style={{ fontSize: '0.85rem' }}>✓</span>
+                <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: 650, color: '#15803d' }}>
+                  ₹{Math.min(customerCredit, total).toLocaleString('en-IN')} credit applied as cash payment
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setCashAmount(''); setCreditApplied(false) }}
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#15803d', fontSize: '0.75rem' }}>
+                  Undo
+                </button>
+              </div>
+            )}
 
           {/* Row 2: Device Station & Duration */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'flex-start' }}>
