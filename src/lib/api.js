@@ -1,5 +1,37 @@
 const BASE = '/api'
 
+/**
+ * Maps raw server/DB error strings to user-friendly messages.
+ * Keeps internal stack traces, config details, and SQL out of the UI.
+ */
+function sanitizeApiError(raw, status) {
+  if (!raw) return `Something went wrong (${status}). Please try again.`
+
+  // Internal system errors that must never be shown verbatim
+  const internalPrefixes = [
+    'TENANT_NOT_RESOLVED',
+    'TENANT_SUSPENDED',
+    'STAFF_SUSPENDED',
+    'SQLSTATE',
+    'ERROR:',
+    'db error',
+    'relation "',
+    'column "',
+    'syntax error',
+    'invalid input syntax',
+  ]
+  const isInternal = internalPrefixes.some(p => raw.toLowerCase().includes(p.toLowerCase()))
+
+  if (raw.startsWith('TENANT_SUSPENDED')) return 'Your cafe account is currently suspended. Please contact support.'
+  if (raw.startsWith('STAFF_SUSPENDED'))  return 'Your staff account has been suspended. Contact your admin.'
+  if (raw.startsWith('TENANT_NOT_RESOLVED') || isInternal) {
+    return 'Unable to reach the server. Please check your connection and try again.'
+  }
+
+  // Safe to show — these are intentional user-facing messages from the API
+  return raw
+}
+
 function getUser() {
   try {
     return JSON.parse(localStorage.getItem('nexus_user'))
@@ -44,7 +76,10 @@ async function request(path, options = {}) {
   }
 
   if (!res.ok) {
-    throw new Error(data.error || data.message || `Request failed with status ${res.status}`)
+    const raw = data.error || data.message || ''
+    // Sanitize internal/technical errors — never show raw system messages to users
+    const friendly = sanitizeApiError(raw, res.status)
+    throw new Error(friendly)
   }
   return data
 }

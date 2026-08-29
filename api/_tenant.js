@@ -672,14 +672,23 @@ export async function resolveTenantSchema(req, pool) {
     }
   }
 
-  // Default fallback — only permitted in non-production environments (local dev)
+  // Default fallback:
+  // 1. In production, use DEFAULT_TENANT_SCHEMA env var (set on Vercel for the deployment's schema)
+  // 2. In local dev, fall back to 'public' with a warning
+  // This covers the PIN login flow where no auth headers exist yet.
+  const defaultSchema = process.env.DEFAULT_TENANT_SCHEMA
+  if (defaultSchema && /^[a-zA-Z0-9_]+$/.test(defaultSchema)) {
+    return defaultSchema
+  }
+
   if (process.env.NODE_ENV !== 'production') {
     console.warn('[tenant] resolveTenantSchema: falling back to public schema (local dev mode)')
     return 'public'
   }
 
-  // In production, every request MUST resolve to a real tenant schema.
+  // Last resort \u2014 no schema configured at all
   throw new Error('TENANT_NOT_RESOLVED: Unable to determine tenant schema. Ensure x-org-id, x-user-email, or x-tenant-schema headers are present.')
+
 }
 
 /**
