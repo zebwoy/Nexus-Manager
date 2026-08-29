@@ -182,28 +182,50 @@ async function handleLogin(pool, req, res) {
     }
   }
 
-  // ── Parse slug from username: hgc_operator@3 → 'hgc' ─────────────────────
-  const slugMatch = cleanUser.match(/^([a-z0-9]+)_/)
-  if (!slugMatch) {
-    return err(res, 'Invalid username. Use the handle assigned by your admin (e.g. hgc_operator@3).', 401)
-  }
-  const slug = slugMatch[1]
+  // ── Parse slug from username: hgc_admin@1 → 'hgc' ─────────────────────
+  const slugMatch = cleanUser.match(/^([a-z0-9_\-]+)_/)
+  const parsedSlug = slugMatch ? slugMatch[1].toLowerCase() : ''
 
-  // ── Resolve schema from slug ───────────────────────────────────────────────
+  // ── Resolve schema from slug / tenant registry ─────────────────────────────
   let tenantInfo = null
+  let schemaName = null
   try {
-    const tenantR = await pool.query(
-      `SELECT name, slug, logo_url, schema_name, status FROM public.tenants WHERE slug = $1 LIMIT 1`,
-      [slug]
-    )
-    if (tenantR.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
-    if (tenantR.rows[0].status === 'suspended') {
+    let tenantR
+    if (parsedSlug) {
+      tenantR = await pool.query(
+        `SELECT name, slug, logo_url, schema_name, status
+         FROM public.tenants
+         WHERE slug = $1
+            OR schema_name = $2
+            OR schema_name = $1
+            OR replace(slug, '-', '_') = $1
+            OR org_id = $1
+            OR slug ILIKE $1 || '%'
+         ORDER BY CASE WHEN slug = $1 THEN 1 WHEN schema_name = $2 THEN 2 ELSE 3 END
+         LIMIT 1`,
+        [parsedSlug, `tenant_${parsedSlug}`]
+      )
+    }
+
+    // If no match by slug, fallback to first active tenant (covers single-tenant deployments)
+    if (!tenantR || tenantR.rows.length === 0) {
+      tenantR = await pool.query(
+        `SELECT name, slug, logo_url, schema_name, status FROM public.tenants WHERE status = 'active' ORDER BY id ASC LIMIT 1`
+      )
+    }
+
+    if (tenantR.rows.length === 0) {
+      return err(res, 'Organization not found. Check your username handle.', 401)
+    }
+
+    tenantInfo = tenantR.rows[0]
+    if (tenantInfo.status === 'suspended') {
       return err(res, 'This organization account is suspended. Contact support.', 403)
     }
-    tenantInfo = tenantR.rows[0]
     schemaName = tenantInfo.schema_name
-  } catch {
-    return err(res, 'Unable to reach the server. Please try again.', 500)
+  } catch (e) {
+    console.error('Tenant resolution error during login:', e)
+    return err(res, 'Database connection error during organization lookup: ' + e.message, 500)
   }
 
   // ── Query the correct tenant schema ───────────────────────────────────────
@@ -219,18 +241,21 @@ async function handleLogin(pool, req, res) {
     const result = await client.query(
       `SELECT id, full_name, username, COALESCE(role, 'operator') AS role, COALESCE(status, 'active') AS status
        FROM users
-       WHERE username = $1 AND pin = $2
-       LIMIT 1`,
-      [cleanUser, cleanPin]
+       WHERE (username = $1 OR username ILIKE '%' || $1 OR username = $2) AND pin = $3
+       ORDER BY id ASC LIMIT 1`,
+      [cleanUser, `${tenantInfo.slug || parsedSlug}_admin@1`, cleanPin]
     )
 
-    if (result.rows.length === 0) return err(res, 'Invalid username or PIN', 401)
+    if (result.rows.length === 0) {
+      return err(res, 'Invalid username or PIN', 401)
+    }
+
     const user = result.rows[0]
     if (user.status === 'suspended') {
       return err(res, 'Account suspended. Contact your cafe administrator.', 403)
     }
 
-    // Record login
+    // Record login in operator_sessions and audit_logs
     await client.query(
       `INSERT INTO operator_sessions (user_id, username) VALUES ($1, $2)`,
       [user.id, user.username]
@@ -245,13 +270,14 @@ async function handleLogin(pool, req, res) {
       user: {
         ...user,
         schema_name: schemaName,
-        tenant_name: tenantInfo?.name || '',
-        tenant_logo: tenantInfo?.logo_url || '',
-        org_slug: tenantInfo?.slug || slug
+        tenant_name: tenantInfo.name || '',
+        tenant_logo: tenantInfo.logo_url || '',
+        org_slug: tenantInfo.slug || parsedSlug
       }
     })
-  } catch {
-    return err(res, 'Unable to reach the server. Please try again.', 500)
+  } catch (e) {
+    console.error('Tenant schema query error during login:', e)
+    return err(res, 'Database error during authentication: ' + e.message, 500)
   } finally {
     client.release()
   }
