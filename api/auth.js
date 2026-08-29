@@ -182,40 +182,31 @@ async function handleLogin(pool, req, res) {
     }
   }
 
-  // ── Parse slug from username: hgc_admin@1 → 'hgc' ─────────────────────
-  const slugMatch = cleanUser.match(/^([a-z0-9_\-]+)_/)
-  const parsedSlug = slugMatch ? slugMatch[1].toLowerCase() : ''
+  // ── Strict handle format validation: <slug>_<role>@<id> ─────────────────
+  // Examples: hgc_admin@1, hgc_operator@7
+  const slugMatch = cleanUser.match(/^([a-z0-9_\-]+)_(admin|operator|trial)@(\d+)$/)
+  if (!slugMatch) {
+    return err(res, 'Invalid username format. Enter your full handle (e.g. hgc_admin@1 or hgc_operator@7).', 401)
+  }
 
-  // ── Resolve schema from slug / tenant registry ─────────────────────────────
+  const slug = slugMatch[1]
+  const parsedRole = slugMatch[2]
+  const parsedUserId = Number(slugMatch[3])
+
+  // ── Resolve tenant schema strictly by slug ────────────────────────────────
   let tenantInfo = null
   let schemaName = null
   try {
-    let tenantR
-    if (parsedSlug) {
-      tenantR = await pool.query(
-        `SELECT name, slug, logo_url, schema_name, status
-         FROM public.tenants
-         WHERE slug = $1
-            OR schema_name = $2
-            OR schema_name = $1
-            OR replace(slug, '-', '_') = $1
-            OR org_id = $1
-            OR slug ILIKE $1 || '%'
-         ORDER BY CASE WHEN slug = $1 THEN 1 WHEN schema_name = $2 THEN 2 ELSE 3 END
-         LIMIT 1`,
-        [parsedSlug, `tenant_${parsedSlug}`]
-      )
-    }
-
-    // If no match by slug, fallback to first active tenant (covers single-tenant deployments)
-    if (!tenantR || tenantR.rows.length === 0) {
-      tenantR = await pool.query(
-        `SELECT name, slug, logo_url, schema_name, status FROM public.tenants WHERE status = 'active' ORDER BY id ASC LIMIT 1`
-      )
-    }
+    const tenantR = await pool.query(
+      `SELECT name, slug, logo_url, schema_name, status
+       FROM public.tenants
+       WHERE slug = $1 OR schema_name = $2
+       LIMIT 1`,
+      [slug, `tenant_${slug}`]
+    )
 
     if (tenantR.rows.length === 0) {
-      return err(res, 'Organization not found. Check your username handle.', 401)
+      return err(res, `Organization "${slug}" not found. Check your handle.`, 401)
     }
 
     tenantInfo = tenantR.rows[0]
@@ -225,25 +216,20 @@ async function handleLogin(pool, req, res) {
     schemaName = tenantInfo.schema_name
   } catch (e) {
     console.error('Tenant resolution error during login:', e)
-    return err(res, 'Database connection error during organization lookup: ' + e.message, 500)
+    return err(res, 'Database error during organization lookup: ' + e.message, 500)
   }
 
-  // ── Query the correct tenant schema ───────────────────────────────────────
+  // ── Strict user credential verification in the private tenant schema ───────
   const client = await pool.connect()
   try {
     await client.query(`SET search_path TO "${schemaName}", public`)
 
-    // Patch missing columns defensively (safe no-op if already exist)
-    await client.query(`
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'active';
-    `).catch(() => {})
-
     const result = await client.query(
       `SELECT id, full_name, username, COALESCE(role, 'operator') AS role, COALESCE(status, 'active') AS status
        FROM users
-       WHERE (username = $1 OR username ILIKE '%' || $1 OR username = $2) AND pin = $3
-       ORDER BY id ASC LIMIT 1`,
-      [cleanUser, `${tenantInfo.slug || parsedSlug}_admin@1`, cleanPin]
+       WHERE id = $1 AND username = $2 AND pin = $3
+       LIMIT 1`,
+      [parsedUserId, cleanUser, cleanPin]
     )
 
     if (result.rows.length === 0) {
@@ -272,7 +258,7 @@ async function handleLogin(pool, req, res) {
         schema_name: schemaName,
         tenant_name: tenantInfo.name || '',
         tenant_logo: tenantInfo.logo_url || '',
-        org_slug: tenantInfo.slug || parsedSlug
+        org_slug: tenantInfo.slug || slug
       }
     })
   } catch (e) {
