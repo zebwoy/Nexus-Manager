@@ -13,17 +13,37 @@ const _migratedSchemas = new Set()
  * SQL DDL template executed inside every new tenant schema
  */
 export const TENANT_SCHEMA_TEMPLATE = `
+-- 0. Tenant Role Definitions (admin + operator only — super_admin is global/public only)
+CREATE TABLE IF NOT EXISTS roles (
+    id          SERIAL PRIMARY KEY,
+    name        VARCHAR(30)  NOT NULL UNIQUE,
+    label       VARCHAR(60)  NOT NULL,
+    permissions JSONB        NOT NULL DEFAULT '{}',
+    is_system   BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- Seed the two canonical tenant roles
+INSERT INTO roles (name, label, permissions, is_system) VALUES
+  ('admin',    'Cafe Administrator',
+   '{"sessions":true,"customers":true,"inventory":true,"reports":true,"staff":true,"settings":true,"recharges":true}',
+   TRUE),
+  ('operator', 'Counter Operator',
+   '{"sessions":true,"customers":true,"sales":true,"recharges":true}',
+   TRUE)
+ON CONFLICT (name) DO NOTHING;
+
 -- 1. Users / Staff Accounts
 CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    full_name VARCHAR(100) NOT NULL,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    pin CHAR(4) NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff', 'operator', 'super_admin', 'trial')),
-    email VARCHAR(255),
-    status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'invited')),
+    id         SERIAL PRIMARY KEY,
+    full_name  VARCHAR(100) NOT NULL,
+    username   VARCHAR(50)  UNIQUE NOT NULL,
+    pin        CHAR(4)      NOT NULL,
+    role       VARCHAR(30)  NOT NULL DEFAULT 'operator' CHECK (role IN ('admin', 'operator', 'trial')),
+    email      VARCHAR(255),
+    status     VARCHAR(20)  NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'invited')),
     avatar_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ  DEFAULT NOW()
 );
 
 -- 2. Operator Sessions (Counter check-in/out)
@@ -357,6 +377,26 @@ async function ensureTenantMigrations(client, schemaName) {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS email      VARCHAR(255);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
+      -- v7 patch: tenant roles table & user role cleanup (super_admin is public only, staff role eliminated)
+      CREATE TABLE IF NOT EXISTS roles (
+          id          SERIAL PRIMARY KEY,
+          name        VARCHAR(30)  NOT NULL UNIQUE,
+          label       VARCHAR(60)  NOT NULL,
+          permissions JSONB        NOT NULL DEFAULT '{}',
+          is_system   BOOLEAN      NOT NULL DEFAULT TRUE,
+          created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO roles (name, label, permissions, is_system) VALUES
+        ('admin',    'Cafe Administrator', '{"sessions":true,"customers":true,"inventory":true,"reports":true,"staff":true,"settings":true,"recharges":true}', TRUE),
+        ('operator', 'Counter Operator',   '{"sessions":true,"customers":true,"sales":true,"recharges":true}', TRUE)
+      ON CONFLICT (name) DO NOTHING;
+
+      UPDATE users SET role = 'operator' WHERE role = 'staff';
+      DELETE FROM users WHERE role = 'super_admin' OR username = 'superadmin';
+      ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+      ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'operator', 'trial'));
+      ALTER TABLE users ALTER COLUMN role SET DEFAULT 'operator';
+
       -- v5 patch: customer_ledger (created by v5_customer_ledger.sql migration)
       -- The table itself is created by the migration script. This just ensures
       -- the index exists if the migration was run without the index block.
@@ -480,12 +520,19 @@ export async function provisionDemoSandbox(pool) {
     await client.query(`SET search_path TO "${DEMO_SANDBOX_SCHEMA}", public`)
     await client.query(TENANT_SCHEMA_TEMPLATE)
 
-    // 1. Seed Demo Staff
+    // 1. Seed Demo Roles (includes 'trial' for the sandbox-specific user)
+    await client.query(`
+      INSERT INTO roles (name, label, permissions, is_system) VALUES
+        ('trial', 'Demo / Trial User', '{"sessions":true,"customers":true,"sales":true}', TRUE)
+      ON CONFLICT (name) DO NOTHING;
+    `)
+
+    // 2. Seed Demo Staff
     await client.query(`
       INSERT INTO users (full_name, username, pin, role, status) VALUES
-      ('Demo Operator', 'trial',    '0000', 'admin',    'active'),
+      ('Demo Operator', 'trial',    '0000', 'trial',    'active'),
       ('Store Owner',   'admin',    '1234', 'admin',    'active'),
-      ('Shift Staff',   'operator', '5678', 'operator', 'active')
+      ('Counter Op',    'operator', '5678', 'operator', 'active')
       ON CONFLICT (username) DO NOTHING;
     `)
 

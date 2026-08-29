@@ -340,19 +340,18 @@ export default async function handler(req, res) {
         console.error('Error syncing admin user:', e)
       }
 
-      const usersR = await client.query(
-        "SELECT id, full_name, username, pin, role, email, status, avatar_url, created_at FROM users WHERE role != 'super_admin' AND username != 'superadmin' ORDER BY id ASC"
-      )
-      const staffRegistryR = await pool.query(
-        'SELECT * FROM public.organization_staff WHERE schema_name = $1 ORDER BY id DESC',
-        [schemaName]
-      )
+      const [usersR, rolesR, staffRegistryR] = await Promise.all([
+        client.query("SELECT id, full_name, username, pin, role, email, status, avatar_url, created_at FROM users WHERE role != 'super_admin' AND username != 'superadmin' ORDER BY id ASC"),
+        client.query("SELECT id, name, label, permissions, is_system FROM roles ORDER BY id ASC").catch(() => ({ rows: [] })),
+        pool.query('SELECT * FROM public.organization_staff WHERE schema_name = $1 ORDER BY id DESC', [schemaName])
+      ])
 
       const joinRequests = staffRegistryR.rows.filter(r => r.status === 'pending_approval')
       const invites = staffRegistryR.rows.filter(r => r.status === 'invited')
 
       return ok(res, {
         users: usersR.rows,
+        roles: rolesR.rows,
         invites,
         join_requests: joinRequests,
         schemaName
@@ -367,26 +366,50 @@ export default async function handler(req, res) {
       }
 
       const cleanPin = pin && /^\d{4}$/.test(pin) ? pin : '1234'
-      const username = email.trim().toLowerCase().split('@')[0].replace(/[^a-z0-9_]/g, '')
       const assignedRole = role === 'admin' ? 'admin' : 'operator'
 
-      // 1. Insert/update in private tenant schema users table
-      const userR = await client.query(
-        `INSERT INTO users (full_name, username, pin, role, email, status)
-         VALUES ($1, $2, $3, $4, $5, 'invited')
-         ON CONFLICT (username) DO UPDATE
-         SET full_name = EXCLUDED.full_name, pin = EXCLUDED.pin, role = EXCLUDED.role, email = EXCLUDED.email, status = 'invited'
-         RETURNING *`,
-        [full_name.trim(), username, cleanPin, assignedRole, email.trim().toLowerCase()]
+      // Fetch tenant slug for username convention: <slug>_<role>@<user_id>
+      const tenantSlugR = await pool.query('SELECT slug FROM public.tenants WHERE schema_name = $1', [schemaName])
+      const tenantSlug = tenantSlugR.rows[0]?.slug || schemaName.replace('tenant_', '')
+
+      // Check if user already exists by email
+      const existingR = await client.query(
+        'SELECT id FROM users WHERE email ILIKE $1',
+        [email.trim()]
       )
+
+      let userId
+      let userRow
+      if (existingR.rows.length > 0) {
+        userId = existingR.rows[0].id
+        const finalUsername = `${tenantSlug}_${assignedRole}@${userId}`
+        const updR = await client.query(`
+          UPDATE users
+          SET full_name = $1, pin = $2, role = $3, status = 'invited', email = $4, username = $5
+          WHERE id = $6
+          RETURNING *
+        `, [full_name.trim(), cleanPin, assignedRole, email.trim().toLowerCase(), finalUsername, userId])
+        userRow = updR.rows[0]
+      } else {
+        const tempUsername = `pending_${Date.now()}`
+        const insertR = await client.query(`
+          INSERT INTO users (full_name, username, pin, role, email, status)
+          VALUES ($1, $2, $3, $4, $5, 'invited')
+          RETURNING id
+        `, [full_name.trim(), tempUsername, cleanPin, assignedRole, email.trim().toLowerCase()])
+        userId = insertR.rows[0].id
+        const finalUsername = `${tenantSlug}_${assignedRole}@${userId}`
+        const updR = await client.query('UPDATE users SET username = $1 WHERE id = $2 RETURNING *', [finalUsername, userId])
+        userRow = updR.rows[0]
+      }
 
       // 2. Insert/update in public organization_staff registry
       await pool.query(
-        `INSERT INTO public.organization_staff (schema_name, staff_email, staff_name, pin, status, invited_by)
-         VALUES ($1, $2, $3, $4, 'invited', $5)
+        `INSERT INTO public.organization_staff (schema_name, staff_email, staff_name, role, pin, status, invited_by)
+         VALUES ($1, $2, $3, $4, $5, 'invited', $6)
          ON CONFLICT (schema_name, staff_email) DO UPDATE
-         SET staff_name = EXCLUDED.staff_name, pin = EXCLUDED.pin, status = 'invited', updated_at = CURRENT_TIMESTAMP`,
-        [schemaName, email.trim().toLowerCase(), full_name.trim(), cleanPin, callerUser]
+         SET staff_name = EXCLUDED.staff_name, role = EXCLUDED.role, pin = EXCLUDED.pin, status = 'invited', updated_at = CURRENT_TIMESTAMP`,
+        [schemaName, email.trim().toLowerCase(), full_name.trim(), assignedRole, cleanPin, callerUser]
       )
 
       // 3. Log Granular Audit Trail
@@ -395,12 +418,12 @@ export default async function handler(req, res) {
          VALUES ($1, 'INVITE_STAFF', 'staff', $2, $3)`,
         [
           callerUser,
-          `Invited staff member "${full_name}" (${email}) with 4-digit PIN`,
-          JSON.stringify({ staff_email: email, full_name, role: assignedRole })
+          `Invited staff member "${full_name}" (${email}) as ${assignedRole} — handle: @${userRow.username}`,
+          JSON.stringify({ staff_email: email, full_name, role: assignedRole, username: userRow.username })
         ]
       )
 
-      return ok(res, { success: true, user: userR.rows[0] }, 201)
+      return ok(res, { success: true, user: userRow }, 201)
     }
 
     // PATCH /api/staff?id=X - Update staff info, PIN, or toggle status

@@ -50,7 +50,7 @@ export default async function handler(req, res) {
           ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS module VARCHAR(50);
           ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS metadata JSONB;
           ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
-          ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'staff', 'operator', 'super_admin', 'trial'));
+          ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'operator', 'trial'));
         `)
       } catch {}
 
@@ -216,7 +216,7 @@ async function handleLogin(pool, req, res) {
     `).catch(() => {})
 
     const result = await client.query(
-      `SELECT id, full_name, username, COALESCE(role, 'staff') AS role, COALESCE(status, 'active') AS status
+      `SELECT id, full_name, username, COALESCE(role, 'operator') AS role, COALESCE(status, 'active') AS status
        FROM users
        WHERE username = $1 AND pin = $2
        LIMIT 1`,
