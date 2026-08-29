@@ -391,6 +391,17 @@ async function ensureTenantMigrations(client, schemaName) {
         ('operator', 'Counter Operator',   '{"sessions":true,"customers":true,"sales":true,"recharges":true}', TRUE)
       ON CONFLICT (name) DO NOTHING;
 
+      -- Harden foreign keys referencing users(id) with ON DELETE SET NULL
+      ALTER TABLE operator_sessions DROP CONSTRAINT IF EXISTS operator_sessions_user_id_fkey;
+      ALTER TABLE operator_sessions ADD CONSTRAINT operator_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;
+
+      ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_user_id_fkey;
+      ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;
+
+      -- Safely unlink references before cleaning up super_admin / superadmin from tenant users
+      UPDATE operator_sessions SET user_id = NULL WHERE user_id IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
+      UPDATE audit_logs SET user_id = NULL WHERE user_id IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
+
       UPDATE users SET role = 'operator' WHERE role = 'staff';
       DELETE FROM users WHERE role = 'super_admin' OR username = 'superadmin';
       ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;

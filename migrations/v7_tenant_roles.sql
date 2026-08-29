@@ -30,16 +30,34 @@ INSERT INTO roles (name, label, permissions, is_system) VALUES
    TRUE)
 ON CONFLICT (name) DO NOTHING;
 
--- 3. Clean up legacy 'staff' or 'super_admin' roles from tenant users
+-- 3. Harden foreign keys referencing users(id) with ON DELETE SET NULL
+-- (Prevents future user deletions/cleanup from failing on foreign key constraints)
+ALTER TABLE operator_sessions DROP CONSTRAINT IF EXISTS operator_sessions_user_id_fkey;
+ALTER TABLE operator_sessions ADD CONSTRAINT operator_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;
+
+ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_user_id_fkey;
+ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;
+
+-- Safely null out references to super_admin or superadmin users across all modules
+UPDATE operator_sessions SET user_id = NULL WHERE user_id IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
+UPDATE audit_logs SET user_id = NULL WHERE user_id IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
+UPDATE sessions SET created_by = NULL WHERE created_by IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
+UPDATE sales SET created_by = NULL WHERE created_by IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
+UPDATE expenses SET created_by = NULL WHERE created_by IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
+UPDATE recharges SET created_by = NULL WHERE created_by IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
+UPDATE session_payments SET created_by = NULL WHERE created_by IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
+UPDATE day_openings SET created_by = NULL WHERE created_by IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
+
+-- 4. Clean up legacy 'staff' or 'super_admin' roles from tenant users
 UPDATE users SET role = 'operator' WHERE role = 'staff';
 DELETE FROM users WHERE role = 'super_admin' OR username = 'superadmin';
 
--- 4. Enforce clean role check constraint on tenant users
+-- 5. Enforce clean role check constraint on tenant users
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'operator', 'trial'));
 ALTER TABLE users ALTER COLUMN role SET DEFAULT 'operator';
 
--- 5. Standardize user handles to <slug>_<role>@<id> convention
+-- 6. Standardize user handles to <slug>_<role>@<id> convention
 DO $$
 DECLARE v_slug TEXT;
 BEGIN
@@ -57,3 +75,4 @@ COMMIT;
 -- Verification
 SELECT id, username, role, full_name, email, status FROM users ORDER BY id;
 SELECT * FROM roles ORDER BY id;
+
