@@ -353,6 +353,10 @@ async function ensureTenantMigrations(client, schemaName) {
       ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS initial_stock INT NOT NULL DEFAULT 0;
       UPDATE inventory_items SET initial_stock = stock_qty WHERE initial_stock = 0;
 
+      -- users: add columns introduced after initial provisioning
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS email      VARCHAR(255);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
       -- v5 patch: customer_ledger (created by v5_customer_ledger.sql migration)
       -- The table itself is created by the migration script. This just ensures
       -- the index exists if the migration was run without the index block.

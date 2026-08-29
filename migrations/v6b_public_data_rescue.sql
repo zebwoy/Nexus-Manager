@@ -83,7 +83,30 @@ SELECT label, hours, price, COALESCE(is_signup_plan, FALSE), COALESCE(is_active,
 FROM public.pancafe_plans
 ON CONFLICT DO NOTHING;
 
-DO $$ BEGIN RAISE NOTICE 'PanCafe plans migrated.'; END $$;
+DO $$ BEGIN RAISE NOTICE 'Config tables migrated. Beginning relational data migration...'; END $$;
+
+-- ===========================================================================
+-- PHASE 1b: Ensure tenant_hgc.users has all expected columns
+-- (tenant_hgc may have been provisioned before email/status/avatar_url were
+--  added to the schema template — patch defensively before inserting)
+-- ===========================================================================
+
+ALTER TABLE tenant_hgc.users ADD COLUMN IF NOT EXISTS email      VARCHAR(255);
+ALTER TABLE tenant_hgc.users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
+-- Add status if missing (NOT NULL with default, so existing rows get 'active')
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'tenant_hgc' AND table_name = 'users' AND column_name = 'status'
+  ) THEN
+    ALTER TABLE tenant_hgc.users ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'active'
+      CHECK (status IN ('active', 'suspended', 'invited'));
+  END IF;
+END $$;
+
+DO $$ BEGIN RAISE NOTICE 'tenant_hgc.users schema patched.'; END $$;
 
 -- ===========================================================================
 -- PHASE 2: Users — map public.users → tenant_hgc.users
@@ -97,8 +120,15 @@ CREATE TEMP TABLE _user_map (
 
 -- Insert public users that don't exist in hgc yet (by username)
 INSERT INTO tenant_hgc.users (full_name, username, pin, role, email, status, avatar_url, created_at)
-SELECT pu.full_name, pu.username, pu.pin, pu.role,
-       pu.email, COALESCE(pu.status, 'active'), pu.avatar_url, pu.created_at
+SELECT
+  pu.full_name,
+  pu.username,
+  pu.pin,
+  pu.role,
+  pu.email,
+  COALESCE(pu.status, 'active'),
+  pu.avatar_url,
+  pu.created_at
 FROM public.users pu
 WHERE NOT EXISTS (
   SELECT 1 FROM tenant_hgc.users hu WHERE hu.username = pu.username
