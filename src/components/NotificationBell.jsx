@@ -1,16 +1,66 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Bell } from 'lucide-react'
 
 /**
- * NotificationBell — Subtle, complimentary notification header button
+ * NotificationBell — Notification header button.
+ *
+ * Dropdown is rendered via React Portal at <body> level so it floats
+ * above ALL stacking contexts, globally on every page.
  */
+
+const CLOSE_DELAY = 180
+
 export default function NotificationBell() {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen]           = useState(false)
+  const [popoverPos, setPopoverPos] = useState({ top: 0, right: 0 })
+
+  const btnRef        = useRef(null)
+  const closeTimerRef = useRef(null)
+
+  const updatePosition = useCallback(() => {
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      setPopoverPos({
+        top:   r.bottom + 8,
+        right: window.innerWidth - r.right,
+      })
+    }
+  }, [])
+
+  const handleToggle = useCallback(() => {
+    if (!open) updatePosition()
+    setOpen(o => !o)
+  }, [open, updatePosition])
+
+  const cancelClose = useCallback(() => {
+    clearTimeout(closeTimerRef.current)
+  }, [])
+
+  const scheduleClose = useCallback(() => {
+    closeTimerRef.current = setTimeout(() => setOpen(false), CLOSE_DELAY)
+  }, [])
+
+  // Reposition on scroll/resize while open
+  useEffect(() => {
+    if (!open) return
+    const sync = () => updatePosition()
+    window.addEventListener('scroll', sync, true)
+    window.addEventListener('resize', sync)
+    return () => {
+      window.removeEventListener('scroll', sync, true)
+      window.removeEventListener('resize', sync)
+    }
+  }, [open, updatePosition])
+
+  // Cleanup on unmount
+  useEffect(() => () => clearTimeout(closeTimerRef.current), [])
 
   return (
-    <div style={{ position: 'relative' }}>
+    <>
       <button
-        onClick={() => setOpen(o => !o)}
+        ref={btnRef}
+        onClick={handleToggle}
         className="top-header-btn bell-btn"
         aria-label="Notifications"
         title="Notifications"
@@ -18,13 +68,27 @@ export default function NotificationBell() {
         <Bell size={16} strokeWidth={2} />
       </button>
 
-      {open && (
+      {/* Portal — mounted at <body>, above all stacking contexts */}
+      {open && createPortal(
         <>
+          {/* Click-away backdrop */}
           <div
-            style={{ position: 'fixed', inset: 0, zIndex: 49 }}
+            style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
             onClick={() => setOpen(false)}
           />
-          <div className="trp-popover" style={{ zIndex: 50, width: '280px', right: 0, top: 'calc(100% + 0.5rem)' }}>
+          {/* Notification panel */}
+          <div
+            className="trp-popover"
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+            style={{
+              position: 'fixed',
+              top:   popoverPos.top,
+              right: popoverPos.right,
+              zIndex: 9999,
+              width: '280px',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
               <p style={{
                 fontSize: '0.725rem', fontWeight: 700, textTransform: 'uppercase',
@@ -46,8 +110,9 @@ export default function NotificationBell() {
               </p>
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
-    </div>
+    </>
   )
 }

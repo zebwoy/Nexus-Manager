@@ -1,18 +1,17 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useTheme, ACCENTS } from '../context/ThemeContext'
 import { Sun, Moon } from 'lucide-react'
 
 /**
- * ThemeToggle — Top header theme switch button
+ * ThemeToggle — Top header theme switch button.
  *
- * Toggles Dark/Light mode on click.
- * In Light mode, hovering reveals the console tint accent swatches.
+ * Popover is rendered via React Portal at <body> level so it floats
+ * above ALL stacking contexts — KPI cards, session buttons, anything.
  *
- * Hover pattern uses a close-delay approach:
- *   - mouseLeave schedules close after CLOSE_DELAY ms
- *   - mouseEnter on either the button wrapper OR the popover cancels the timer
- * This prevents the popover from dismissing when the mouse crosses the
- * natural gap between button and popover.
+ * Hover pattern: close-delay (180ms grace) cancellable on re-enter,
+ * preventing the popover from snapping shut when the mouse crosses
+ * the natural gap between button and popover.
  */
 
 const OPEN_DELAY  = 100   // ms before popover appears
@@ -21,37 +20,46 @@ const CLOSE_DELAY = 180   // ms grace period when mouse leaves
 export default function ThemeToggle() {
   const { isDark, toggleDark, accentId, setAccentId } = useTheme()
   const [showAccents, setShowAccents] = useState(false)
+  const [popoverPos, setPopoverPos]   = useState({ top: 0, right: 0 })
 
-  const openTimerRef  = useRef(null)
+  const btnRef       = useRef(null)
+  const openTimerRef = useRef(null)
   const closeTimerRef = useRef(null)
 
-  // Cancel any pending close
   const cancelClose = useCallback(() => {
     clearTimeout(closeTimerRef.current)
   }, [])
 
-  // Schedule a close — can be cancelled by entering the popover
   const scheduleClose = useCallback(() => {
     clearTimeout(openTimerRef.current)
     closeTimerRef.current = setTimeout(() => setShowAccents(false), CLOSE_DELAY)
   }, [])
 
-  // Wrapper mouseEnter — cancel any pending close, schedule open (light only)
+  const updatePosition = useCallback(() => {
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      setPopoverPos({
+        top:   r.bottom + 8,                    // 8px gap below button
+        right: window.innerWidth - r.right,     // aligned to button's right edge
+      })
+    }
+  }, [])
+
   const handleWrapperEnter = useCallback(() => {
     cancelClose()
     if (!isDark) {
+      updatePosition()
       clearTimeout(openTimerRef.current)
       openTimerRef.current = setTimeout(() => setShowAccents(true), OPEN_DELAY)
     }
-  }, [isDark, cancelClose])
+  }, [isDark, cancelClose, updatePosition])
 
-  // Wrapper mouseLeave — schedule close
   const handleWrapperLeave = useCallback(() => {
     clearTimeout(openTimerRef.current)
     scheduleClose()
   }, [scheduleClose])
 
-  // Close popover immediately if theme switches to dark while open
+  // Auto-close when switching to dark mode
   useEffect(() => {
     if (isDark) {
       clearTimeout(openTimerRef.current)
@@ -60,39 +68,59 @@ export default function ThemeToggle() {
     }
   }, [isDark])
 
-  // Cleanup on unmount
+  // Reposition on scroll/resize while open
+  useEffect(() => {
+    if (!showAccents) return
+    const sync = () => updatePosition()
+    window.addEventListener('scroll', sync, true)
+    window.addEventListener('resize', sync)
+    return () => {
+      window.removeEventListener('scroll', sync, true)
+      window.removeEventListener('resize', sync)
+    }
+  }, [showAccents, updatePosition])
+
+  // Cleanup timers on unmount
   useEffect(() => () => {
     clearTimeout(openTimerRef.current)
     clearTimeout(closeTimerRef.current)
   }, [])
 
   return (
-    <div
-      style={{ position: 'relative' }}
-      onMouseEnter={handleWrapperEnter}
-      onMouseLeave={handleWrapperLeave}
-    >
-      <button
-        onClick={toggleDark}
-        className="top-header-btn theme-toggle-btn"
-        aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-        title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+    <>
+      <div
+        onMouseEnter={handleWrapperEnter}
+        onMouseLeave={handleWrapperLeave}
       >
-        <span className={`top-header-icon-wrap ${isDark ? 'dark' : 'light'}`}>
-          {isDark
-            ? <Moon size={15} strokeWidth={2.2} />
-            : <Sun  size={15} strokeWidth={2.2} />
-          }
-        </span>
-      </button>
+        <button
+          ref={btnRef}
+          onClick={toggleDark}
+          className="top-header-btn theme-toggle-btn"
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          <span className={`top-header-icon-wrap ${isDark ? 'dark' : 'light'}`}>
+            {isDark
+              ? <Moon size={15} strokeWidth={2.2} />
+              : <Sun  size={15} strokeWidth={2.2} />
+            }
+          </span>
+        </button>
+      </div>
 
-      {/* Accent swatch popover — light mode hover only */}
-      {showAccents && !isDark && (
+      {/* Portal — mounted at <body>, bypasses all stacking contexts */}
+      {showAccents && !isDark && createPortal(
         <div
           className="trp-popover trp-accent-popover"
           onMouseEnter={cancelClose}
           onMouseLeave={scheduleClose}
-          style={{ top: 'calc(100% + 0.5rem)', minWidth: '148px' }}
+          style={{
+            position: 'fixed',
+            top:   popoverPos.top,
+            right: popoverPos.right,
+            zIndex: 9999,
+            minWidth: '148px',
+          }}
         >
           <p style={{
             fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase',
@@ -143,8 +171,9 @@ export default function ThemeToggle() {
           }}>
             {ACCENTS[accentId]?.label}
           </p>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   )
 }
