@@ -133,7 +133,7 @@ export default async function handler(req, res) {
 // The slug is parsed from the username, used to look up the tenant schema,
 // and the login query is scoped to that schema. Works for any tenant.
 // ─────────────────────────────────────────────────────────────────────────────
-async function handleLogin(pool, req, res) {
+export async function handleLogin(pool, req, res) {
   if (req.method !== 'POST') return err(res, 'Method not allowed', 405)
   const { username, pin } = req.body || {}
   if (!username || !pin) return err(res, 'Username and PIN required')
@@ -153,32 +153,92 @@ async function handleLogin(pool, req, res) {
     })
   }
 
-  // ── Trial / sandbox user bypass ────────────────────────────────────────────
+  // ── Trial / sandbox user bypass (resilient auto-provisioning) ────────────
   if (cleanUser === 'trial' && cleanPin === '0000') {
-    const { getTenantClient, DEMO_SANDBOX_SCHEMA, provisionDemoSandbox } = await import('./_tenant.js')
-    const client2 = await pool.connect()
+    const { DEMO_SANDBOX_SCHEMA, provisionDemoSandbox } = await import('./_tenant.js')
+    
+    // 1. Ensure sandbox schema is provisioned if not existing yet
     try {
-      await client2.query(`SET search_path TO "${DEMO_SANDBOX_SCHEMA}", public`)
-      const r = await client2.query(
-        `SELECT id, full_name, username, role, status FROM users WHERE username = 'trial' AND pin = '0000' LIMIT 1`
+      const checkR = await pool.query(
+        "SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1",
+        [DEMO_SANDBOX_SCHEMA]
       )
-      if (r.rows.length === 0) {
-        // Provision sandbox first time
-        client2.release()
+      if (checkR.rows.length === 0) {
         await provisionDemoSandbox(pool)
-        // Re-fetch
-        const client3 = await pool.connect()
-        await client3.query(`SET search_path TO "${DEMO_SANDBOX_SCHEMA}", public`)
-        const r2 = await client3.query(
-          `SELECT id, full_name, username, role FROM users WHERE username = 'trial' LIMIT 1`
-        )
-        client3.release()
-        const trialUser = r2.rows[0] || { id: 0, full_name: 'Demo Operator', username: 'trial', role: 'admin' }
-        return ok(res, { user: { ...trialUser, schema_name: DEMO_SANDBOX_SCHEMA } })
       }
-      return ok(res, { user: { ...r.rows[0], schema_name: DEMO_SANDBOX_SCHEMA } })
+    } catch (e) {
+      console.warn('Sandbox schema check warning:', e.message)
+      try {
+        await provisionDemoSandbox(pool)
+      } catch (provErr) {
+        console.error('Failed to provision sandbox schema:', provErr.message)
+      }
+    }
+
+    // 2. Fetch or seed trial user with guaranteed single client release
+    let client
+    try {
+      client = await pool.connect()
+      await client.query(`SET search_path TO "${DEMO_SANDBOX_SCHEMA}", public`)
+
+      let r = await client.query(
+        `SELECT id, full_name, username, email, avatar_url, COALESCE(role, 'admin') AS role, status
+         FROM users
+         WHERE username = 'trial'
+         LIMIT 1`
+      ).catch(() => ({ rows: [] }))
+
+      if (r.rows.length === 0) {
+        await client.query(`
+          INSERT INTO users (full_name, username, pin, role, status)
+          VALUES ('Demo Operator', 'trial', '0000', 'trial', 'active')
+          ON CONFLICT (username) DO NOTHING
+        `).catch(() => {})
+
+        r = await client.query(
+          `SELECT id, full_name, username, email, avatar_url, COALESCE(role, 'admin') AS role, status
+           FROM users
+           WHERE username = 'trial'
+           LIMIT 1`
+        ).catch(() => ({ rows: [] }))
+      }
+
+      const trialUser = r.rows[0] || {
+        id: 0,
+        full_name: 'Demo Operator',
+        username: 'trial',
+        role: 'admin',
+        status: 'active'
+      }
+
+      return ok(res, {
+        user: {
+          ...trialUser,
+          schema_name: DEMO_SANDBOX_SCHEMA,
+          tenant_name: 'Instant Demo Sandbox',
+          tenant_logo: '',
+          org_slug: 'demo'
+        }
+      })
+    } catch (e) {
+      console.error('Trial authentication fallback triggered:', e.message)
+      return ok(res, {
+        user: {
+          id: 0,
+          full_name: 'Demo Operator',
+          username: 'trial',
+          role: 'admin',
+          status: 'active',
+          schema_name: DEMO_SANDBOX_SCHEMA,
+          tenant_name: 'Instant Demo Sandbox',
+          tenant_logo: '',
+          org_slug: 'demo'
+        }
+      })
     } finally {
-      try { client2.release() } catch {}
+      if (client) {
+        try { client.release() } catch {}
+      }
     }
   }
 
