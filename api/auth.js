@@ -225,7 +225,7 @@ async function handleLogin(pool, req, res) {
     await client.query(`SET search_path TO "${schemaName}", public`)
 
     const result = await client.query(
-      `SELECT id, full_name, username, COALESCE(role, 'operator') AS role, COALESCE(status, 'active') AS status
+      `SELECT id, full_name, username, email, avatar_url, COALESCE(role, 'operator') AS role, COALESCE(status, 'active') AS status
        FROM users
        WHERE id = $1 AND username = $2 AND pin = $3
        LIMIT 1`,

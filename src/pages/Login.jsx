@@ -156,6 +156,15 @@ export default function Login() {
       if (data.user?.tenant_logo) {
         localStorage.setItem('nexus_tenant_logo', data.user.tenant_logo)
       }
+      if (data.user?.avatar_url) {
+        localStorage.setItem('nexus_user_avatar', data.user.avatar_url)
+      }
+      if (data.user?.full_name) {
+        localStorage.setItem('nexus_user_name', data.user.full_name)
+      }
+      if (data.user?.email) {
+        localStorage.setItem('nexus_user_email', data.user.email)
+      }
       if (data.user?.org_slug) {
         localStorage.setItem('nexus_org_slug', data.user.org_slug)
       }

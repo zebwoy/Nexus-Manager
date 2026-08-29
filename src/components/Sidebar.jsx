@@ -212,23 +212,38 @@ export default function Sidebar() {
           gap: '0.75rem'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
-            <SignedIn>
-              <UserButton afterSignOutUrl="/" appearance={{ elements: { userButtonAvatarBox: { width: '34px', height: '34px' } } }} />
-            </SignedIn>
-            <SignedOut>
-              <div style={{
-                width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
-                background: 'var(--accent-dim)', border: '1.5px solid var(--accent-border)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '0.85rem', fontWeight: 800, color: 'var(--accent-text)',
-                boxShadow: '1px 1px 3px rgba(0,0,0,0.1)'
-              }}>
-                {user?.full_name?.[0]?.toUpperCase() || '?'}
-              </div>
-            </SignedOut>
+            {user?.avatar_url || localStorage.getItem('nexus_user_avatar') ? (
+              <img
+                src={user?.avatar_url || localStorage.getItem('nexus_user_avatar')}
+                alt={user?.full_name || 'Operator'}
+                style={{
+                  width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
+                  objectFit: 'cover', border: '1.5px solid var(--border)',
+                  boxShadow: '1px 1px 3px rgba(0,0,0,0.1)'
+                }}
+                onError={(e) => { e.target.style.display = 'none' }}
+              />
+            ) : (
+              <>
+                <SignedIn>
+                  <UserButton afterSignOutUrl="/" appearance={{ elements: { userButtonAvatarBox: { width: '34px', height: '34px' } } }} />
+                </SignedIn>
+                <SignedOut>
+                  <div style={{
+                    width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
+                    background: 'var(--accent-dim)', border: '1.5px solid var(--accent-border)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.85rem', fontWeight: 800, color: 'var(--accent-text)',
+                    boxShadow: '1px 1px 3px rgba(0,0,0,0.1)'
+                  }}>
+                    {user?.full_name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                </SignedOut>
+              </>
+            )}
             <div style={{ minWidth: 0 }}>
               <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {clerkUser?.fullName || user?.full_name || 'Operator'}
+                {user?.full_name || clerkUser?.fullName || 'Operator'}
               </p>
               <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 @{user?.username}
@@ -328,17 +343,29 @@ export default function Sidebar() {
             {/* Operator Box & Sign Out */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                <div style={{
-                  width: '2rem', height: '2rem', borderRadius: '50%',
-                  background: 'var(--accent-dim)', border: '1.5px solid var(--accent-border)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.8125rem', fontWeight: 700, color: 'var(--accent-text)'
-                }}>
-                  {user?.full_name?.[0]?.toUpperCase() || '?'}
-                </div>
+                {user?.avatar_url || localStorage.getItem('nexus_user_avatar') ? (
+                  <img
+                    src={user?.avatar_url || localStorage.getItem('nexus_user_avatar')}
+                    alt={user?.full_name || 'Operator'}
+                    style={{
+                      width: '2.25rem', height: '2.25rem', borderRadius: '50%',
+                      objectFit: 'cover', border: '1.5px solid var(--border)'
+                    }}
+                    onError={(e) => { e.target.style.display = 'none' }}
+                  />
+                ) : (
+                  <div style={{
+                    width: '2rem', height: '2rem', borderRadius: '50%',
+                    background: 'var(--accent-dim)', border: '1.5px solid var(--accent-border)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.8125rem', fontWeight: 700, color: 'var(--accent-text)'
+                  }}>
+                    {user?.full_name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                )}
                 <div>
-                  <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text)' }}>{user?.full_name}</p>
-                  <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>@{user?.username}</p>
+                  <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>{user?.full_name}</p>
+                  <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0 }}>@{user?.username}</p>
                 </div>
               </div>
               <button onClick={() => { setMenuOpen(false); setShowSignOutModal(true) }} className="btn-danger btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
