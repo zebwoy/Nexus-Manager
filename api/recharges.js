@@ -4,6 +4,7 @@ import { withTenantClient, resolveEffectiveUserId } from './_tenant.js'
 async function postLedger(client, entry) {
   if (!entry.customer_id) return
   try {
+    await client.query('SAVEPOINT sp_cust_ledger')
     await client.query(
       `INSERT INTO customer_ledger
          (customer_id, module, reference_id, reference_module, amount, description, running_balance, created_by)
@@ -16,7 +17,9 @@ async function postLedger(client, entry) {
         entry.created_by ?? null
       ]
     )
+    await client.query('RELEASE SAVEPOINT sp_cust_ledger')
   } catch (e) {
+    await client.query('ROLLBACK TO SAVEPOINT sp_cust_ledger').catch(() => {})
     if (!e.message?.includes('customer_ledger')) throw e
   }
 }

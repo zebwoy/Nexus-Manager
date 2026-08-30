@@ -2,12 +2,8 @@ import { getPool } from './_db.js'
 
 export const DEMO_SANDBOX_SCHEMA = 'tenant_demo_sandbox'
 
-/**
- * In-memory set of schema names that have already had their incremental
- * DDL migrations applied this process lifetime. Prevents the ALTER TABLE
- * block from executing on every API request (hot-path DDL is expensive).
- */
-const _migratedSchemas = new Set()
+const CURRENT_MIGRATION_VERSION = 'v8_cust_ledger_fkeys'
+const _migratedSchemas = new Map()
 
 /**
  * SQL DDL template executed inside every new tenant schema
@@ -373,7 +369,7 @@ ON CONFLICT (name) DO NOTHING;
  * Safe to call on every cold start; a no-op on subsequent requests.
  */
 async function ensureTenantMigrations(client, schemaName) {
-  if (_migratedSchemas.has(schemaName)) return
+  if (_migratedSchemas.get(schemaName) === CURRENT_MIGRATION_VERSION) return
   try {
     await client.query(`
       -- v1 patches: columns added in early versions
@@ -419,6 +415,18 @@ async function ensureTenantMigrations(client, schemaName) {
       ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_user_id_fkey;
       ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;
 
+      ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_created_by_fkey;
+      ALTER TABLE sessions ADD CONSTRAINT sessions_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;
+
+      ALTER TABLE session_payments DROP CONSTRAINT IF EXISTS session_payments_created_by_fkey;
+      ALTER TABLE session_payments ADD CONSTRAINT session_payments_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;
+
+      ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_created_by_fkey;
+      ALTER TABLE sales ADD CONSTRAINT sales_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;
+
+      ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_created_by_fkey;
+      ALTER TABLE expenses ADD CONSTRAINT expenses_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;
+
       -- Safely unlink references before cleaning up super_admin / superadmin from tenant users
       UPDATE operator_sessions SET user_id = NULL WHERE user_id IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
       UPDATE audit_logs SET user_id = NULL WHERE user_id IN (SELECT id FROM users WHERE role = 'super_admin' OR username = 'superadmin');
@@ -450,7 +458,7 @@ async function ensureTenantMigrations(client, schemaName) {
       CREATE INDEX IF NOT EXISTS idx_cl_reference  ON customer_ledger (reference_module, reference_id);
       CREATE INDEX IF NOT EXISTS idx_cl_module     ON customer_ledger (module);
     `)
-    _migratedSchemas.add(schemaName)
+    _migratedSchemas.set(schemaName, CURRENT_MIGRATION_VERSION)
   } catch (e) {
     // Non-fatal: log and continue. The ALTER TABLE IFs are defensive anyway.
     console.warn(`[tenant] Migration patch warning for schema "${schemaName}":`, e.message)

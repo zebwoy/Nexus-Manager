@@ -25,6 +25,7 @@ function calculateDynamicTariff(hourlyRate, durationMins) {
 async function postLedger(client, entry) {
   if (!entry.customer_id) return
   try {
+    await client.query('SAVEPOINT sp_cust_ledger')
     await client.query(
       `INSERT INTO customer_ledger
          (customer_id, module, reference_id, reference_module, amount, description, running_balance, created_by)
@@ -37,8 +38,10 @@ async function postLedger(client, entry) {
         entry.created_by ?? null
       ]
     )
+    await client.query('RELEASE SAVEPOINT sp_cust_ledger')
   } catch (e) {
-    // Table may not exist yet on first deploy — fail silently so existing
+    await client.query('ROLLBACK TO SAVEPOINT sp_cust_ledger').catch(() => {})
+    // Table may not exist yet on pre-migration tenant — fail silently so existing
     // session flows are never blocked
     if (!e.message?.includes('customer_ledger')) throw e
   }
