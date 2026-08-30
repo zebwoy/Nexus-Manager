@@ -22,6 +22,8 @@ function sanitizeApiError(raw, status) {
   ]
   const isInternal = internalPrefixes.some(p => raw.toLowerCase().includes(p.toLowerCase()))
 
+  console.error('[API Server Error]:', raw)
+
   if (raw.startsWith('TENANT_SUSPENDED')) return 'Your cafe account is currently suspended. Please contact support.'
   if (raw.startsWith('STAFF_SUSPENDED'))  return 'Your staff account has been suspended. Contact your admin.'
   if (raw.startsWith('TENANT_NOT_RESOLVED') || isInternal) {

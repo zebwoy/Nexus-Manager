@@ -2,7 +2,7 @@ import { getPool } from './_db.js'
 
 export const DEMO_SANDBOX_SCHEMA = 'tenant_demo_sandbox'
 
-const CURRENT_MIGRATION_VERSION = 'v8_cust_ledger_fkeys'
+const CURRENT_MIGRATION_VERSION = 'v9_audit_logs_columns'
 const _migratedSchemas = new Map()
 
 /**
@@ -374,6 +374,9 @@ async function ensureTenantMigrations(client, schemaName) {
     await client.query(`
       -- v1 patches: columns added in early versions
       ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS remark TEXT;
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS controller_total DECIMAL(10, 2) DEFAULT 0.00;
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS extra_person_total DECIMAL(10, 2) DEFAULT 0.00;
       ALTER TABLE session_players ADD COLUMN IF NOT EXISTS customer_id INT REFERENCES customers(id);
       ALTER TABLE session_players ADD COLUMN IF NOT EXISTS player_name VARCHAR(100);
       ALTER TABLE sales ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
@@ -385,6 +388,8 @@ async function ensureTenantMigrations(client, schemaName) {
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS unit_sell_price DECIMAL(10, 2);
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS vendor_address TEXT;
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS shop_name VARCHAR(100);
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS pancafe_username VARCHAR(100);
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT;
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS client_type VARCHAR(30) DEFAULT 'customer';
       ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS initial_stock INT NOT NULL DEFAULT 0;
@@ -393,6 +398,10 @@ async function ensureTenantMigrations(client, schemaName) {
       -- users: add columns introduced after initial provisioning
       ALTER TABLE users ADD COLUMN IF NOT EXISTS email      VARCHAR(255);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
+      -- audit_logs: add module and metadata columns introduced for rich audit tracking
+      ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS module   VARCHAR(50);
+      ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS metadata JSONB;
 
       -- v7 patch: tenant roles table & user role cleanup (super_admin is public only, staff role eliminated)
       CREATE TABLE IF NOT EXISTS roles (
