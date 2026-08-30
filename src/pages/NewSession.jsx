@@ -21,8 +21,10 @@ export default function NewSession() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [customerSuggestions, setCustomerSuggestions] = useState([])
-  const [customerCredit, setCustomerCredit] = useState(null)  // null=unknown, 0=settled, neg=cafe owes
+  const [customerCredit, setCustomerCredit] = useState(null)  // null=unknown, >0 = cafe owes customer
+  const [customerDebt, setCustomerDebt] = useState(null)      // null=unknown, >0 = customer owes cafe
   const [creditApplied, setCreditApplied] = useState(false)
+  const [pastDebtCollected, setPastDebtCollected] = useState(false)
 
   // Form state
   const [form, setForm] = useState({
@@ -161,7 +163,9 @@ export default function NewSession() {
   const handleNameChange = async (val) => {
     setForm(f => ({ ...f, name: val, customer_id: null }))
     setCustomerCredit(null)
+    setCustomerDebt(null)
     setCreditApplied(false)
+    setPastDebtCollected(false)
     if (val.length >= 2) {
       try {
         const data = await api.get(`/customers?search=${encodeURIComponent(val)}&type=session`)
@@ -176,15 +180,27 @@ export default function NewSession() {
     setForm(f => ({ ...f, name: c.name, mobile: c.mobile || '', customer_id: c.id }))
     setCustomerSuggestions([])
     setCustomerCredit(null)
+    setCustomerDebt(null)
     setCreditApplied(false)
-    // Check if this customer has a credit balance on their account
+    setPastDebtCollected(false)
+
     try {
       const data = await api.get(`/customers/${c.id}/balance`)
-      const bal = Number(data.balance ?? 0)
-      // Negative balance = cafe owes them (they have credit)
-      setCustomerCredit(bal < 0 ? Math.abs(bal) : 0)
+      const bal = Number(data.balance ?? c.balance ?? 0)
+      if (bal > 0) {
+        setCustomerDebt(bal)
+        setCustomerCredit(0)
+      } else if (bal < 0) {
+        setCustomerCredit(Math.abs(bal))
+        setCustomerDebt(0)
+      } else {
+        setCustomerDebt(0)
+        setCustomerCredit(0)
+      }
     } catch {
-      setCustomerCredit(0)
+      const bal = Number(c.balance ?? 0)
+      setCustomerDebt(bal > 0 ? bal : 0)
+      setCustomerCredit(bal < 0 ? Math.abs(bal) : 0)
     }
   }
 
@@ -289,6 +305,15 @@ export default function NewSession() {
       }
 
       const res = await api.post('/sessions', payload)
+
+      if (pastDebtCollected && form.customer_id && customerDebt > 0) {
+        await api.post(`/customers/${form.customer_id}/settle`, {
+          amount: customerDebt,
+          payment_method: 'cash',
+          note: `Settled past due ₹${customerDebt} on Session #${res.id} check-in`
+        }).catch(err => console.warn('Could not auto-settle past debt:', err))
+      }
+
       toast.success(isPredated ? `Backdated session #${res.id} recorded for ${form.date}` : `Session #${res.id} created`)
       navigate(`/sessions?date=${form.date}`)
     } catch (err) {
@@ -354,20 +379,49 @@ export default function NewSession() {
                     position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
                     background: 'var(--bg-elevated)', border: '1.5px solid var(--border)',
                     boxShadow: 'var(--shadow-md)', borderRadius: '10px', marginTop: '0.45rem',
-                    overflow: 'hidden'
+                    overflow: 'hidden', maxHeight: '240px', overflowY: 'auto'
                   }}>
-                    {customerSuggestions.map(c => (
-                      <button key={c.id} onClick={() => selectCustomer(c)}
-                        className="btn-ghost"
-                        style={{
-                          width: '100%', textAlign: 'left', padding: '0.65rem 0.85rem',
-                          fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between',
-                          borderRadius: 0, borderBottom: '1px solid var(--border)'
-                        }}>
-                        <span>{c.name}</span>
-                        {c.mobile && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{c.mobile}</span>}
-                      </button>
-                    ))}
+                    {customerSuggestions.map(c => {
+                      const bal = Number(c.balance || 0)
+                      return (
+                        <button key={c.id} onClick={() => selectCustomer(c)}
+                          className="btn-ghost"
+                          style={{
+                            width: '100%', textAlign: 'left', padding: '0.65rem 0.85rem',
+                            fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            borderRadius: 0, borderBottom: '1px solid var(--border)', gap: '0.5rem'
+                          }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontWeight: 650, color: 'var(--text)' }}>{c.name}</div>
+                            {c.mobile && <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{c.mobile}</div>}
+                          </div>
+                          <div style={{ flexShrink: 0 }}>
+                            {bal > 0 ? (
+                              <span style={{
+                                padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700,
+                                background: 'rgba(239,68,68,0.12)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.3)'
+                              }}>
+                                ₹{bal.toLocaleString('en-IN')} Due
+                              </span>
+                            ) : bal < 0 ? (
+                              <span style={{
+                                padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700,
+                                background: 'rgba(34,197,94,0.12)', color: '#15803d', border: '1px solid rgba(34,197,94,0.3)'
+                              }}>
+                                ₹{Math.abs(bal).toLocaleString('en-IN')} Credit
+                              </span>
+                            ) : (
+                              <span style={{
+                                padding: '0.2rem 0.45rem', borderRadius: '6px', fontSize: '0.68rem', fontWeight: 600,
+                                background: 'var(--bg-input)', color: 'var(--text-faint)', border: '1px solid var(--border)'
+                              }}>
+                                Clear
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -378,7 +432,84 @@ export default function NewSession() {
             </Field>
           </div>
 
-            {/* Credit carry-forward banner — shown when a known customer has credit */}
+            {/* Outstanding Debt Alert Banner — shown when a customer has unpaid dues from past visits */}
+            {form.customer_id && customerDebt > 0 && !pastDebtCollected && (
+              <div style={{
+                padding: '0.75rem 1rem',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(244,63,94,0.06) 100%)',
+                border: '1.5px solid rgba(239,68,68,0.35)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
+                  <span style={{ fontSize: '1.1rem' }}>⚠️</span>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 700, color: 'var(--danger)' }}>
+                      Outstanding Debt Alert: {form.name} owes ₹{customerDebt.toLocaleString('en-IN')}
+                    </p>
+                    <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                      Unpaid dues from previous visits. Collect past due along with this session or keep on tab.
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cur = Number(cashAmount || 0)
+                      setCashAmount(String(cur + customerDebt))
+                      setPastDebtCollected(true)
+                      toast.success(`Added ₹${customerDebt} past due to upfront collection`)
+                    }}
+                    style={{
+                      padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                      background: 'var(--danger)', border: 'none', color: '#fff',
+                      fontSize: '0.78rem', fontWeight: 700
+                    }}>
+                    Collect +₹{customerDebt.toLocaleString('en-IN')} Now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomerDebt(0)}
+                    style={{
+                      padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                      background: 'transparent', border: '1.5px solid rgba(239,68,68,0.3)',
+                      color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 600
+                    }}>
+                    Keep on Tab
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Past debt collected confirmation */}
+            {pastDebtCollected && customerDebt > 0 && (
+              <div style={{
+                padding: '0.6rem 0.9rem',
+                borderRadius: '10px',
+                background: 'rgba(34,197,94,0.08)',
+                border: '1.5px solid rgba(34,197,94,0.3)',
+                display: 'flex', alignItems: 'center', gap: '0.5rem'
+              }}>
+                <span style={{ fontSize: '0.85rem' }}>✓</span>
+                <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: 650, color: '#15803d' }}>
+                  ₹{customerDebt.toLocaleString('en-IN')} past debt included in cash collection
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cur = Number(cashAmount || 0)
+                    setCashAmount(cur > customerDebt ? String(cur - customerDebt) : '')
+                    setPastDebtCollected(false)
+                  }}
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#15803d', fontSize: '0.75rem' }}>
+                  Undo
+                </button>
+              </div>
+            )}
+
+            {/* Credit carry-forward banner — shown when a known customer has advance credit */}
             {form.customer_id && customerCredit > 0 && !creditApplied && (
               <div style={{
                 padding: '0.75rem 1rem',

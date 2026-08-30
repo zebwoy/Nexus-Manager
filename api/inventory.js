@@ -57,11 +57,17 @@ export default async function handler(req, res) {
             return ok(res, { customers: [] })
           }
           const r = await client.query(
-            `SELECT id, name, mobile, shop_name, pancafe_username, address, client_type
-             FROM customers
-             WHERE (name ILIKE $1 OR mobile ILIKE $1 OR shop_name ILIKE $1 OR pancafe_username ILIKE $1 OR address ILIKE $1)
+            `SELECT c.id, c.name, c.mobile, c.shop_name, c.pancafe_username, c.address, c.client_type,
+               COALESCE((
+                 SELECT running_balance
+                 FROM customer_ledger cl
+                 WHERE cl.customer_id = c.id
+                 ORDER BY cl.id DESC LIMIT 1
+               ), 0) AS balance
+             FROM customers c
+             WHERE (c.name ILIKE $1 OR c.mobile ILIKE $1 OR c.shop_name ILIKE $1 OR c.pancafe_username ILIKE $1 OR c.address ILIKE $1)
              ${typeFilter}
-             ORDER BY name LIMIT 15`,
+             ORDER BY c.name LIMIT 15`,
             [`%${search.trim()}%`]
           )
           return ok(res, { customers: r.rows })
@@ -72,7 +78,13 @@ export default async function handler(req, res) {
             SELECT
               c.id, c.name, c.mobile, c.shop_name, c.address, c.client_type, c.created_at,
               COUNT(DISTINCT e.id) AS expense_count,
-              COALESCE(SUM(e.amount), 0) AS total_expense_amount
+              COALESCE(SUM(e.amount), 0) AS total_expense_amount,
+              COALESCE((
+                SELECT running_balance
+                FROM customer_ledger cl
+                WHERE cl.customer_id = c.id
+                ORDER BY cl.id DESC LIMIT 1
+              ), 0) AS balance
             FROM customers c
             LEFT JOIN expenses e ON (e.vendor_name ILIKE c.name)
             WHERE c.client_type = 'vendor' OR e.id IS NOT NULL
@@ -88,7 +100,13 @@ export default async function handler(req, res) {
             SELECT
               c.id, c.name, c.mobile, c.shop_name, c.address, c.client_type, c.created_at,
               COUNT(DISTINCT s.id) AS session_count,
-              COUNT(DISTINCT e.id) AS expense_count
+              COUNT(DISTINCT e.id) AS expense_count,
+              COALESCE((
+                SELECT running_balance
+                FROM customer_ledger cl
+                WHERE cl.customer_id = c.id
+                ORDER BY cl.id DESC LIMIT 1
+              ), 0) AS balance
             FROM customers c
             LEFT JOIN sessions s ON s.customer_id = c.id AND (s.is_deleted IS NULL OR s.is_deleted = FALSE)
             LEFT JOIN expenses e ON e.vendor_name ILIKE c.name
@@ -103,7 +121,13 @@ export default async function handler(req, res) {
           const r = await client.query(`
             SELECT
               c.id, c.name, c.mobile, c.shop_name, c.address, c.client_type, c.created_at,
-              COUNT(DISTINCT s.id) AS session_count
+              COUNT(DISTINCT s.id) AS session_count,
+              COALESCE((
+                SELECT running_balance
+                FROM customer_ledger cl
+                WHERE cl.customer_id = c.id
+                ORDER BY cl.id DESC LIMIT 1
+              ), 0) AS balance
             FROM customers c
             JOIN sales s ON s.customer_id = c.id
             WHERE s.is_deleted IS NULL OR s.is_deleted = FALSE
@@ -117,7 +141,13 @@ export default async function handler(req, res) {
         const r = await client.query(`
           SELECT
             c.id, c.name, c.mobile, c.shop_name, c.address, c.client_type, c.pancafe_username, c.created_at,
-            COUNT(DISTINCT s.id) AS session_count
+            COUNT(DISTINCT s.id) AS session_count,
+            COALESCE((
+              SELECT running_balance
+              FROM customer_ledger cl
+              WHERE cl.customer_id = c.id
+              ORDER BY cl.id DESC LIMIT 1
+            ), 0) AS balance
           FROM customers c
           JOIN sessions s ON (s.customer_id = c.id OR s.id IN (SELECT session_id FROM session_players WHERE customer_id = c.id))
           WHERE s.is_deleted IS NULL OR s.is_deleted = FALSE
